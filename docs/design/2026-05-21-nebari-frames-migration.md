@@ -259,7 +259,7 @@ description: OpenTeams brand voice    # max 280 chars
 version: 1.2.0                        # semver-ish
 
 extends:                              # ordered list; later wins on slot conflict
-  - ref: openteams/company-frame      # org_slug/frame_name; same-org may omit slug
+  - ref: openteams/company-frame      # org_slug/frame_name (MVP: fully-qualified required; see note below)
     version: 3.1.0
   - ref: industry-consortia/healthcare-compliance
     version: 2024.4
@@ -299,6 +299,8 @@ slots:
   business_process: |
     ...
 ```
+
+**`extends` ref format (MVP decision, 2026-06-24).** For MVP, `extends` and `excludes` refs must be **fully qualified** as `org_slug/frame_name`; the server-side validator rejects a bare `frame_name`. The whitepaper-era convenience of omitting the slug for same-org parents is deferred (the resolver already carries a same-org fallback, so relaxing the validator later is non-breaking). Fully-qualified refs are unambiguous and keep the publish-time parent lookup simple. This note supersedes the earlier "same-org may omit slug" annotation in the schema example above.
 
 **Slot typing rationale.** The whitepaper lists ten slots without prescribing how they should be structured. We commit to all ten in the schema from MVP (avoids ecosystem churn from adding slots later) but ship conservative typing on four of them:
 
