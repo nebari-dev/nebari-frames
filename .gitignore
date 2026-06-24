@@ -21,6 +21,9 @@ Thumbs.db
 coverage.out
 *.test
 
+# Database
+*.db
+
 # Build
 dist/
 node_modules/
