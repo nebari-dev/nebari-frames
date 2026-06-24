@@ -251,6 +251,9 @@ func (r *Repository) GetFrameVersion(ctx context.Context, frameID, version strin
 	}
 	v.PublishedAt = ts(published)
 
+	// The version row and its edges/excludes are read in sequential queries.
+	// This is safe because Open pins MaxOpenConns=1 (single-writer), so no
+	// concurrent writer can interleave between these reads.
 	rows, err := r.db.QueryContext(ctx,
 		`SELECT parent_frame_id, parent_version, order_index FROM frame_extends
 		  WHERE frame_id = ? AND version = ? ORDER BY order_index`, frameID, version)
@@ -266,6 +269,9 @@ func (r *Repository) GetFrameVersion(ctx context.Context, frameID, version strin
 		}
 		edges = append(edges, e)
 	}
+	if err := rows.Err(); err != nil {
+		return nil, nil, nil, err
+	}
 
 	exRows, err := r.db.QueryContext(ctx,
 		`SELECT excluded_frame_id FROM frame_excludes WHERE frame_id = ? AND version = ?`, frameID, version)
@@ -280,6 +286,9 @@ func (r *Repository) GetFrameVersion(ctx context.Context, frameID, version strin
 			return nil, nil, nil, err
 		}
 		excludes = append(excludes, id)
+	}
+	if err := exRows.Err(); err != nil {
+		return nil, nil, nil, err
 	}
 	return &v, edges, excludes, nil
 }
@@ -302,6 +311,9 @@ func (r *Repository) ListFramesByOrg(ctx context.Context, orgID string) ([]*fram
 		f.CreatedAt, f.UpdatedAt = ts(created), ts(updated)
 		out = append(out, &f)
 	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
 	return out, nil
 }
 
@@ -319,6 +331,9 @@ func (r *Repository) FrameGrants(ctx context.Context, frameID string) ([]store.G
 			return nil, err
 		}
 		out = append(out, g)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
 	}
 	return out, nil
 }

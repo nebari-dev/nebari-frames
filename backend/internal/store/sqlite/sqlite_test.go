@@ -52,9 +52,9 @@ func baseInput(now *timestamppb.Timestamp) store.CreateFrameVersionInput {
 			PublishedBy: "u1", PublishedAt: now,
 		},
 		Grants: []store.Grant{
-			{"user", "u1", "edit"},
-			{"user", "u1", "delete"},
-			{"org", "o1", "read"},
+			{SubjectType: "user", SubjectID: "u1", Permission: "edit"},
+			{SubjectType: "user", SubjectID: "u1", Permission: "delete"},
+			{SubjectType: "org", SubjectID: "o1", Permission: "read"},
 		},
 		IsNewFrame: true,
 	}
