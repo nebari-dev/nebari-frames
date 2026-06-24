@@ -3,16 +3,29 @@ package frames_test
 import (
 	"context"
 	"errors"
+	"fmt"
 	"testing"
 
 	"github.com/nebari-dev/nebari-frames/backend/internal/frames"
 )
 
 // fakeFetcher resolves refs from an in-memory map of ref@version -> doc.
-type fakeFetcher map[string]*frames.Doc
+// A configured error for a ref@version key takes precedence over the doc map.
+type fakeFetcher struct {
+	docs map[string]*frames.Doc
+	errs map[string]error
+}
+
+func newFakeFetcher(docs map[string]*frames.Doc) fakeFetcher {
+	return fakeFetcher{docs: docs}
+}
 
 func (f fakeFetcher) FetchParent(_ context.Context, ref, version string) (*frames.Doc, []frames.ExtendRef, []string, error) {
-	d, ok := f[ref+"@"+version]
+	key := ref + "@" + version
+	if err, ok := f.errs[key]; ok {
+		return nil, nil, nil, err
+	}
+	d, ok := f.docs[key]
 	if !ok {
 		return nil, nil, nil, errors.New("not found")
 	}
@@ -29,7 +42,7 @@ func TestResolve_MergeOrderAndOverride(t *testing.T) {
 	child.Slots.Rules = []string{"shared", "rule-b"}
 	child.Slots.Terminology = []frames.Term{{Term: "x", Definition: "from-child"}}
 
-	f := fakeFetcher{"org/base@1.0.0": parent}
+	f := newFakeFetcher(map[string]*frames.Doc{"org/base@1.0.0": parent})
 	got, err := frames.Resolve(context.Background(), f, child, child.Extends, child.Excludes)
 	if err != nil {
 		t.Fatalf("resolve: %v", err)
@@ -64,7 +77,7 @@ func TestResolve_MergeOrderAndOverride(t *testing.T) {
 func TestResolve_CycleDetected(t *testing.T) {
 	a := &frames.Doc{Name: "a", Version: "1", Extends: []frames.ExtendRef{{Ref: "org/b", Version: "1"}}}
 	b := &frames.Doc{Name: "b", Version: "1", Extends: []frames.ExtendRef{{Ref: "org/a", Version: "1"}}}
-	f := fakeFetcher{"org/a@1": a, "org/b@1": b}
+	f := newFakeFetcher(map[string]*frames.Doc{"org/a@1": a, "org/b@1": b})
 	_, err := frames.Resolve(context.Background(), f, a, a.Extends, a.Excludes)
 	var ce *frames.CycleError
 	if !errors.As(err, &ce) {
@@ -80,12 +93,31 @@ func TestResolve_Excludes(t *testing.T) {
 		Extends:  []frames.ExtendRef{{Ref: "org/base", Version: "1"}},
 		Excludes: []string{"org/base"},
 	}
-	f := fakeFetcher{"org/base@1": parent}
+	f := newFakeFetcher(map[string]*frames.Doc{"org/base@1": parent})
 	got, err := frames.Resolve(context.Background(), f, child, child.Extends, child.Excludes)
 	if err != nil {
 		t.Fatalf("resolve: %v", err)
 	}
 	if len(got.Slots.Rules) != 0 {
 		t.Fatalf("excluded parent rules leaked: %v", got.Slots.Rules)
+	}
+}
+
+func TestResolve_UnreadableParentPropagates(t *testing.T) {
+	child := &frames.Doc{
+		Name: "child", Version: "1",
+		Extends: []frames.ExtendRef{{Ref: "org/secret", Version: "1"}},
+	}
+	f := fakeFetcher{
+		errs: map[string]error{
+			"org/secret@1": fmt.Errorf("forbidden: %w", frames.ErrParentUnreadable),
+		},
+	}
+	_, err := frames.Resolve(context.Background(), f, child, child.Extends, child.Excludes)
+	if err == nil {
+		t.Fatal("want error for unreadable parent, got nil (parent silently skipped)")
+	}
+	if !errors.Is(err, frames.ErrParentUnreadable) {
+		t.Fatalf("want err wrapping ErrParentUnreadable, got %v", err)
 	}
 }
