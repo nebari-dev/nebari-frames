@@ -586,6 +586,7 @@ In rough priority order, drawn from the deferred items above:
 10. Federation between Hubs.
 11. Cogs and Ops, if and when they exist as products.
 12. Formal "Frame protocol" specification document.
+13. Frame review/approval gate: a reviewer identity, a content-validation date (distinct from `published_at`), and an approval state on frame versions, so SME-vetted content is distinguishable from freshly-authored content and consumers can judge accuracy/freshness. Surfaced by real-user feedback ("Mystic Depot" Phase II usage): frame content is weighted above other prompt context, so authors asked for a QA gate and an explicit "who validated this, and when" signal. The backend-core build leaves forward-compatible nullable `reviewed_by` / `reviewed_at` / `status` columns on `frame_versions` (always NULL / `published` in MVP) so this lands without a schema migration.
 
 ## 12. Sub-specs
 
