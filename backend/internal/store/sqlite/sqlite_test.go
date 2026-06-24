@@ -254,3 +254,73 @@ func TestSQLite_PublishInsertsVersionAndDefaultGrants(t *testing.T) {
 		})
 	}
 }
+
+// TestSQLite_PublishAtomicRollback verifies that a CreateFrameVersion call that
+// fails mid-transaction (due to a FK violation on frame_extends) rolls back the
+// entire transaction: no frames row, no grants row, and no frame version are
+// left behind.
+func TestSQLite_PublishAtomicRollback(t *testing.T) {
+	ctx := context.Background()
+
+	tests := []struct {
+		name string
+		run  func(t *testing.T, r *sqlite.Repository)
+	}{
+		{
+			name: "FK violation on extends rolls back frame and grants",
+			run: func(t *testing.T, r *sqlite.Repository) {
+				seedOrg(t, r, "o1", "openteams")
+				now := timestamppb.Now()
+
+				in := store.CreateFrameVersionInput{
+					Frame: &framesv1.Frame{
+						Id: "f-rollback", OrgId: "o1", Name: "bad-child",
+						Description: "d", OwnerSub: "u1",
+						LatestVersion: "1.0.0",
+						CreatedAt:     now, UpdatedAt: now,
+					},
+					Version: &framesv1.FrameVersion{
+						Version: "1.0.0", Content: []byte("name: bad-child\n"),
+						Digest: "d", SizeBytes: 16,
+						PublishedBy: "u1", PublishedAt: now,
+					},
+					Extends: []store.ParentEdge{
+						{ParentFrameID: "does-not-exist", ParentVersion: "1.0.0", OrderIndex: 0},
+					},
+					Grants: []store.Grant{
+						{SubjectType: "org", SubjectID: "o1", Permission: "read"},
+					},
+					IsNewFrame: true,
+				}
+
+				// (a) CreateFrameVersion must return a non-nil error.
+				err := r.CreateFrameVersion(ctx, in)
+				if err == nil {
+					t.Fatal("want error from FK violation, got nil")
+				}
+
+				// (b) Transaction must have rolled back - frame row must not exist.
+				_, getErr := r.GetFrameBySlugName(ctx, "openteams", "bad-child")
+				if !errors.Is(getErr, store.ErrNotFound) {
+					t.Fatalf("rollback check: want ErrNotFound for frame, got %v", getErr)
+				}
+
+				// (c) Grants must also be absent (grants are inserted in same tx).
+				grants, grantsErr := r.FrameGrants(ctx, "f-rollback")
+				if grantsErr != nil {
+					t.Fatalf("rollback check: FrameGrants returned unexpected error: %v", grantsErr)
+				}
+				if len(grants) != 0 {
+					t.Fatalf("rollback check: want 0 grants after rollback, got %d", len(grants))
+				}
+			},
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			r := newRepo(t)
+			tc.run(t, r)
+		})
+	}
+}

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"regexp"
 	"strings"
+	"unicode/utf8"
 )
 
 var nameRe = regexp.MustCompile(`^[a-z0-9][a-z0-9-]{0,63}$`)
@@ -36,7 +37,7 @@ func Validate(doc *Doc) error {
 	}
 	if doc.Description == "" {
 		add("description", "must not be empty")
-	} else if len(doc.Description) > 280 {
+	} else if utf8.RuneCountInString(doc.Description) > 280 {
 		add("description", "must be at most 280 characters")
 	}
 	if strings.TrimSpace(doc.Version) == "" {

@@ -118,11 +118,11 @@ func (s *Service) PublishFrame(ctx context.Context, req *connect.Request[framesv
 		frame.UpdatedAt = now
 	}
 
-	edges, err := s.resolveEdges(ctx, org.Slug, doc.Extends)
+	edges, err := s.resolveEdges(ctx, caller, org.Slug, doc.Extends)
 	if err != nil {
 		return nil, err
 	}
-	excludeIDs, err := s.resolveExcludes(ctx, org.Slug, doc.Excludes)
+	excludeIDs, err := s.resolveExcludes(ctx, caller, org.Slug, doc.Excludes)
 	if err != nil {
 		return nil, err
 	}
@@ -165,7 +165,10 @@ func (s *Service) ListFrames(ctx context.Context, _ *connect.Request[framesv1.Li
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
-	resp := &framesv1.ListFramesResponse{CanCreate: rbac.CanPublish(caller)}
+	resp := &framesv1.ListFramesResponse{
+		CanCreate: rbac.CanPublish(caller),
+		Frames:    []*framesv1.FrameSummary{},
+	}
 	for _, f := range all {
 		canRead, err := rbac.Can(ctx, s.lookup, caller, f.OrgId, f.Id, rbac.PermRead)
 		if err != nil {
@@ -311,12 +314,22 @@ func (s *Service) loadForRead(ctx context.Context, caller rbac.Caller, orgSlug, 
 }
 
 // resolveEdges maps YAML extends refs -> pinned store.ParentEdge rows.
-func (s *Service) resolveEdges(ctx context.Context, callerOrgSlug string, refs []ExtendRef) ([]store.ParentEdge, error) {
-	var out []store.ParentEdge
+// caller is used to enforce read permission on each parent frame; a denied
+// read returns the same error as a missing parent to avoid oracle leakage.
+func (s *Service) resolveEdges(ctx context.Context, caller rbac.Caller, callerOrgSlug string, refs []ExtendRef) ([]store.ParentEdge, error) {
+	out := []store.ParentEdge{}
 	for i, r := range refs {
 		orgSlug, name := splitRef(r.Ref, callerOrgSlug)
 		pf, err := s.repo.GetFrameBySlugName(ctx, orgSlug, name)
 		if err != nil {
+			return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("extends[%d]: parent %s not found", i, r.Ref))
+		}
+		canRead, err := rbac.Can(ctx, s.lookup, caller, pf.OrgId, pf.Id, rbac.PermRead)
+		if err != nil {
+			return nil, connect.NewError(connect.CodeInternal, err)
+		}
+		if !canRead {
+			// Return the same error as absent to prevent oracle leakage.
 			return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("extends[%d]: parent %s not found", i, r.Ref))
 		}
 		out = append(out, store.ParentEdge{ParentFrameID: pf.Id, ParentVersion: r.Version, OrderIndex: i})
@@ -324,12 +337,23 @@ func (s *Service) resolveEdges(ctx context.Context, callerOrgSlug string, refs [
 	return out, nil
 }
 
-func (s *Service) resolveExcludes(ctx context.Context, callerOrgSlug string, refs []string) ([]string, error) {
-	var out []string
+// resolveExcludes maps YAML excludes refs -> frame IDs.
+// caller is used to enforce read permission on each excluded frame; a denied
+// read returns the same error as a missing frame to avoid oracle leakage.
+func (s *Service) resolveExcludes(ctx context.Context, caller rbac.Caller, callerOrgSlug string, refs []string) ([]string, error) {
+	out := []string{}
 	for _, ref := range refs {
 		orgSlug, name := splitRef(ref, callerOrgSlug)
 		pf, err := s.repo.GetFrameBySlugName(ctx, orgSlug, name)
 		if err != nil {
+			return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("excludes: %s not found", ref))
+		}
+		canRead, err := rbac.Can(ctx, s.lookup, caller, pf.OrgId, pf.Id, rbac.PermRead)
+		if err != nil {
+			return nil, connect.NewError(connect.CodeInternal, err)
+		}
+		if !canRead {
+			// Return the same error as absent to prevent oracle leakage.
 			return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("excludes: %s not found", ref))
 		}
 		out = append(out, pf.Id)

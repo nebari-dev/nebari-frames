@@ -145,7 +145,7 @@ func (m *Memory) GetFrameVersion(_ context.Context, frameID, version string) (*f
 func (m *Memory) ListFramesByOrg(_ context.Context, orgID string) ([]*framesv1.Frame, error) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
-	var out []*framesv1.Frame
+	out := []*framesv1.Frame{}
 	for _, f := range m.frames {
 		if f.OrgId == orgID {
 			out = append(out, f)
@@ -157,5 +157,8 @@ func (m *Memory) ListFramesByOrg(_ context.Context, orgID string) ([]*framesv1.F
 func (m *Memory) FrameGrants(_ context.Context, frameID string) ([]Grant, error) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
-	return m.grants[frameID], nil
+	if g, ok := m.grants[frameID]; ok {
+		return g, nil
+	}
+	return []Grant{}, nil
 }

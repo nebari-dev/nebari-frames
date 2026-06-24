@@ -301,7 +301,7 @@ func (r *Repository) ListFramesByOrg(ctx context.Context, orgID string) ([]*fram
 		return nil, err
 	}
 	defer func() { _ = rows.Close() }()
-	var out []*framesv1.Frame
+	out := []*framesv1.Frame{}
 	for rows.Next() {
 		var f framesv1.Frame
 		var created, updated string
@@ -324,7 +324,7 @@ func (r *Repository) FrameGrants(ctx context.Context, frameID string) ([]store.G
 		return nil, err
 	}
 	defer func() { _ = rows.Close() }()
-	var out []store.Grant
+	out := []store.Grant{}
 	for rows.Next() {
 		var g store.Grant
 		if err := rows.Scan(&g.SubjectType, &g.SubjectID, &g.Permission); err != nil {

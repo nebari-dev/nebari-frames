@@ -142,6 +142,75 @@ func TestService_ResolveSameOrgParent(t *testing.T) {
 	}
 }
 
+// TestService_CrossOrgParentReadEnforcement verifies that an org-A publisher
+// cannot probe the existence of an org-B frame by referencing it in extends.
+// The publish must fail with CodeInvalidArgument, and the error code must be
+// identical to the case where the ref names a truly non-existent frame
+// (no oracle distinction between "denied" and "absent").
+func TestService_CrossOrgParentReadEnforcement(t *testing.T) {
+	const secretFrameYAML = `name: secret
+description: Secret frame for org B
+version: 1.0.0
+slots:
+  rules:
+    - Internal only.
+`
+	// childExtending builds a publishable child frame YAML that extends the
+	// given fully-qualified ref (e.g. "acme/secret") at version 1.0.0.
+	childExtending := func(ref string) []byte {
+		return []byte(`name: child-frame
+description: Child extending cross-org parent
+version: 1.0.0
+extends:
+  - ref: ` + ref + `
+    version: 1.0.0
+slots:
+  rules:
+    - Some rule.
+`)
+	}
+
+	tests := []struct {
+		name     string
+		childRef string // extends ref without @version
+	}{
+		{
+			name:     "cross-org existing frame is denied (same code as absent)",
+			childRef: "acme/secret",
+		},
+		{
+			name:     "cross-org nonexistent frame",
+			childRef: "acme/does-not-exist",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			repo := store.NewMemory()
+			// Seed org A with a publisher.
+			pubACtx := seedOrg(t, repo, "pub-a", "publisher")
+			svc := frames.NewService(repo)
+
+			// Seed org B with its own frame "secret".
+			pubBCtx := seedSecondOrg(t, repo, "pub-b", "publisher")
+			if _, err := svc.PublishFrame(pubBCtx, connect.NewRequest(&framesv1.PublishFrameRequest{Content: []byte(secretFrameYAML)})); err != nil {
+				t.Fatalf("publish org-B secret frame: %v", err)
+			}
+
+			// Org-A publisher attempts to publish a frame extending the org-B ref.
+			_, err := svc.PublishFrame(pubACtx, connect.NewRequest(&framesv1.PublishFrameRequest{
+				Content: childExtending(tc.childRef),
+			}))
+			if err == nil {
+				t.Fatal("want error, got nil")
+			}
+			if connect.CodeOf(err) != connect.CodeInvalidArgument {
+				t.Fatalf("want CodeInvalidArgument, got %v (%v)", connect.CodeOf(err), err)
+			}
+		})
+	}
+}
+
 func TestService_GetMeReportsRole(t *testing.T) {
 	repo := store.NewMemory()
 	ctx := seedOrg(t, repo, "pub", "publisher")
