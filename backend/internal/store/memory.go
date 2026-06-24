@@ -92,6 +92,9 @@ func (m *Memory) CreateFrameVersion(_ context.Context, in CreateFrameVersionInpu
 		if _, ok := m.keyToFrame[key]; ok {
 			return ErrAlreadyExists
 		}
+		if _, ok := m.frames[in.Frame.Id]; ok {
+			return ErrAlreadyExists
+		}
 		m.frames[in.Frame.Id] = in.Frame
 		m.keyToFrame[key] = in.Frame.Id
 		m.grants[in.Frame.Id] = append(m.grants[in.Frame.Id], in.Grants...)
@@ -106,7 +109,7 @@ func (m *Memory) CreateFrameVersion(_ context.Context, in CreateFrameVersionInpu
 	return nil
 }
 
-func (m *Memory) GetFrameBySlugName(ctx context.Context, orgSlug, name string) (*framesv1.Frame, error) {
+func (m *Memory) GetFrameBySlugName(_ context.Context, orgSlug, name string) (*framesv1.Frame, error) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 	orgID, ok := m.slugToOrg[orgSlug]

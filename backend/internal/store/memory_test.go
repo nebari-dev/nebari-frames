@@ -5,33 +5,62 @@ import (
 	"errors"
 	"testing"
 
-	framesv1 "github.com/nebari-dev/nebari-frames/gen/go/frames/v1"
 	"github.com/nebari-dev/nebari-frames/backend/internal/store"
+	framesv1 "github.com/nebari-dev/nebari-frames/gen/go/frames/v1"
 )
 
-func TestMemory_OrgAndMembershipRoundTrip(t *testing.T) {
+func TestMemory_OrgAndMembership(t *testing.T) {
 	m := store.NewMemory()
 	ctx := context.Background()
 
+	// Seed an org used by the read scenarios below.
 	if err := m.CreateOrg(ctx, &framesv1.Org{Id: "o1", Slug: "openteams", DisplayName: "OpenTeams"}); err != nil {
-		t.Fatalf("CreateOrg: %v", err)
+		t.Fatalf("seed CreateOrg: %v", err)
 	}
-	if err := m.CreateOrg(ctx, &framesv1.Org{Id: "o2", Slug: "openteams"}); !errors.Is(err, store.ErrAlreadyExists) {
-		t.Fatalf("duplicate slug: want ErrAlreadyExists, got %v", err)
+
+	tests := []struct {
+		name string
+		run  func(t *testing.T)
+	}{
+		{
+			name: "duplicate slug returns ErrAlreadyExists",
+			run: func(t *testing.T) {
+				err := m.CreateOrg(ctx, &framesv1.Org{Id: "o2", Slug: "openteams"})
+				if !errors.Is(err, store.ErrAlreadyExists) {
+					t.Fatalf("duplicate slug: want ErrAlreadyExists, got %v", err)
+				}
+			},
+		},
+		{
+			name: "org round-trip by slug",
+			run: func(t *testing.T) {
+				got, err := m.GetOrgBySlug(ctx, "openteams")
+				if err != nil || got.Id != "o1" {
+					t.Fatalf("GetOrgBySlug: got %v, %v", got, err)
+				}
+			},
+		},
+		{
+			name: "missing membership returns ErrNotFound",
+			run: func(t *testing.T) {
+				if _, err := m.GetMembership(ctx, "nobody"); !errors.Is(err, store.ErrNotFound) {
+					t.Fatalf("missing membership: want ErrNotFound, got %v", err)
+				}
+			},
+		},
 	}
-	got, err := m.GetOrgBySlug(ctx, "openteams")
-	if err != nil || got.Id != "o1" {
-		t.Fatalf("GetOrgBySlug: got %v, %v", got, err)
-	}
-	if _, err := m.GetMembership(ctx, "nobody"); !errors.Is(err, store.ErrNotFound) {
-		t.Fatalf("missing membership: want ErrNotFound, got %v", err)
+
+	for _, tt := range tests {
+		t.Run(tt.name, tt.run)
 	}
 }
 
 func TestMemory_CreateFrameVersionAndGrants(t *testing.T) {
 	m := store.NewMemory()
 	ctx := context.Background()
-	_ = m.CreateOrg(ctx, &framesv1.Org{Id: "o1", Slug: "openteams"})
+	if err := m.CreateOrg(ctx, &framesv1.Org{Id: "o1", Slug: "openteams"}); err != nil {
+		t.Fatalf("seed CreateOrg: %v", err)
+	}
 
 	in := store.CreateFrameVersionInput{
 		Frame:      &framesv1.Frame{Id: "f1", OrgId: "o1", Name: "brand-voice", OwnerSub: "u1", LatestVersion: "1.0.0"},
@@ -39,14 +68,41 @@ func TestMemory_CreateFrameVersionAndGrants(t *testing.T) {
 		Grants:     []store.Grant{{SubjectType: "user", SubjectID: "u1", Permission: "edit"}, {SubjectType: "org", SubjectID: "o1", Permission: "read"}},
 		IsNewFrame: true,
 	}
-	if err := m.CreateFrameVersion(ctx, in); err != nil {
-		t.Fatalf("CreateFrameVersion: %v", err)
+
+	// These scenarios share mutable state and assert a sequence
+	// (create -> grants present -> duplicate rejected), so run in order.
+	tests := []struct {
+		name string
+		run  func(t *testing.T)
+	}{
+		{
+			name: "create new frame version succeeds",
+			run: func(t *testing.T) {
+				if err := m.CreateFrameVersion(ctx, in); err != nil {
+					t.Fatalf("CreateFrameVersion: %v", err)
+				}
+			},
+		},
+		{
+			name: "default grants are stored on new frame",
+			run: func(t *testing.T) {
+				grants, _ := m.FrameGrants(ctx, "f1")
+				if len(grants) != 2 {
+					t.Fatalf("want 2 grants, got %d", len(grants))
+				}
+			},
+		},
+		{
+			name: "duplicate version returns ErrAlreadyExists",
+			run: func(t *testing.T) {
+				if err := m.CreateFrameVersion(ctx, in); !errors.Is(err, store.ErrAlreadyExists) {
+					t.Fatalf("duplicate version: want ErrAlreadyExists, got %v", err)
+				}
+			},
+		},
 	}
-	grants, _ := m.FrameGrants(ctx, "f1")
-	if len(grants) != 2 {
-		t.Fatalf("want 2 grants, got %d", len(grants))
-	}
-	if err := m.CreateFrameVersion(ctx, in); !errors.Is(err, store.ErrAlreadyExists) {
-		t.Fatalf("duplicate version: want ErrAlreadyExists, got %v", err)
+
+	for _, tt := range tests {
+		t.Run(tt.name, tt.run)
 	}
 }
