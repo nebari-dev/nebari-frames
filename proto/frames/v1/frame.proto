@@ -59,3 +59,10 @@ message FrameSummary {
   google.protobuf.Timestamp updated_at = 6;
   Permissions permissions = 7;
 }
+
+message FrameVersionSummary {
+  string version = 1;
+  string changelog = 2;
+  string published_by = 3;
+  google.protobuf.Timestamp published_at = 4;
+}

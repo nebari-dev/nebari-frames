@@ -211,6 +211,72 @@ slots:
 	}
 }
 
+func TestListFrameVersions(t *testing.T) {
+	const v1Frame = `name: brand-voice
+description: OpenTeams brand voice
+version: 1.0.0
+slots:
+  rules:
+    - Cite benchmarks.
+`
+	const v2Frame = `name: brand-voice
+description: OpenTeams brand voice
+version: 1.1.0
+slots:
+  rules:
+    - Cite benchmarks.
+    - Use data.
+`
+	tests := []struct {
+		name      string
+		hasRead   bool
+		wantCode  connect.Code // 0 means OK
+		wantCount int
+	}{
+		{name: "reader sees versions", hasRead: true, wantCode: 0, wantCount: 2},
+		{name: "no read returns not found", hasRead: false, wantCode: connect.CodeNotFound},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			repo := store.NewMemory()
+			pubCtx := seedOrg(t, repo, "pub", "publisher")
+			svc := frames.NewService(repo)
+
+			// Publish two versions as the publisher.
+			for _, content := range [][]byte{[]byte(v1Frame), []byte(v2Frame)} {
+				if _, err := svc.PublishFrame(pubCtx, connect.NewRequest(&framesv1.PublishFrameRequest{Content: content})); err != nil {
+					t.Fatalf("publish: %v", err)
+				}
+			}
+
+			var callerCtx context.Context
+			if tt.hasRead {
+				// The publisher already has read via the org-level grant.
+				callerCtx = pubCtx
+			} else {
+				// A user in a different org has no read grant.
+				callerCtx = seedSecondOrg(t, repo, "outsider", "admin")
+			}
+
+			resp, err := svc.ListFrameVersions(callerCtx, connect.NewRequest(&framesv1.ListFrameVersionsRequest{
+				OrgSlug: "openteams", Name: "brand-voice",
+			}))
+			if tt.wantCode != 0 {
+				if connect.CodeOf(err) != tt.wantCode {
+					t.Fatalf("code = %v, want %v (err=%v)", connect.CodeOf(err), tt.wantCode, err)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("unexpected err: %v", err)
+			}
+			if len(resp.Msg.Versions) != tt.wantCount {
+				t.Errorf("versions = %d, want %d", len(resp.Msg.Versions), tt.wantCount)
+			}
+		})
+	}
+}
+
 func TestService_GetMeReportsRole(t *testing.T) {
 	repo := store.NewMemory()
 	ctx := seedOrg(t, repo, "pub", "publisher")

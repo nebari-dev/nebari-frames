@@ -45,6 +45,9 @@ const (
 	FrameServiceResolveFrameProcedure = "/frames.v1.FrameService/ResolveFrame"
 	// FrameServiceGetMeProcedure is the fully-qualified name of the FrameService's GetMe RPC.
 	FrameServiceGetMeProcedure = "/frames.v1.FrameService/GetMe"
+	// FrameServiceListFrameVersionsProcedure is the fully-qualified name of the FrameService's
+	// ListFrameVersions RPC.
+	FrameServiceListFrameVersionsProcedure = "/frames.v1.FrameService/ListFrameVersions"
 )
 
 // FrameServiceClient is a client for the frames.v1.FrameService service.
@@ -59,6 +62,8 @@ type FrameServiceClient interface {
 	ResolveFrame(context.Context, *connect.Request[v1.ResolveFrameRequest]) (*connect.Response[v1.ResolveFrameResponse], error)
 	// Identity + org + role for the calling user.
 	GetMe(context.Context, *connect.Request[v1.GetMeRequest]) (*connect.Response[v1.GetMeResponse], error)
+	// Read - lists a frame's published versions, newest first. 404 if no read.
+	ListFrameVersions(context.Context, *connect.Request[v1.ListFrameVersionsRequest]) (*connect.Response[v1.ListFrameVersionsResponse], error)
 }
 
 // NewFrameServiceClient constructs a client for the frames.v1.FrameService service. By default, it
@@ -102,16 +107,23 @@ func NewFrameServiceClient(httpClient connect.HTTPClient, baseURL string, opts .
 			connect.WithSchema(frameServiceMethods.ByName("GetMe")),
 			connect.WithClientOptions(opts...),
 		),
+		listFrameVersions: connect.NewClient[v1.ListFrameVersionsRequest, v1.ListFrameVersionsResponse](
+			httpClient,
+			baseURL+FrameServiceListFrameVersionsProcedure,
+			connect.WithSchema(frameServiceMethods.ByName("ListFrameVersions")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
 // frameServiceClient implements FrameServiceClient.
 type frameServiceClient struct {
-	publishFrame *connect.Client[v1.PublishFrameRequest, v1.PublishFrameResponse]
-	listFrames   *connect.Client[v1.ListFramesRequest, v1.ListFramesResponse]
-	getFrame     *connect.Client[v1.GetFrameRequest, v1.GetFrameResponse]
-	resolveFrame *connect.Client[v1.ResolveFrameRequest, v1.ResolveFrameResponse]
-	getMe        *connect.Client[v1.GetMeRequest, v1.GetMeResponse]
+	publishFrame      *connect.Client[v1.PublishFrameRequest, v1.PublishFrameResponse]
+	listFrames        *connect.Client[v1.ListFramesRequest, v1.ListFramesResponse]
+	getFrame          *connect.Client[v1.GetFrameRequest, v1.GetFrameResponse]
+	resolveFrame      *connect.Client[v1.ResolveFrameRequest, v1.ResolveFrameResponse]
+	getMe             *connect.Client[v1.GetMeRequest, v1.GetMeResponse]
+	listFrameVersions *connect.Client[v1.ListFrameVersionsRequest, v1.ListFrameVersionsResponse]
 }
 
 // PublishFrame calls frames.v1.FrameService.PublishFrame.
@@ -139,6 +151,11 @@ func (c *frameServiceClient) GetMe(ctx context.Context, req *connect.Request[v1.
 	return c.getMe.CallUnary(ctx, req)
 }
 
+// ListFrameVersions calls frames.v1.FrameService.ListFrameVersions.
+func (c *frameServiceClient) ListFrameVersions(ctx context.Context, req *connect.Request[v1.ListFrameVersionsRequest]) (*connect.Response[v1.ListFrameVersionsResponse], error) {
+	return c.listFrameVersions.CallUnary(ctx, req)
+}
+
 // FrameServiceHandler is an implementation of the frames.v1.FrameService service.
 type FrameServiceHandler interface {
 	// Write - publisher/admin only. Org is derived from the caller.
@@ -151,6 +168,8 @@ type FrameServiceHandler interface {
 	ResolveFrame(context.Context, *connect.Request[v1.ResolveFrameRequest]) (*connect.Response[v1.ResolveFrameResponse], error)
 	// Identity + org + role for the calling user.
 	GetMe(context.Context, *connect.Request[v1.GetMeRequest]) (*connect.Response[v1.GetMeResponse], error)
+	// Read - lists a frame's published versions, newest first. 404 if no read.
+	ListFrameVersions(context.Context, *connect.Request[v1.ListFrameVersionsRequest]) (*connect.Response[v1.ListFrameVersionsResponse], error)
 }
 
 // NewFrameServiceHandler builds an HTTP handler from the service implementation. It returns the
@@ -190,6 +209,12 @@ func NewFrameServiceHandler(svc FrameServiceHandler, opts ...connect.HandlerOpti
 		connect.WithSchema(frameServiceMethods.ByName("GetMe")),
 		connect.WithHandlerOptions(opts...),
 	)
+	frameServiceListFrameVersionsHandler := connect.NewUnaryHandler(
+		FrameServiceListFrameVersionsProcedure,
+		svc.ListFrameVersions,
+		connect.WithSchema(frameServiceMethods.ByName("ListFrameVersions")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/frames.v1.FrameService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case FrameServicePublishFrameProcedure:
@@ -202,6 +227,8 @@ func NewFrameServiceHandler(svc FrameServiceHandler, opts ...connect.HandlerOpti
 			frameServiceResolveFrameHandler.ServeHTTP(w, r)
 		case FrameServiceGetMeProcedure:
 			frameServiceGetMeHandler.ServeHTTP(w, r)
+		case FrameServiceListFrameVersionsProcedure:
+			frameServiceListFrameVersionsHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -229,4 +256,8 @@ func (UnimplementedFrameServiceHandler) ResolveFrame(context.Context, *connect.R
 
 func (UnimplementedFrameServiceHandler) GetMe(context.Context, *connect.Request[v1.GetMeRequest]) (*connect.Response[v1.GetMeResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("frames.v1.FrameService.GetMe is not implemented"))
+}
+
+func (UnimplementedFrameServiceHandler) ListFrameVersions(context.Context, *connect.Request[v1.ListFrameVersionsRequest]) (*connect.Response[v1.ListFrameVersionsResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("frames.v1.FrameService.ListFrameVersions is not implemented"))
 }

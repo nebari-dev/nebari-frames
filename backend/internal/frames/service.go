@@ -229,6 +229,35 @@ func (s *Service) GetFrame(ctx context.Context, req *connect.Request[framesv1.Ge
 	}), nil
 }
 
+// ListFrameVersions lists a frame's published versions, read-enforced.
+// Missing read is reported as NotFound to avoid leaking existence.
+func (s *Service) ListFrameVersions(ctx context.Context, req *connect.Request[framesv1.ListFrameVersionsRequest]) (*connect.Response[framesv1.ListFrameVersionsResponse], error) {
+	caller, err := s.resolveCaller(ctx)
+	if err != nil {
+		return nil, err
+	}
+	notFound := connect.NewError(connect.CodeNotFound, errors.New("frame not found"))
+	frame, err := s.repo.GetFrameBySlugName(ctx, req.Msg.OrgSlug, req.Msg.Name)
+	if err != nil {
+		if errors.Is(err, store.ErrNotFound) {
+			return nil, notFound
+		}
+		return nil, connect.NewError(connect.CodeInternal, err)
+	}
+	canRead, err := rbac.Can(ctx, s.lookup, caller, frame.OrgId, frame.Id, rbac.PermRead)
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInternal, err)
+	}
+	if !canRead {
+		return nil, notFound
+	}
+	versions, err := s.repo.ListFrameVersions(ctx, frame.Id)
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInternal, err)
+	}
+	return connect.NewResponse(&framesv1.ListFrameVersionsResponse{Versions: versions}), nil
+}
+
 func (s *Service) ResolveFrame(ctx context.Context, req *connect.Request[framesv1.ResolveFrameRequest]) (*connect.Response[framesv1.ResolveFrameResponse], error) {
 	caller, err := s.resolveCaller(ctx)
 	if err != nil {

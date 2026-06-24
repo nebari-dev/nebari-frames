@@ -142,6 +142,35 @@ func (m *Memory) GetFrameVersion(_ context.Context, frameID, version string) (*f
 	return row.v, row.extends, row.excludes, nil
 }
 
+func (m *Memory) ListFrameVersions(_ context.Context, frameID string) ([]*framesv1.FrameVersionSummary, error) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	var out []*framesv1.FrameVersionSummary
+	for key, row := range m.versions {
+		// key format: frameID+"@"+version
+		if len(key) <= len(frameID)+1 || key[:len(frameID)+1] != frameID+"@" {
+			continue
+		}
+		out = append(out, &framesv1.FrameVersionSummary{
+			Version:     row.v.Version,
+			Changelog:   row.v.Changelog,
+			PublishedBy: row.v.PublishedBy,
+			PublishedAt: row.v.PublishedAt,
+		})
+	}
+	// Sort newest first by published_at then version descending.
+	for i := 0; i < len(out)-1; i++ {
+		for j := i + 1; j < len(out); j++ {
+			ti := out[i].PublishedAt.AsTime()
+			tj := out[j].PublishedAt.AsTime()
+			if tj.After(ti) {
+				out[i], out[j] = out[j], out[i]
+			}
+		}
+	}
+	return out, nil
+}
+
 func (m *Memory) ListFramesByOrg(_ context.Context, orgID string) ([]*framesv1.Frame, error) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()

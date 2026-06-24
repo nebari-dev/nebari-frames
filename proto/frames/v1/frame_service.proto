@@ -16,6 +16,8 @@ service FrameService {
   rpc ResolveFrame(ResolveFrameRequest) returns (ResolveFrameResponse);
   // Identity + org + role for the calling user.
   rpc GetMe(GetMeRequest) returns (GetMeResponse);
+  // Read - lists a frame's published versions, newest first. 404 if no read.
+  rpc ListFrameVersions(ListFrameVersionsRequest) returns (ListFrameVersionsResponse);
 }
 
 message PublishFrameRequest {
@@ -62,4 +64,12 @@ message GetMeResponse {
   Org org = 3;
   string role = 4;
   bool can_create = 5;
+}
+
+message ListFrameVersionsRequest {
+  string org_slug = 1;
+  string name = 2;
+}
+message ListFrameVersionsResponse {
+  repeated FrameVersionSummary versions = 1;
 }

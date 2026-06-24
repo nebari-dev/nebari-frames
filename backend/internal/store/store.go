@@ -53,6 +53,7 @@ type Repository interface {
 	GetFrameBySlugName(ctx context.Context, orgSlug, name string) (*framesv1.Frame, error)
 	GetFrameByID(ctx context.Context, id string) (*framesv1.Frame, error)
 	GetFrameVersion(ctx context.Context, frameID, version string) (*framesv1.FrameVersion, []ParentEdge, []string, error)
+	ListFrameVersions(ctx context.Context, frameID string) ([]*framesv1.FrameVersionSummary, error)
 	ListFramesByOrg(ctx context.Context, orgID string) ([]*framesv1.Frame, error)
 	FrameGrants(ctx context.Context, frameID string) ([]Grant, error)
 }
