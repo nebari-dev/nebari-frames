@@ -174,8 +174,14 @@ func (s *Service) ListFrames(ctx context.Context, _ *connect.Request[framesv1.Li
 		if !canRead {
 			continue
 		}
-		canEdit, _ := rbac.Can(ctx, s.lookup, caller, f.OrgId, f.Id, rbac.PermEdit)
-		canDelete, _ := rbac.Can(ctx, s.lookup, caller, f.OrgId, f.Id, rbac.PermDelete)
+		canEdit, err := rbac.Can(ctx, s.lookup, caller, f.OrgId, f.Id, rbac.PermEdit)
+		if err != nil {
+			return nil, connect.NewError(connect.CodeInternal, err)
+		}
+		canDelete, err := rbac.Can(ctx, s.lookup, caller, f.OrgId, f.Id, rbac.PermDelete)
+		if err != nil {
+			return nil, connect.NewError(connect.CodeInternal, err)
+		}
 		resp.Frames = append(resp.Frames, &framesv1.FrameSummary{
 			OrgSlug: org.Slug, Name: f.Name, Description: f.Description, OwnerSub: f.OwnerSub,
 			LatestVersion: f.LatestVersion, UpdatedAt: f.UpdatedAt,
@@ -233,7 +239,11 @@ func (s *Service) ResolveFrame(ctx context.Context, req *connect.Request[framesv
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
-	fetcher := &readFetcher{s: s, ctx: ctx, caller: caller}
+	callerOrg, err := s.repo.GetOrgByID(ctx, caller.OrgID)
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInternal, err)
+	}
+	fetcher := &readFetcher{s: s, caller: caller, callerOrgSlug: callerOrg.Slug}
 	resolved, err := Resolve(ctx, fetcher, doc, doc.Extends, doc.Excludes)
 	if err != nil {
 		var ce *CycleError
@@ -328,21 +338,21 @@ func (s *Service) resolveExcludes(ctx context.Context, callerOrgSlug string, ref
 }
 
 func splitRef(ref, callerOrgSlug string) (orgSlug, name string) {
-	if i := strings.IndexByte(ref, '/'); i >= 0 {
-		return ref[:i], ref[i+1:]
+	if orgSlug, name, ok := strings.Cut(ref, "/"); ok {
+		return orgSlug, name
 	}
 	return callerOrgSlug, ref // same-org may omit slug
 }
 
 // readFetcher adapts the store to frames.ParentFetcher, enforcing read on each parent.
 type readFetcher struct {
-	s      *Service
-	ctx    context.Context
-	caller rbac.Caller
+	s             *Service
+	caller        rbac.Caller
+	callerOrgSlug string // fallback org slug for bare (same-org) refs
 }
 
 func (f *readFetcher) FetchParent(ctx context.Context, ref, version string) (*Doc, []ExtendRef, []string, error) {
-	orgSlug, name := splitRef(ref, "")
+	orgSlug, name := splitRef(ref, f.callerOrgSlug)
 	frame, err := f.s.repo.GetFrameBySlugName(ctx, orgSlug, name)
 	if err != nil {
 		return nil, nil, nil, fmt.Errorf("%w: %s", ErrParentUnreadable, ref)
