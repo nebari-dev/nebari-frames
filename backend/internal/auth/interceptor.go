@@ -9,7 +9,7 @@ import (
 )
 
 // devClaims are injected when running without an OIDC provider so that
-// write operations (PublishSkill) work in local development.
+// write/authenticated operations work in local development.
 var devClaims = &Claims{
 	Subject: "dev-user",
 	Email:   "dev@localhost",

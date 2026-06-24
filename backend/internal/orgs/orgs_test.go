@@ -59,7 +59,8 @@ func TestResolveCaller(t *testing.T) {
 			}
 			if caller.OrgID != tt.wantCaller.OrgID ||
 				caller.Role != tt.wantCaller.Role ||
-				caller.Subject != tt.wantCaller.Subject {
+				caller.Subject != tt.wantCaller.Subject ||
+				caller.Email != tt.wantCaller.Email {
 				t.Fatalf("caller = %+v, want %+v", caller, tt.wantCaller)
 			}
 		})
