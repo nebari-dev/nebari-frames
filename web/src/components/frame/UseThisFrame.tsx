@@ -16,6 +16,7 @@ export function UseThisFrame({ org, name }: { org: string; name: string }) {
         onClick={() => {
           void navigator.clipboard.writeText(uri);
           setCopied(true);
+          setTimeout(() => setCopied(false), 2000);
         }}
       >
         {copied ? "Copied" : "Copy MCP URI"}

@@ -13,9 +13,11 @@ export default defineConfig({
     alias: {
       "@": path.resolve(__dirname, "./src"),
       "@gen": path.resolve(__dirname, "../gen/ts"),
-      // protoc-gen-es v2 uses package subpath exports that Rollup resolves via
-      // the "import" condition; map them to their ESM dist paths explicitly so
-      // the production build can bundle them.
+      // gen/ts lives outside web/ so its @bufbuild/protobuf subpath imports
+      // (codegenv2, wkt) cannot resolve via normal node_modules lookup.
+      // These three aliases (vite.config.ts, vitest.config.ts, tsconfig.json)
+      // are the required workaround. The proper long-term fix is to convert
+      // this repo to an npm workspace so gen/ts shares web/'s node_modules.
       "@bufbuild/protobuf/codegenv2": path.resolve(
         __dirname,
         "./node_modules/@bufbuild/protobuf/dist/esm/codegenv2/index.js",
