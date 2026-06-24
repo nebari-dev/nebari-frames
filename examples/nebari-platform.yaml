@@ -1,0 +1,281 @@
+# Frame: nebari-platform
+#
+# The first hand-authored example Frame (see docs/design/2026-05-21-nebari-frames-migration.md §5.3).
+# Audience: sales teams giving Claude context when drafting proposals for potential clients.
+# Source material: nebari-infrastructure-core design docs, nebari-operator API,
+# software-pack-dashboard tracked-packs.yaml, and internal positioning documents.
+
+name: nebari-platform
+description: >-
+  What Nebari is today: Nebari Infrastructure Core, the Nebari Operator, and the
+  software pack catalog. Context for writing accurate client proposals: value
+  proposition, vocabulary, and guardrails for the today-vs-roadmap line.
+version: 0.1.0
+
+slots:
+  terminology:
+    - term: Nebari
+      definition: >-
+        An open-source platform for deploying and operating data science and AI
+        infrastructure on Kubernetes, inside the client's own cloud account or
+        data center. Stewarded by OpenTeams and the nebari-dev community.
+    - term: Nebari Infrastructure Core (NIC)
+      definition: >-
+        The deployment engine. A Go CLI that reads a single config.yaml and
+        provisions a production-ready Kubernetes cluster plus platform services
+        using OpenTofu modules. Commands include deploy, destroy, status, and
+        validate.
+    - term: Software Pack
+      definition: >-
+        A curated, versioned Helm chart that deploys a workload (JupyterHub,
+        MLflow, LLM serving, Superset, and others) onto a Nebari cluster with
+        platform integration included: routing, single sign-on, TLS, and
+        landing-page registration.
+    - term: Nebari Operator
+      definition: >-
+        A Kubernetes operator that watches NebariApp resources and wires each
+        application into the platform automatically: HTTPRoute creation through
+        Envoy Gateway, OIDC authentication through Keycloak, TLS certificates,
+        and landing-page registration.
+    - term: NebariApp
+      definition: >-
+        The custom resource a pack (or any application) creates to join the
+        platform. Declaring a hostname and backend service is enough to get
+        routing, auth, and TLS without writing any of that configuration by
+        hand.
+    - term: foundational software
+      definition: >-
+        The platform services NIC installs on every cluster via GitOps:
+        cert-manager, Envoy Gateway, Keycloak, the LGTM observability stack,
+        and the Nebari Operator.
+    - term: GitOps
+      definition: >-
+        The operating model for everything above the infrastructure layer. The
+        desired state of the platform lives in a Git repository the client
+        owns; ArgoCD continuously reconciles the cluster against it. Every
+        change is a reviewable commit.
+    - term: OpenTofu
+      definition: >-
+        The open-source infrastructure-as-code engine (a Terraform fork under
+        the Linux Foundation) that NIC drives to provision cloud resources.
+        State lives in standard backends the client controls.
+    - term: LGTM stack
+      definition: >-
+        The observability suite deployed on every cluster: Loki for logs,
+        Grafana for dashboards, Tempo for traces, Mimir for metrics, fed by an
+        OpenTelemetry Collector pipeline.
+    - term: Keycloak
+      definition: >-
+        The open-source identity provider deployed with the platform. Provides
+        single sign-on across all deployed services and federates with the
+        client's existing identity provider (Active Directory, Okta, and other
+        OIDC or SAML systems).
+    - term: Envoy Gateway
+      definition: >-
+        The ingress layer, built on the Kubernetes Gateway API. All traffic to
+        platform services routes through it, which is where authentication
+        policies and TLS are enforced.
+    - term: Intelligence Hub
+      definition: >-
+        OpenTeams' product direction: a governed environment, built on Nebari,
+        where an organization's AI context, workers, and workflows are owned
+        and auditable artifacts. Direction, not a current deliverable; see
+        rules before referencing it in proposals.
+    - term: Nebari Classic
+      definition: >-
+        The earlier generation of Nebari that ships the full data science stack
+        as a single opinionated deployment. The current platform supersedes it
+        with a composable architecture; avoid the term in proposals unless the
+        client already uses Nebari Classic.
+
+  rules:
+    - >-
+      Only present as deliverables what ships today: NIC-provisioned Kubernetes
+      clusters, the foundational software, the Nebari Operator, and the tracked
+      software packs. Nothing else is committable.
+    - >-
+      Intelligence Hubs, Frames, Cogs, Ops, the marketplace, and the Desktop
+      Application are product direction. Mention them only when the client asks
+      where the platform is heading, clearly labeled as direction, with no
+      dates and no commitments.
+    - >-
+      Never reproduce confidential internal material in client-facing output:
+      competitive moat analysis, network flywheel framing, competitor
+      comparison tables, strategic roadmap timelines, or investor messaging.
+    - >-
+      Never make performance, scale, or cost claims without a citable source.
+      If no source exists, describe the capability without quantifying it.
+    - >-
+      Never disparage competitors or name them negatively. Position Nebari on
+      its own strengths: ownership, open source, composability, auditability.
+    - >-
+      Pricing, delivery timelines, and contractual scope come from the account
+      team. Leave them as clearly marked placeholders for humans to fill in.
+    - >-
+      The data-engineering pack is work in progress. Do not present it as a
+      turnkey deliverable.
+    - >-
+      Every capability claim in a proposal must name the component that
+      delivers it (NIC, the operator, a specific pack). If no component
+      delivers it, the claim does not go in.
+
+  skills:
+    - proposal-writing
+    - technical-writing
+
+  prompts:
+    - >-
+      Lead proposals with the client's problem stated in their own terms.
+      Introduce Nebari as the answer to that problem, not as the topic.
+    - >-
+      Where it honestly fits the client's situation, connect their pain to the
+      costs of rented AI and data infrastructure: vendor lock-in, compliance
+      exposure when data leaves their perimeter, no ability to audit or
+      reproduce AI behavior, and institutional knowledge accumulating in a
+      vendor's logs instead of their own systems.
+    - >-
+      When listing capabilities, tie each one to the named component that
+      delivers it, so the proposal reads as an engineering plan rather than a
+      brochure.
+    - >-
+      If the client asks about future direction, give the Intelligence Hub
+      story in one short paragraph, label it as direction, and return to what
+      ships today.
+
+  tool_specs: |
+    No tools are required to use this Frame. Web access is helpful for citing
+    https://nebari.dev and the public pack repositories under
+    https://github.com/nebari-dev when a proposal needs links or version
+    details.
+
+  goals: |
+    A good Nebari proposal does four things:
+
+    1. Shows the client we understood their actual problem: the workloads they
+       need to run, the compliance regime they operate under, and the
+       infrastructure they already have.
+    2. Positions Nebari as owned infrastructure: open source, deployed in
+       their cloud account or data center, managed through a GitOps repository
+       they control. They are buying a platform and the expertise to run it,
+       not renting access to someone else's.
+    3. Wins on the strengths that are true today: composability (install only
+       the packs they need), integrated auth and observability out of the box,
+       multi-cloud portability, and full auditability of both the
+       infrastructure (Git history, OpenTofu state) and the workloads
+       (provenance reports, LGTM stack).
+    4. Sets expectations the delivery team can meet. An accurate proposal that
+       wins is the goal; an inflated one that wins is a failure that surfaces
+       three months later.
+
+  style: |
+    Plain, concrete, and confident without hype. Short sentences. Name real
+    components instead of using category buzzwords: "the operator creates an
+    OAuth client in Keycloak" lands better than "seamless enterprise-grade
+    security integration". No superlatives like cutting-edge, revolutionary,
+    best-in-class, or seamless. Write like the engineers who will deliver the
+    project, because they will read the proposal too. American English.
+    Spell out an acronym at first use. Use regular dashes and colons for
+    punctuation, never em dashes.
+
+  norms: |
+    Engineering reviews the technical scope of every proposal before it goes
+    to the client; the frame gives you accurate raw material, but a human who
+    has deployed Nebari validates the specific commitments. Proposals state
+    explicitly what the client will own at the end of the engagement.
+    Vision and roadmap content appears only when the client asks for it.
+    When a proposal needs a capability that no current component delivers,
+    flag it to the account team as a gap rather than writing around it.
+
+  architecture: |
+    Nebari today is a layered, open-source platform. Each layer is independently
+    useful and the client owns all of them.
+
+    **Layer 1: Infrastructure (Nebari Infrastructure Core).** NIC is a Go CLI
+    that reads one config.yaml and provisions a complete Kubernetes
+    environment with `nic deploy`. Under the hood it drives OpenTofu modules,
+    so the infrastructure is standard, inspectable infrastructure-as-code, with
+    state in a backend the client controls. Supported targets: AWS (EKS),
+    Google Cloud (GKE), Azure (AKS), Hetzner, local or air-gapped hardware via
+    K3s, and existing Kubernetes clusters the client already runs. The same
+    config format works across all of them, which is what makes the platform
+    portable rather than cloud-specific.
+
+    **Layer 2: Foundational software.** On top of the cluster, NIC bootstraps
+    ArgoCD and deploys the platform services through GitOps: cert-manager for
+    automated TLS, Envoy Gateway for routing (Kubernetes Gateway API), Keycloak
+    for single sign-on (federating with the client's existing identity
+    provider), and the LGTM observability stack (Loki, Grafana, Tempo, Mimir,
+    OpenTelemetry Collector) so logs, metrics, and traces work from day one.
+
+    **Layer 3: The Nebari Operator.** The operator watches a custom resource
+    called NebariApp. Any application that creates one, declaring just a
+    hostname and a backend service, automatically receives routing through
+    Envoy Gateway, OIDC authentication through Keycloak, TLS certificates, and
+    a tile on the platform landing page where users discover their services.
+    This is the integration layer that makes the platform composable: new
+    services join the platform by declaring themselves, not by a week of
+    ingress, auth, and certificate wiring.
+
+    **Layer 4: Software packs.** Versioned Helm charts that deploy curated
+    workloads with NebariApp integration built in. The official catalog:
+
+    Workload packs:
+    - **Data science**: JupyterHub with jhub-apps for deploying notebooks,
+      dashboards, and apps.
+    - **LLM serving**: model serving via llm-d with per-model OIDC access
+      control, API key management, and Envoy AI Gateway integration for token
+      counting and rate limiting. Owned LLM inference inside the client's
+      perimeter.
+    - **Chat**: a drop-in chat application wired into Keycloak SSO.
+    - **MLflow**: experiment tracking with PostgreSQL backend and SSO.
+    - **Ray Serve**: scalable model serving via the RayService CRD.
+    - **Superset**: BI dashboards with platform routing and OAuth.
+    - **Pi coding agent**: AI coding-agent workflow on the JupyterHub stack.
+    - **Capability pack**: pixi-backed Python services.
+    - **Data engineering**: work in progress, not yet a committable deliverable.
+
+    Platform and operations packs:
+    - **LGTM**: the observability stack, also installable standalone.
+    - **External auth**: delivers third-party credentials (GitHub and other
+      providers) into user environments securely.
+    - **Longhorn backup**: hourly snapshots and daily S3 backups for every
+      volume on the cluster's default storage class.
+    - **Provenance collector**: discovers running images and Helm releases,
+      verifies signatures, detects SLSA/SBOM attestations, and emits
+      timestamped provenance reports. Directly supports compliance and
+      supply-chain audit requirements.
+    - **Nebi** and **skillsctl**: distribution tooling for environments and
+      AI skills.
+
+    **Direction.** This stack is the infrastructure layer for OpenTeams'
+    Intelligence Hub direction: governed environments where an organization's
+    AI context, workers, and workflows are owned, versioned, auditable
+    artifacts rather than vendor-side state. When clients ask where the
+    platform is heading, that is the one-paragraph answer. It is direction,
+    not a deliverable.
+
+  business_process: |
+    A typical Nebari engagement runs in five stages:
+
+    1. **Discovery.** Understand the client's workloads (notebooks, model
+       serving, BI, LLM inference), their cloud or on-prem footprint, their
+       identity provider, and their compliance requirements.
+    2. **Architecture fit.** Decide between a new NIC-provisioned cluster or
+       deployment onto an existing cluster; pick the provider target; plan
+       DNS, TLS, and identity federation; select the pack set.
+    3. **Deployment.** Author config.yaml, run `nic deploy`, and verify the
+       cluster, foundational software, and operator. Install and configure
+       the selected packs through the GitOps repository.
+    4. **Onboarding.** Connect the client's identity provider to Keycloak,
+       onboard user groups, and walk teams through the landing page, their
+       workloads, and the Grafana dashboards.
+    5. **Handover.** The client receives the GitOps repository, the
+       infrastructure state backend, documentation, and training. Ongoing
+       support and platform engineering are scoped per engagement by the
+       account team.
+
+    End state: the client owns everything. The infrastructure runs in their
+    accounts, the state and Git repositories are theirs, and every component
+    is open source. There is no proprietary runtime and no platform hostage:
+    if the engagement ended tomorrow, the platform would keep running and
+    their own team could operate it.

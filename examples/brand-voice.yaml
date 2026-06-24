@@ -1,0 +1,16 @@
+name: brand-voice
+description: OpenTeams brand voice and messaging guardrails.
+version: 1.0.0
+slots:
+  terminology:
+    - term: customer
+      definition: An enterprise organization that has deployed an Intelligence Hub.
+    - term: hub
+      definition: A deployed Nebari instance.
+  rules:
+    - Never claim performance numbers without a benchmark citation.
+    - Avoid the word "revolutionary" in customer-facing copy.
+  goals: |
+    Communicate capability with precision and restraint.
+  style: |
+    Plain, direct, technically credible. Short sentences.

@@ -1,0 +1,11 @@
+name: healthcare-compliance
+description: Compliance guardrails for healthcare-sector messaging and deliverables.
+version: 1.0.0
+slots:
+  rules:
+    - Never state or imply HIPAA compliance without legal sign-off.
+    - Do not include PHI in any generated artifact.
+  norms: |
+    When uncertain about a regulatory claim, flag it for SME review rather than asserting it.
+  business_process: |
+    All externally-facing compliance statements route through the compliance officer before release.
