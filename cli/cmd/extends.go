@@ -20,7 +20,7 @@ func addExtendsCmd(root *cobra.Command) {
 			}
 			resp, err := getClientCtx(cmd.Context()).Get(cmd.Context(), org, name, version)
 			if err != nil {
-				return notFoundAware(err)
+				return authAware(notFoundAware(err))
 			}
 			out := cmd.OutOrStdout()
 			if len(resp.Extends) == 0 {

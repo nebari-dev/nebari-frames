@@ -14,7 +14,7 @@ func addListCmd(root *cobra.Command) {
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			frames, _, err := getClientCtx(cmd.Context()).List(cmd.Context())
 			if err != nil {
-				return err
+				return authAware(err)
 			}
 			if len(frames) == 0 {
 				fmt.Fprintln(cmd.OutOrStdout(), "No frames found.")

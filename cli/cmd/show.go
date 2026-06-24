@@ -21,7 +21,7 @@ func addShowCmd(root *cobra.Command) {
 			}
 			resp, err := getClientCtx(cmd.Context()).Get(cmd.Context(), org, name, version)
 			if err != nil {
-				return notFoundAware(err)
+				return authAware(notFoundAware(err))
 			}
 			out := cmd.OutOrStdout()
 			fmt.Fprintf(out, "%s/%s@%s\n", org, resp.Frame.Name, resp.Version.Version)
@@ -45,6 +45,14 @@ func addShowCmd(root *cobra.Command) {
 func notFoundAware(err error) error {
 	if connect.CodeOf(err) == connect.CodeNotFound {
 		return fmt.Errorf("frame not found (or you do not have access)")
+	}
+	return err
+}
+
+// authAware rewrites an Unauthenticated error into a user-friendly prompt.
+func authAware(err error) error {
+	if connect.CodeOf(err) == connect.CodeUnauthenticated {
+		return fmt.Errorf("not authenticated; run 'frames auth login'")
 	}
 	return err
 }

@@ -78,7 +78,7 @@ type tokenResponse struct {
 	Error            string `json:"error"`
 }
 
-// StartDeviceFlow fetches auth config from the skillsctl server, discovers
+// StartDeviceFlow fetches auth config from the frames server, discovers
 // OIDC endpoints, requests a device code, and returns the pending state
 // for display to the user. Call PollForToken after displaying the URL.
 func StartDeviceFlow(ctx context.Context, serverURL string) (*DeviceFlowPending, error) {

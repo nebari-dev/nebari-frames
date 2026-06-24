@@ -20,7 +20,7 @@ func addResolveCmd(root *cobra.Command) {
 			}
 			content, err := getClientCtx(cmd.Context()).Resolve(cmd.Context(), org, name, version)
 			if err != nil {
-				return notFoundAware(err)
+				return authAware(notFoundAware(err))
 			}
 			fmt.Fprint(cmd.OutOrStdout(), string(content))
 			return nil

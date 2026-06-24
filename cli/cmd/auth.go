@@ -48,7 +48,7 @@ func addAuthCmd(root *cobra.Command) {
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			me, err := getClientCtx(cmd.Context()).Me(cmd.Context())
 			if err != nil {
-				return err
+				return authAware(err)
 			}
 			org := ""
 			if me.Org != nil {

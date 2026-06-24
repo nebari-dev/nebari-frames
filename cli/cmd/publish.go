@@ -31,7 +31,7 @@ func addPublishCmd(root *cobra.Command) {
 				if connect.CodeOf(err) == connect.CodeInvalidArgument {
 					return fmt.Errorf("frame.yaml is invalid: %w", err)
 				}
-				return err
+				return authAware(err)
 			}
 			fmt.Fprintf(cmd.OutOrStdout(), "Published %s@%s\n", frame.Name, version.Version)
 			return nil

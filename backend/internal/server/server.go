@@ -46,7 +46,11 @@ type authConfigResponse struct {
 }
 
 func handleAuthConfig(cfg auth.Config) http.HandlerFunc {
-	return func(w http.ResponseWriter, _ *http.Request) {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
 		resp := authConfigResponse{Enabled: cfg.IssuerURL != "" && cfg.ClientID != ""}
 		if resp.Enabled {
 			resp.IssuerURL = cfg.IssuerURL
