@@ -1,0 +1,13 @@
+name: q4-sales-playbook
+description: Q4 enterprise sales motion, talk tracks, and qualification rules.
+version: 1.0.0
+extends:
+  - ref: openteams/brand-voice
+    version: 1.0.0
+slots:
+  prompts:
+    - When summarizing a release, lead with customer impact, not the feature list.
+  rules:
+    - Qualify on deployment ownership before discussing pricing.
+  goals: |
+    Move qualified enterprise accounts from evaluation to signed pilot within the quarter.

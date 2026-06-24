@@ -259,7 +259,7 @@ description: OpenTeams brand voice    # max 280 chars
 version: 1.2.0                        # semver-ish
 
 extends:                              # ordered list; later wins on slot conflict
-  - ref: openteams/company-frame      # org_slug/frame_name; same-org may omit slug
+  - ref: openteams/company-frame      # org_slug/frame_name (MVP: fully-qualified required; see note below)
     version: 3.1.0
   - ref: industry-consortia/healthcare-compliance
     version: 2024.4
@@ -299,6 +299,8 @@ slots:
   business_process: |
     ...
 ```
+
+**`extends` ref format (MVP decision, 2026-06-24).** For MVP, `extends` and `excludes` refs must be **fully qualified** as `org_slug/frame_name`; the server-side validator rejects a bare `frame_name`. The whitepaper-era convenience of omitting the slug for same-org parents is deferred (the resolver already carries a same-org fallback, so relaxing the validator later is non-breaking). Fully-qualified refs are unambiguous and keep the publish-time parent lookup simple. This note supersedes the earlier "same-org may omit slug" annotation in the schema example above.
 
 **Slot typing rationale.** The whitepaper lists ten slots without prescribing how they should be structured. We commit to all ten in the schema from MVP (avoids ecosystem churn from adding slots later) but ship conservative typing on four of them:
 
@@ -367,6 +369,8 @@ Resolution at read time (not publish time) keeps storage simple. Pinned parent r
 The 403-vs-404 distinction for missing read permission is deliberate: returning 403 would leak that a Frame with the requested name exists in some org.
 
 **Not in MVP:** no `AddGrant` / `RevokeGrant` RPCs; no `share` action exercised; no section-level checks; no group subjects. The schema accommodates these; the API does not yet expose them.
+
+**Frame deletion semantics (decided 2026-06-24, deferred to the future `DeleteFrame` RPC):** deleting a frame that is still referenced as a parent by another frame's `extends` must **block by default**. This is what the plain `frame_extends.parent_frame_id REFERENCES frames(id)` FK already enforces at the database layer (no `ON DELETE CASCADE` on that column, by design - cascading would silently corrupt a child's pinned inheritance). When `DeleteFrame` is built, it should offer an explicit `force` option that, in a transaction, removes the dependent `frame_extends` edges (or dependent frames) before deleting the target. Force-cascade is application logic, never a column-level `ON DELETE CASCADE`.
 
 ### 3.6 MCP endpoint
 
@@ -586,6 +590,7 @@ In rough priority order, drawn from the deferred items above:
 10. Federation between Hubs.
 11. Cogs and Ops, if and when they exist as products.
 12. Formal "Frame protocol" specification document.
+13. Frame review/approval gate: a reviewer identity, a content-validation date (distinct from `published_at`), and an approval state on frame versions, so SME-vetted content is distinguishable from freshly-authored content and consumers can judge accuracy/freshness. Surfaced by real-user feedback ("Mystic Depot" Phase II usage): frame content is weighted above other prompt context, so authors asked for a QA gate and an explicit "who validated this, and when" signal. The backend-core build leaves forward-compatible nullable `reviewed_by` / `reviewed_at` / `status` columns on `frame_versions` (always NULL / `published` in MVP) so this lands without a schema migration.
 
 ## 12. Sub-specs
 

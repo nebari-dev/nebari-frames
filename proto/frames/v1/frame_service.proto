@@ -1,0 +1,65 @@
+syntax = "proto3";
+package frames.v1;
+
+import "frames/v1/frame.proto";
+
+option go_package = "github.com/nebari-dev/nebari-frames/gen/go/frames/v1;framesv1";
+
+service FrameService {
+  // Write - publisher/admin only. Org is derived from the caller.
+  rpc PublishFrame(PublishFrameRequest) returns (PublishFrameResponse);
+  // Read - server-filtered to frames the caller may read in their org.
+  rpc ListFrames(ListFramesRequest) returns (ListFramesResponse);
+  // Read - 404 if caller lacks read or frame is absent.
+  rpc GetFrame(GetFrameRequest) returns (GetFrameResponse);
+  // Read - returns the inheritance-merged frame.
+  rpc ResolveFrame(ResolveFrameRequest) returns (ResolveFrameResponse);
+  // Identity + org + role for the calling user.
+  rpc GetMe(GetMeRequest) returns (GetMeResponse);
+}
+
+message PublishFrameRequest {
+  bytes content = 1;   // full YAML; name/version/extends/excludes/slots parsed server-side
+  string changelog = 2;
+}
+message PublishFrameResponse {
+  Frame frame = 1;
+  FrameVersion version = 2;
+}
+
+message ListFramesRequest {}
+message ListFramesResponse {
+  repeated FrameSummary frames = 1;
+  bool can_create = 2;
+}
+
+message GetFrameRequest {
+  string org_slug = 1;
+  string name = 2;
+  string version = 3; // empty = latest
+}
+message GetFrameResponse {
+  Frame frame = 1;
+  FrameVersion version = 2;
+  repeated ParentRef extends = 3;
+  repeated string excludes = 4;
+  Permissions permissions = 5;
+}
+
+message ResolveFrameRequest {
+  string org_slug = 1;
+  string name = 2;
+  string version = 3; // empty = latest
+}
+message ResolveFrameResponse {
+  bytes resolved_content = 1; // merged YAML
+}
+
+message GetMeRequest {}
+message GetMeResponse {
+  string subject = 1;
+  string email = 2;
+  Org org = 3;
+  string role = 4;
+  bool can_create = 5;
+}

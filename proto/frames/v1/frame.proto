@@ -1,0 +1,61 @@
+syntax = "proto3";
+package frames.v1;
+
+import "google/protobuf/timestamp.proto";
+
+option go_package = "github.com/nebari-dev/nebari-frames/gen/go/frames/v1;framesv1";
+
+message Org {
+  string id = 1;
+  string slug = 2;
+  string display_name = 3;
+  google.protobuf.Timestamp created_at = 4;
+}
+
+message Membership {
+  string org_id = 1;
+  string user_sub = 2;
+  string role = 3; // "viewer" | "publisher" | "admin"
+  google.protobuf.Timestamp added_at = 4;
+}
+
+message Frame {
+  string id = 1;
+  string org_id = 2;
+  string name = 3;
+  string description = 4;
+  string owner_sub = 5;
+  string latest_version = 6;
+  google.protobuf.Timestamp created_at = 7;
+  google.protobuf.Timestamp updated_at = 8;
+}
+
+message ParentRef {
+  string ref = 1;     // org_slug/frame_name
+  string version = 2; // pinned
+}
+
+message FrameVersion {
+  string version = 1;
+  string changelog = 2;
+  string digest = 3;
+  int64 size_bytes = 4;
+  string published_by = 5;
+  google.protobuf.Timestamp published_at = 6;
+  bytes content = 7; // full YAML document
+}
+
+message Permissions {
+  bool can_edit = 1;
+  bool can_delete = 2;
+}
+
+message FrameSummary {
+  string org_slug = 1;
+  string name = 2;
+  string description = 3;
+  string owner_sub = 4;
+  string latest_version = 5;
+  google.protobuf.Timestamp updated_at = 6;
+  Permissions permissions = 7;
+}
