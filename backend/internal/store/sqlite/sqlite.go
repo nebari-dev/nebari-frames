@@ -293,6 +293,29 @@ func (r *Repository) GetFrameVersion(ctx context.Context, frameID, version strin
 	return &v, edges, excludes, nil
 }
 
+// ListFrameVersions returns version metadata for a frame, newest first.
+// Content is intentionally omitted to keep the list lightweight.
+func (r *Repository) ListFrameVersions(ctx context.Context, frameID string) ([]*framesv1.FrameVersionSummary, error) {
+	rows, err := r.db.QueryContext(ctx,
+		`SELECT version, changelog, published_by, published_at
+		   FROM frame_versions WHERE frame_id = ? ORDER BY published_at DESC, version DESC`, frameID)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = rows.Close() }()
+	var out []*framesv1.FrameVersionSummary
+	for rows.Next() {
+		var v framesv1.FrameVersionSummary
+		var published string
+		if err := rows.Scan(&v.Version, &v.Changelog, &v.PublishedBy, &published); err != nil {
+			return nil, err
+		}
+		v.PublishedAt = ts(published)
+		out = append(out, &v)
+	}
+	return out, rows.Err()
+}
+
 func (r *Repository) ListFramesByOrg(ctx context.Context, orgID string) ([]*framesv1.Frame, error) {
 	rows, err := r.db.QueryContext(ctx,
 		`SELECT id, org_id, name, description, owner_sub, latest_version, created_at, updated_at

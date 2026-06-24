@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"testing"
+	"time"
 
 	_ "modernc.org/sqlite"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -251,6 +252,70 @@ func TestSQLite_PublishInsertsVersionAndDefaultGrants(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			r := newRepo(t)
 			tc.run(t, r)
+		})
+	}
+}
+
+// seedFrameWithVersions opens a fresh in-memory repo, creates a test org and
+// frame, and publishes one version per entry in versions (in order), using
+// monotonically increasing published_at values. Returns the repo and frame ID.
+func seedFrameWithVersions(t *testing.T, versions []string) (*sqlite.Repository, string) {
+	t.Helper()
+	r := newRepo(t)
+	ctx := context.Background()
+	seedOrg(t, r, "o1", "openteams")
+	base := timestamppb.Now()
+	frameID := "fv1"
+	for i, ver := range versions {
+		ts := timestamppb.New(base.AsTime().Add(time.Duration(i) * time.Second))
+		in := store.CreateFrameVersionInput{
+			Frame: &framesv1.Frame{
+				Id: frameID, OrgId: "o1", Name: "multi-ver",
+				Description: "d", OwnerSub: "u1",
+				LatestVersion: ver,
+				CreatedAt:     base, UpdatedAt: ts,
+			},
+			Version: &framesv1.FrameVersion{
+				Version:     ver,
+				Content:     []byte("name: multi-ver\n"),
+				Digest:      "d" + ver,
+				SizeBytes:   16,
+				PublishedBy: "u1",
+				PublishedAt: ts,
+				Changelog:   "release " + ver,
+			},
+			IsNewFrame: i == 0,
+		}
+		if err := r.CreateFrameVersion(ctx, in); err != nil {
+			t.Fatalf("seedFrameWithVersions CreateFrameVersion(%s): %v", ver, err)
+		}
+	}
+	return r, frameID
+}
+
+func TestListFrameVersions(t *testing.T) {
+	tests := []struct {
+		name     string
+		versions []string // published in this order
+		wantLen  int
+		wantTop  string // newest first
+	}{
+		{name: "multiple versions newest first", versions: []string{"1.0.0", "1.1.0", "2.0.0"}, wantLen: 3, wantTop: "2.0.0"},
+		{name: "single version", versions: []string{"1.0.0"}, wantLen: 1, wantTop: "1.0.0"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			repo, frameID := seedFrameWithVersions(t, tt.versions)
+			got, err := repo.ListFrameVersions(context.Background(), frameID)
+			if err != nil {
+				t.Fatalf("ListFrameVersions: %v", err)
+			}
+			if len(got) != tt.wantLen {
+				t.Fatalf("len = %d, want %d", len(got), tt.wantLen)
+			}
+			if got[0].Version != tt.wantTop {
+				t.Errorf("top version = %q, want %q", got[0].Version, tt.wantTop)
+			}
 		})
 	}
 }

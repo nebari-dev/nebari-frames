@@ -565,6 +565,102 @@ func (x *GetMeResponse) GetCanCreate() bool {
 	return false
 }
 
+type ListFrameVersionsRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	OrgSlug       string                 `protobuf:"bytes,1,opt,name=org_slug,json=orgSlug,proto3" json:"org_slug,omitempty"`
+	Name          string                 `protobuf:"bytes,2,opt,name=name,proto3" json:"name,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListFrameVersionsRequest) Reset() {
+	*x = ListFrameVersionsRequest{}
+	mi := &file_frames_v1_frame_service_proto_msgTypes[10]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListFrameVersionsRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListFrameVersionsRequest) ProtoMessage() {}
+
+func (x *ListFrameVersionsRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_frames_v1_frame_service_proto_msgTypes[10]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListFrameVersionsRequest.ProtoReflect.Descriptor instead.
+func (*ListFrameVersionsRequest) Descriptor() ([]byte, []int) {
+	return file_frames_v1_frame_service_proto_rawDescGZIP(), []int{10}
+}
+
+func (x *ListFrameVersionsRequest) GetOrgSlug() string {
+	if x != nil {
+		return x.OrgSlug
+	}
+	return ""
+}
+
+func (x *ListFrameVersionsRequest) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+type ListFrameVersionsResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Versions      []*FrameVersionSummary `protobuf:"bytes,1,rep,name=versions,proto3" json:"versions,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListFrameVersionsResponse) Reset() {
+	*x = ListFrameVersionsResponse{}
+	mi := &file_frames_v1_frame_service_proto_msgTypes[11]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListFrameVersionsResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListFrameVersionsResponse) ProtoMessage() {}
+
+func (x *ListFrameVersionsResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_frames_v1_frame_service_proto_msgTypes[11]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListFrameVersionsResponse.ProtoReflect.Descriptor instead.
+func (*ListFrameVersionsResponse) Descriptor() ([]byte, []int) {
+	return file_frames_v1_frame_service_proto_rawDescGZIP(), []int{11}
+}
+
+func (x *ListFrameVersionsResponse) GetVersions() []*FrameVersionSummary {
+	if x != nil {
+		return x.Versions
+	}
+	return nil
+}
+
 var File_frames_v1_frame_service_proto protoreflect.FileDescriptor
 
 const file_frames_v1_frame_service_proto_rawDesc = "" +
@@ -604,14 +700,20 @@ const file_frames_v1_frame_service_proto_rawDesc = "" +
 	"\x03org\x18\x03 \x01(\v2\x0e.frames.v1.OrgR\x03org\x12\x12\n" +
 	"\x04role\x18\x04 \x01(\tR\x04role\x12\x1d\n" +
 	"\n" +
-	"can_create\x18\x05 \x01(\bR\tcanCreate2\xfc\x02\n" +
+	"can_create\x18\x05 \x01(\bR\tcanCreate\"I\n" +
+	"\x18ListFrameVersionsRequest\x12\x19\n" +
+	"\borg_slug\x18\x01 \x01(\tR\aorgSlug\x12\x12\n" +
+	"\x04name\x18\x02 \x01(\tR\x04name\"W\n" +
+	"\x19ListFrameVersionsResponse\x12:\n" +
+	"\bversions\x18\x01 \x03(\v2\x1e.frames.v1.FrameVersionSummaryR\bversions2\xdc\x03\n" +
 	"\fFrameService\x12O\n" +
 	"\fPublishFrame\x12\x1e.frames.v1.PublishFrameRequest\x1a\x1f.frames.v1.PublishFrameResponse\x12I\n" +
 	"\n" +
 	"ListFrames\x12\x1c.frames.v1.ListFramesRequest\x1a\x1d.frames.v1.ListFramesResponse\x12C\n" +
 	"\bGetFrame\x12\x1a.frames.v1.GetFrameRequest\x1a\x1b.frames.v1.GetFrameResponse\x12O\n" +
 	"\fResolveFrame\x12\x1e.frames.v1.ResolveFrameRequest\x1a\x1f.frames.v1.ResolveFrameResponse\x12:\n" +
-	"\x05GetMe\x12\x17.frames.v1.GetMeRequest\x1a\x18.frames.v1.GetMeResponseB\xa6\x01\n" +
+	"\x05GetMe\x12\x17.frames.v1.GetMeRequest\x1a\x18.frames.v1.GetMeResponse\x12^\n" +
+	"\x11ListFrameVersions\x12#.frames.v1.ListFrameVersionsRequest\x1a$.frames.v1.ListFrameVersionsResponseB\xa6\x01\n" +
 	"\rcom.frames.v1B\x11FrameServiceProtoP\x01Z=github.com/nebari-dev/nebari-frames/gen/go/frames/v1;framesv1\xa2\x02\x03FXX\xaa\x02\tFrames.V1\xca\x02\tFrames\\V1\xe2\x02\x15Frames\\V1\\GPBMetadata\xea\x02\n" +
 	"Frames::V1b\x06proto3"
 
@@ -627,49 +729,55 @@ func file_frames_v1_frame_service_proto_rawDescGZIP() []byte {
 	return file_frames_v1_frame_service_proto_rawDescData
 }
 
-var file_frames_v1_frame_service_proto_msgTypes = make([]protoimpl.MessageInfo, 10)
+var file_frames_v1_frame_service_proto_msgTypes = make([]protoimpl.MessageInfo, 12)
 var file_frames_v1_frame_service_proto_goTypes = []any{
-	(*PublishFrameRequest)(nil),  // 0: frames.v1.PublishFrameRequest
-	(*PublishFrameResponse)(nil), // 1: frames.v1.PublishFrameResponse
-	(*ListFramesRequest)(nil),    // 2: frames.v1.ListFramesRequest
-	(*ListFramesResponse)(nil),   // 3: frames.v1.ListFramesResponse
-	(*GetFrameRequest)(nil),      // 4: frames.v1.GetFrameRequest
-	(*GetFrameResponse)(nil),     // 5: frames.v1.GetFrameResponse
-	(*ResolveFrameRequest)(nil),  // 6: frames.v1.ResolveFrameRequest
-	(*ResolveFrameResponse)(nil), // 7: frames.v1.ResolveFrameResponse
-	(*GetMeRequest)(nil),         // 8: frames.v1.GetMeRequest
-	(*GetMeResponse)(nil),        // 9: frames.v1.GetMeResponse
-	(*Frame)(nil),                // 10: frames.v1.Frame
-	(*FrameVersion)(nil),         // 11: frames.v1.FrameVersion
-	(*FrameSummary)(nil),         // 12: frames.v1.FrameSummary
-	(*ParentRef)(nil),            // 13: frames.v1.ParentRef
-	(*Permissions)(nil),          // 14: frames.v1.Permissions
-	(*Org)(nil),                  // 15: frames.v1.Org
+	(*PublishFrameRequest)(nil),       // 0: frames.v1.PublishFrameRequest
+	(*PublishFrameResponse)(nil),      // 1: frames.v1.PublishFrameResponse
+	(*ListFramesRequest)(nil),         // 2: frames.v1.ListFramesRequest
+	(*ListFramesResponse)(nil),        // 3: frames.v1.ListFramesResponse
+	(*GetFrameRequest)(nil),           // 4: frames.v1.GetFrameRequest
+	(*GetFrameResponse)(nil),          // 5: frames.v1.GetFrameResponse
+	(*ResolveFrameRequest)(nil),       // 6: frames.v1.ResolveFrameRequest
+	(*ResolveFrameResponse)(nil),      // 7: frames.v1.ResolveFrameResponse
+	(*GetMeRequest)(nil),              // 8: frames.v1.GetMeRequest
+	(*GetMeResponse)(nil),             // 9: frames.v1.GetMeResponse
+	(*ListFrameVersionsRequest)(nil),  // 10: frames.v1.ListFrameVersionsRequest
+	(*ListFrameVersionsResponse)(nil), // 11: frames.v1.ListFrameVersionsResponse
+	(*Frame)(nil),                     // 12: frames.v1.Frame
+	(*FrameVersion)(nil),              // 13: frames.v1.FrameVersion
+	(*FrameSummary)(nil),              // 14: frames.v1.FrameSummary
+	(*ParentRef)(nil),                 // 15: frames.v1.ParentRef
+	(*Permissions)(nil),               // 16: frames.v1.Permissions
+	(*Org)(nil),                       // 17: frames.v1.Org
+	(*FrameVersionSummary)(nil),       // 18: frames.v1.FrameVersionSummary
 }
 var file_frames_v1_frame_service_proto_depIdxs = []int32{
-	10, // 0: frames.v1.PublishFrameResponse.frame:type_name -> frames.v1.Frame
-	11, // 1: frames.v1.PublishFrameResponse.version:type_name -> frames.v1.FrameVersion
-	12, // 2: frames.v1.ListFramesResponse.frames:type_name -> frames.v1.FrameSummary
-	10, // 3: frames.v1.GetFrameResponse.frame:type_name -> frames.v1.Frame
-	11, // 4: frames.v1.GetFrameResponse.version:type_name -> frames.v1.FrameVersion
-	13, // 5: frames.v1.GetFrameResponse.extends:type_name -> frames.v1.ParentRef
-	14, // 6: frames.v1.GetFrameResponse.permissions:type_name -> frames.v1.Permissions
-	15, // 7: frames.v1.GetMeResponse.org:type_name -> frames.v1.Org
-	0,  // 8: frames.v1.FrameService.PublishFrame:input_type -> frames.v1.PublishFrameRequest
-	2,  // 9: frames.v1.FrameService.ListFrames:input_type -> frames.v1.ListFramesRequest
-	4,  // 10: frames.v1.FrameService.GetFrame:input_type -> frames.v1.GetFrameRequest
-	6,  // 11: frames.v1.FrameService.ResolveFrame:input_type -> frames.v1.ResolveFrameRequest
-	8,  // 12: frames.v1.FrameService.GetMe:input_type -> frames.v1.GetMeRequest
-	1,  // 13: frames.v1.FrameService.PublishFrame:output_type -> frames.v1.PublishFrameResponse
-	3,  // 14: frames.v1.FrameService.ListFrames:output_type -> frames.v1.ListFramesResponse
-	5,  // 15: frames.v1.FrameService.GetFrame:output_type -> frames.v1.GetFrameResponse
-	7,  // 16: frames.v1.FrameService.ResolveFrame:output_type -> frames.v1.ResolveFrameResponse
-	9,  // 17: frames.v1.FrameService.GetMe:output_type -> frames.v1.GetMeResponse
-	13, // [13:18] is the sub-list for method output_type
-	8,  // [8:13] is the sub-list for method input_type
-	8,  // [8:8] is the sub-list for extension type_name
-	8,  // [8:8] is the sub-list for extension extendee
-	0,  // [0:8] is the sub-list for field type_name
+	12, // 0: frames.v1.PublishFrameResponse.frame:type_name -> frames.v1.Frame
+	13, // 1: frames.v1.PublishFrameResponse.version:type_name -> frames.v1.FrameVersion
+	14, // 2: frames.v1.ListFramesResponse.frames:type_name -> frames.v1.FrameSummary
+	12, // 3: frames.v1.GetFrameResponse.frame:type_name -> frames.v1.Frame
+	13, // 4: frames.v1.GetFrameResponse.version:type_name -> frames.v1.FrameVersion
+	15, // 5: frames.v1.GetFrameResponse.extends:type_name -> frames.v1.ParentRef
+	16, // 6: frames.v1.GetFrameResponse.permissions:type_name -> frames.v1.Permissions
+	17, // 7: frames.v1.GetMeResponse.org:type_name -> frames.v1.Org
+	18, // 8: frames.v1.ListFrameVersionsResponse.versions:type_name -> frames.v1.FrameVersionSummary
+	0,  // 9: frames.v1.FrameService.PublishFrame:input_type -> frames.v1.PublishFrameRequest
+	2,  // 10: frames.v1.FrameService.ListFrames:input_type -> frames.v1.ListFramesRequest
+	4,  // 11: frames.v1.FrameService.GetFrame:input_type -> frames.v1.GetFrameRequest
+	6,  // 12: frames.v1.FrameService.ResolveFrame:input_type -> frames.v1.ResolveFrameRequest
+	8,  // 13: frames.v1.FrameService.GetMe:input_type -> frames.v1.GetMeRequest
+	10, // 14: frames.v1.FrameService.ListFrameVersions:input_type -> frames.v1.ListFrameVersionsRequest
+	1,  // 15: frames.v1.FrameService.PublishFrame:output_type -> frames.v1.PublishFrameResponse
+	3,  // 16: frames.v1.FrameService.ListFrames:output_type -> frames.v1.ListFramesResponse
+	5,  // 17: frames.v1.FrameService.GetFrame:output_type -> frames.v1.GetFrameResponse
+	7,  // 18: frames.v1.FrameService.ResolveFrame:output_type -> frames.v1.ResolveFrameResponse
+	9,  // 19: frames.v1.FrameService.GetMe:output_type -> frames.v1.GetMeResponse
+	11, // 20: frames.v1.FrameService.ListFrameVersions:output_type -> frames.v1.ListFrameVersionsResponse
+	15, // [15:21] is the sub-list for method output_type
+	9,  // [9:15] is the sub-list for method input_type
+	9,  // [9:9] is the sub-list for extension type_name
+	9,  // [9:9] is the sub-list for extension extendee
+	0,  // [0:9] is the sub-list for field type_name
 }
 
 func init() { file_frames_v1_frame_service_proto_init() }
@@ -684,7 +792,7 @@ func file_frames_v1_frame_service_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_frames_v1_frame_service_proto_rawDesc), len(file_frames_v1_frame_service_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   10,
+			NumMessages:   12,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

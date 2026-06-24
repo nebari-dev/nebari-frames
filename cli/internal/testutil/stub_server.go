@@ -15,11 +15,12 @@ import (
 // StubService implements framesv1connect.FrameServiceHandler via optional func
 // fields. Unset methods return CodeUnimplemented.
 type StubService struct {
-	PublishFn func(context.Context, *connect.Request[framesv1.PublishFrameRequest]) (*connect.Response[framesv1.PublishFrameResponse], error)
-	ListFn    func(context.Context, *connect.Request[framesv1.ListFramesRequest]) (*connect.Response[framesv1.ListFramesResponse], error)
-	GetFn     func(context.Context, *connect.Request[framesv1.GetFrameRequest]) (*connect.Response[framesv1.GetFrameResponse], error)
-	ResolveFn func(context.Context, *connect.Request[framesv1.ResolveFrameRequest]) (*connect.Response[framesv1.ResolveFrameResponse], error)
-	MeFn      func(context.Context, *connect.Request[framesv1.GetMeRequest]) (*connect.Response[framesv1.GetMeResponse], error)
+	PublishFn         func(context.Context, *connect.Request[framesv1.PublishFrameRequest]) (*connect.Response[framesv1.PublishFrameResponse], error)
+	ListFn            func(context.Context, *connect.Request[framesv1.ListFramesRequest]) (*connect.Response[framesv1.ListFramesResponse], error)
+	GetFn             func(context.Context, *connect.Request[framesv1.GetFrameRequest]) (*connect.Response[framesv1.GetFrameResponse], error)
+	ResolveFn         func(context.Context, *connect.Request[framesv1.ResolveFrameRequest]) (*connect.Response[framesv1.ResolveFrameResponse], error)
+	MeFn              func(context.Context, *connect.Request[framesv1.GetMeRequest]) (*connect.Response[framesv1.GetMeResponse], error)
+	ListVersionsFn    func(context.Context, *connect.Request[framesv1.ListFrameVersionsRequest]) (*connect.Response[framesv1.ListFrameVersionsResponse], error)
 }
 
 var _ framesv1connect.FrameServiceHandler = (*StubService)(nil)
@@ -57,6 +58,13 @@ func (s *StubService) ResolveFrame(ctx context.Context, r *connect.Request[frame
 func (s *StubService) GetMe(ctx context.Context, r *connect.Request[framesv1.GetMeRequest]) (*connect.Response[framesv1.GetMeResponse], error) {
 	if s.MeFn != nil {
 		return s.MeFn(ctx, r)
+	}
+	return nil, unimpl()
+}
+
+func (s *StubService) ListFrameVersions(ctx context.Context, r *connect.Request[framesv1.ListFrameVersionsRequest]) (*connect.Response[framesv1.ListFrameVersionsResponse], error) {
+	if s.ListVersionsFn != nil {
+		return s.ListVersionsFn(ctx, r)
 	}
 	return nil, unimpl()
 }

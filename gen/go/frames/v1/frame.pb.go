@@ -546,6 +546,74 @@ func (x *FrameSummary) GetPermissions() *Permissions {
 	return nil
 }
 
+type FrameVersionSummary struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Version       string                 `protobuf:"bytes,1,opt,name=version,proto3" json:"version,omitempty"`
+	Changelog     string                 `protobuf:"bytes,2,opt,name=changelog,proto3" json:"changelog,omitempty"`
+	PublishedBy   string                 `protobuf:"bytes,3,opt,name=published_by,json=publishedBy,proto3" json:"published_by,omitempty"`
+	PublishedAt   *timestamppb.Timestamp `protobuf:"bytes,4,opt,name=published_at,json=publishedAt,proto3" json:"published_at,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *FrameVersionSummary) Reset() {
+	*x = FrameVersionSummary{}
+	mi := &file_frames_v1_frame_proto_msgTypes[7]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *FrameVersionSummary) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*FrameVersionSummary) ProtoMessage() {}
+
+func (x *FrameVersionSummary) ProtoReflect() protoreflect.Message {
+	mi := &file_frames_v1_frame_proto_msgTypes[7]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use FrameVersionSummary.ProtoReflect.Descriptor instead.
+func (*FrameVersionSummary) Descriptor() ([]byte, []int) {
+	return file_frames_v1_frame_proto_rawDescGZIP(), []int{7}
+}
+
+func (x *FrameVersionSummary) GetVersion() string {
+	if x != nil {
+		return x.Version
+	}
+	return ""
+}
+
+func (x *FrameVersionSummary) GetChangelog() string {
+	if x != nil {
+		return x.Changelog
+	}
+	return ""
+}
+
+func (x *FrameVersionSummary) GetPublishedBy() string {
+	if x != nil {
+		return x.PublishedBy
+	}
+	return ""
+}
+
+func (x *FrameVersionSummary) GetPublishedAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.PublishedAt
+	}
+	return nil
+}
+
 var File_frames_v1_frame_proto protoreflect.FileDescriptor
 
 const file_frames_v1_frame_proto_rawDesc = "" +
@@ -598,7 +666,12 @@ const file_frames_v1_frame_proto_rawDesc = "" +
 	"\x0elatest_version\x18\x05 \x01(\tR\rlatestVersion\x129\n" +
 	"\n" +
 	"updated_at\x18\x06 \x01(\v2\x1a.google.protobuf.TimestampR\tupdatedAt\x128\n" +
-	"\vpermissions\x18\a \x01(\v2\x16.frames.v1.PermissionsR\vpermissionsB\x9f\x01\n" +
+	"\vpermissions\x18\a \x01(\v2\x16.frames.v1.PermissionsR\vpermissions\"\xaf\x01\n" +
+	"\x13FrameVersionSummary\x12\x18\n" +
+	"\aversion\x18\x01 \x01(\tR\aversion\x12\x1c\n" +
+	"\tchangelog\x18\x02 \x01(\tR\tchangelog\x12!\n" +
+	"\fpublished_by\x18\x03 \x01(\tR\vpublishedBy\x12=\n" +
+	"\fpublished_at\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampR\vpublishedAtB\x9f\x01\n" +
 	"\rcom.frames.v1B\n" +
 	"FrameProtoP\x01Z=github.com/nebari-dev/nebari-frames/gen/go/frames/v1;framesv1\xa2\x02\x03FXX\xaa\x02\tFrames.V1\xca\x02\tFrames\\V1\xe2\x02\x15Frames\\V1\\GPBMetadata\xea\x02\n" +
 	"Frames::V1b\x06proto3"
@@ -615,7 +688,7 @@ func file_frames_v1_frame_proto_rawDescGZIP() []byte {
 	return file_frames_v1_frame_proto_rawDescData
 }
 
-var file_frames_v1_frame_proto_msgTypes = make([]protoimpl.MessageInfo, 7)
+var file_frames_v1_frame_proto_msgTypes = make([]protoimpl.MessageInfo, 8)
 var file_frames_v1_frame_proto_goTypes = []any{
 	(*Org)(nil),                   // 0: frames.v1.Org
 	(*Membership)(nil),            // 1: frames.v1.Membership
@@ -624,21 +697,23 @@ var file_frames_v1_frame_proto_goTypes = []any{
 	(*FrameVersion)(nil),          // 4: frames.v1.FrameVersion
 	(*Permissions)(nil),           // 5: frames.v1.Permissions
 	(*FrameSummary)(nil),          // 6: frames.v1.FrameSummary
-	(*timestamppb.Timestamp)(nil), // 7: google.protobuf.Timestamp
+	(*FrameVersionSummary)(nil),   // 7: frames.v1.FrameVersionSummary
+	(*timestamppb.Timestamp)(nil), // 8: google.protobuf.Timestamp
 }
 var file_frames_v1_frame_proto_depIdxs = []int32{
-	7, // 0: frames.v1.Org.created_at:type_name -> google.protobuf.Timestamp
-	7, // 1: frames.v1.Membership.added_at:type_name -> google.protobuf.Timestamp
-	7, // 2: frames.v1.Frame.created_at:type_name -> google.protobuf.Timestamp
-	7, // 3: frames.v1.Frame.updated_at:type_name -> google.protobuf.Timestamp
-	7, // 4: frames.v1.FrameVersion.published_at:type_name -> google.protobuf.Timestamp
-	7, // 5: frames.v1.FrameSummary.updated_at:type_name -> google.protobuf.Timestamp
+	8, // 0: frames.v1.Org.created_at:type_name -> google.protobuf.Timestamp
+	8, // 1: frames.v1.Membership.added_at:type_name -> google.protobuf.Timestamp
+	8, // 2: frames.v1.Frame.created_at:type_name -> google.protobuf.Timestamp
+	8, // 3: frames.v1.Frame.updated_at:type_name -> google.protobuf.Timestamp
+	8, // 4: frames.v1.FrameVersion.published_at:type_name -> google.protobuf.Timestamp
+	8, // 5: frames.v1.FrameSummary.updated_at:type_name -> google.protobuf.Timestamp
 	5, // 6: frames.v1.FrameSummary.permissions:type_name -> frames.v1.Permissions
-	7, // [7:7] is the sub-list for method output_type
-	7, // [7:7] is the sub-list for method input_type
-	7, // [7:7] is the sub-list for extension type_name
-	7, // [7:7] is the sub-list for extension extendee
-	0, // [0:7] is the sub-list for field type_name
+	8, // 7: frames.v1.FrameVersionSummary.published_at:type_name -> google.protobuf.Timestamp
+	8, // [8:8] is the sub-list for method output_type
+	8, // [8:8] is the sub-list for method input_type
+	8, // [8:8] is the sub-list for extension type_name
+	8, // [8:8] is the sub-list for extension extendee
+	0, // [0:8] is the sub-list for field type_name
 }
 
 func init() { file_frames_v1_frame_proto_init() }
@@ -652,7 +727,7 @@ func file_frames_v1_frame_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_frames_v1_frame_proto_rawDesc), len(file_frames_v1_frame_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   7,
+			NumMessages:   8,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

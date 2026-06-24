@@ -1,0 +1,8 @@
+{
+  "name": "@nebari-frames/gen",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@bufbuild/protobuf": "^2.2.0"
+  }
+}
