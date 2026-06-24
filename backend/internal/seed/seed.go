@@ -31,8 +31,10 @@ func Run(ctx context.Context, repo store.Repository, cfg Config) error {
 			display = cfg.OrgSlug
 		}
 		org = &framesv1.Org{
-			Id: ulid.MustNew(ulid.Now(), rand.Reader).String(), Slug: cfg.OrgSlug,
-			DisplayName: display, CreatedAt: timestamppb.Now(),
+			Id:          ulid.MustNew(ulid.Now(), rand.Reader).String(),
+			Slug:        cfg.OrgSlug,
+			DisplayName: display,
+			CreatedAt:   timestamppb.Now(),
 		}
 		if err := repo.CreateOrg(ctx, org); err != nil {
 			return err
