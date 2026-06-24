@@ -368,6 +368,8 @@ The 403-vs-404 distinction for missing read permission is deliberate: returning 
 
 **Not in MVP:** no `AddGrant` / `RevokeGrant` RPCs; no `share` action exercised; no section-level checks; no group subjects. The schema accommodates these; the API does not yet expose them.
 
+**Frame deletion semantics (decided 2026-06-24, deferred to the future `DeleteFrame` RPC):** deleting a frame that is still referenced as a parent by another frame's `extends` must **block by default**. This is what the plain `frame_extends.parent_frame_id REFERENCES frames(id)` FK already enforces at the database layer (no `ON DELETE CASCADE` on that column, by design - cascading would silently corrupt a child's pinned inheritance). When `DeleteFrame` is built, it should offer an explicit `force` option that, in a transaction, removes the dependent `frame_extends` edges (or dependent frames) before deleting the target. Force-cascade is application logic, never a column-level `ON DELETE CASCADE`.
+
 ### 3.6 MCP endpoint
 
 Detailed design is deferred to a follow-up spec (see [§5 Sub-specs](#sub-specs)). The shape:
