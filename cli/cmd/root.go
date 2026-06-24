@@ -1,9 +1,12 @@
 package cmd
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 
+	"github.com/nebari-dev/nebari-frames/cli/internal/api"
+	"github.com/nebari-dev/nebari-frames/cli/internal/auth"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 )
@@ -60,6 +63,14 @@ func resolveCredentialsPath() string {
 	}
 	home, _ := os.UserHomeDir()
 	return filepath.Join(home, ".config", "frames", "credentials.json")
+}
+
+func getClientCtx(ctx context.Context) *api.Client {
+	token := ""
+	if tok, _ := auth.LoadAndRefresh(ctx, resolveCredentialsPath()); tok != nil {
+		token = tok.IDToken
+	}
+	return api.NewClient(getAPIURL(), api.WithToken(token))
 }
 
 func Execute() {
