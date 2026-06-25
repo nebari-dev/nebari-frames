@@ -120,7 +120,7 @@ func (m *Memory) CountAdmins(_ context.Context, orgID string) (int, error) {
 	defer m.mu.RUnlock()
 	n := 0
 	for _, mem := range m.memberships {
-		if mem.OrgId == orgID && mem.Role == "admin" {
+		if mem.OrgId == orgID && mem.Role == "admin" && mem.UserSub != "" {
 			n++
 		}
 	}

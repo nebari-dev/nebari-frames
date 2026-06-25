@@ -206,7 +206,7 @@ func (r *Repository) GetPendingMembershipByEmail(ctx context.Context, email stri
 func (r *Repository) CountAdmins(ctx context.Context, orgID string) (int, error) {
 	var n int
 	err := r.db.QueryRowContext(ctx,
-		`SELECT COUNT(*) FROM org_memberships WHERE org_id = ? AND role = 'admin'`, orgID).Scan(&n)
+		`SELECT COUNT(*) FROM org_memberships WHERE org_id = ? AND role = 'admin' AND user_sub <> ''`, orgID).Scan(&n)
 	return n, err
 }
 

@@ -92,6 +92,46 @@ func TestMemoryMembershipReads(t *testing.T) {
 	}
 }
 
+func TestMemoryCountAdmins_PendingInviteNotCounted(t *testing.T) {
+	ctx := context.Background()
+	tests := []struct {
+		name      string
+		seed      func(m *store.Memory)
+		wantCount int
+	}{
+		{
+			name: "active admin only - pending invite admin not counted",
+			seed: func(m *store.Memory) {
+				// 1 active admin (real user_sub)
+				_ = m.UpsertMembership(ctx, &framesv1.Membership{OrgId: "o1", UserSub: "s1", Role: "admin", Email: "a@x.io"})
+				// 1 pending admin invite (user_sub = "")
+				_ = m.AddPendingMembership(ctx, &framesv1.Membership{OrgId: "o1", Role: "admin", Email: "pending-admin@x.io"})
+			},
+			wantCount: 1,
+		},
+		{
+			name: "no active admins - only pending invite admin",
+			seed: func(m *store.Memory) {
+				_ = m.AddPendingMembership(ctx, &framesv1.Membership{OrgId: "o1", Role: "admin", Email: "pending@x.io"})
+			},
+			wantCount: 0,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			m := store.NewMemory()
+			tt.seed(m)
+			got, err := m.CountAdmins(ctx, "o1")
+			if err != nil {
+				t.Fatalf("CountAdmins: %v", err)
+			}
+			if got != tt.wantCount {
+				t.Fatalf("CountAdmins = %d, want %d", got, tt.wantCount)
+			}
+		})
+	}
+}
+
 func TestMemoryMembershipWrites(t *testing.T) {
 	ctx := context.Background()
 	m := store.NewMemory()

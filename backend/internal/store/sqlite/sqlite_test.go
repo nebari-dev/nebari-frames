@@ -331,6 +331,46 @@ func TestSQLite_MembershipReads(t *testing.T) {
 			t.Fatalf("active email should return ErrNotFound for pending lookup, got %v", err)
 		}
 	})
+
+	t.Run("count admins excludes pending invite admins", func(t *testing.T) {
+		subtests := []struct {
+			name      string
+			seed      func(r *sqlite.Repository, now *timestamppb.Timestamp)
+			wantCount int
+		}{
+			{
+				name: "1 active admin + 1 pending admin invite = 1",
+				seed: func(r *sqlite.Repository, now *timestamppb.Timestamp) {
+					_ = r.UpsertMembership(ctx, &framesv1.Membership{OrgId: "o1", UserSub: "s1", Role: "admin", Email: "a@x.io", AddedAt: now})
+					_ = r.AddPendingMembership(ctx, &framesv1.Membership{OrgId: "o1", Role: "admin", Email: "pending-admin@x.io", AddedAt: now})
+				},
+				wantCount: 1,
+			},
+			{
+				name: "only pending admin invite = 0",
+				seed: func(r *sqlite.Repository, now *timestamppb.Timestamp) {
+					_ = r.AddPendingMembership(ctx, &framesv1.Membership{OrgId: "o1", Role: "admin", Email: "pending@x.io", AddedAt: now})
+				},
+				wantCount: 0,
+			},
+		}
+		for _, st := range subtests {
+			st := st
+			t.Run(st.name, func(t *testing.T) {
+				r := newRepo(t)
+				seedOrg(t, r, "o1", "openteams")
+				now := timestamppb.Now()
+				st.seed(r, now)
+				got, err := r.CountAdmins(ctx, "o1")
+				if err != nil {
+					t.Fatalf("CountAdmins: %v", err)
+				}
+				if got != st.wantCount {
+					t.Fatalf("CountAdmins = %d, want %d", got, st.wantCount)
+				}
+			})
+		}
+	})
 }
 
 // seedFrameWithVersions opens a fresh in-memory repo, creates a test org and

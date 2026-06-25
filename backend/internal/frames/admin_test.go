@@ -275,3 +275,52 @@ func TestAddOrgMemberCreatesPending(t *testing.T) {
 		})
 	}
 }
+
+func TestMembershipMutations_ViewerGetsPermissionDenied(t *testing.T) {
+	tests := []struct {
+		name string
+		call func(ctx context.Context, svc *frames.Service) error
+	}{
+		{
+			name: "AddOrgMember denied for viewer",
+			call: func(ctx context.Context, svc *frames.Service) error {
+				_, err := svc.AddOrgMember(ctx, connect.NewRequest(&framesv1.AddOrgMemberRequest{
+					Email: "x@x.io",
+					Role:  "viewer",
+				}))
+				return err
+			},
+		},
+		{
+			name: "SetMemberRole denied for viewer",
+			call: func(ctx context.Context, svc *frames.Service) error {
+				_, err := svc.SetMemberRole(ctx, connect.NewRequest(&framesv1.SetMemberRoleRequest{
+					UserSub: "someone",
+					Role:    "viewer",
+				}))
+				return err
+			},
+		},
+		{
+			name: "RemoveOrgMember denied for viewer",
+			call: func(ctx context.Context, svc *frames.Service) error {
+				_, err := svc.RemoveOrgMember(ctx, connect.NewRequest(&framesv1.RemoveOrgMemberRequest{
+					UserSub: "someone",
+				}))
+				return err
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			repo := store.NewMemory()
+			viewerCtx := seedOrg(t, repo, "v", "viewer")
+			svc := frames.NewService(repo)
+			err := tt.call(viewerCtx, svc)
+			if connect.CodeOf(err) != connect.CodePermissionDenied {
+				t.Fatalf("want PermissionDenied, got code=%v err=%v", connect.CodeOf(err), err)
+			}
+		})
+	}
+}
