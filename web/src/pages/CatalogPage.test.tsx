@@ -20,6 +20,18 @@ it("hides Create button when not can_create", () => {
   expect(screen.queryByRole("link", { name: /create new frame/i })).not.toBeInTheDocument();
 });
 
+it("renders skeletons while loading", () => {
+  useQueryMock.mockReturnValue({ isLoading: true, error: null, data: undefined });
+  const { container } = render(<MemoryRouter><CatalogPage /></MemoryRouter>);
+  expect(container.querySelectorAll('[data-slot="skeleton"]').length).toBeGreaterThan(0);
+});
+
+it("renders an error state on failure", () => {
+  useQueryMock.mockReturnValue({ isLoading: false, error: new Error("boom"), data: undefined });
+  render(<MemoryRouter><CatalogPage /></MemoryRouter>);
+  expect(screen.getByText(/could not load frames/i)).toBeInTheDocument();
+});
+
 it("lists frames and filters by search", async () => {
   useQueryMock.mockReturnValue({
     isLoading: false,

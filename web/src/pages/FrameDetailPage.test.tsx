@@ -7,6 +7,7 @@ vi.mock("@connectrpc/connect-query", () => ({ useQuery: (...a: unknown[]) => use
 
 import { FrameDetailPage } from "./FrameDetailPage";
 import { FrameService } from "@gen/frames/v1/frame_service_pb";
+import { ConnectError, Code } from "@connectrpc/connect";
 
 const yamlContent = new TextEncoder().encode(
   "name: brand-voice\ndescription: voice\nversion: 1.0.0\nslots:\n  rules:\n    - no hype\n",
@@ -41,6 +42,36 @@ it("shows Edit link when canEdit is true", () => {
 it("hides Edit link when canEdit is false", () => {
   renderDetail({ canEdit: false });
   expect(screen.queryByRole("link", { name: /edit/i })).not.toBeInTheDocument();
+});
+
+it("renders loading skeletons", () => {
+  useQueryMock.mockReturnValue({ isLoading: true, error: null, data: undefined });
+  const { container } = render(
+    <MemoryRouter initialEntries={["/frames/openteams/brand-voice"]}>
+      <Routes><Route path="/frames/:org/:name" element={<FrameDetailPage />} /></Routes>
+    </MemoryRouter>,
+  );
+  expect(container.querySelector('[data-slot="skeleton"]')).toBeInTheDocument();
+});
+
+it("renders not-found on Code.NotFound", () => {
+  useQueryMock.mockReturnValue({ isLoading: false, error: new ConnectError("nf", Code.NotFound), data: undefined });
+  render(
+    <MemoryRouter initialEntries={["/frames/openteams/brand-voice"]}>
+      <Routes><Route path="/frames/:org/:name" element={<FrameDetailPage />} /></Routes>
+    </MemoryRouter>,
+  );
+  expect(screen.getByText(/not found/i)).toBeInTheDocument();
+});
+
+it("renders generic error on other failures", () => {
+  useQueryMock.mockReturnValue({ isLoading: false, error: new ConnectError("x", Code.Internal), data: undefined });
+  render(
+    <MemoryRouter initialEntries={["/frames/openteams/brand-voice"]}>
+      <Routes><Route path="/frames/:org/:name" element={<FrameDetailPage />} /></Routes>
+    </MemoryRouter>,
+  );
+  expect(screen.getByText(/could not load this frame/i)).toBeInTheDocument();
 });
 
 it("renders header, slots, and version history", () => {
