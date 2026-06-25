@@ -69,6 +69,26 @@ func (s *StubService) ListFrameVersions(ctx context.Context, r *connect.Request[
 	return nil, unimpl()
 }
 
+func (s *StubService) DeleteFrame(_ context.Context, r *connect.Request[framesv1.DeleteFrameRequest]) (*connect.Response[framesv1.DeleteFrameResponse], error) {
+	return nil, unimpl()
+}
+
+func (s *StubService) ListOrgMembers(_ context.Context, r *connect.Request[framesv1.ListOrgMembersRequest]) (*connect.Response[framesv1.ListOrgMembersResponse], error) {
+	return nil, unimpl()
+}
+
+func (s *StubService) AddOrgMember(_ context.Context, r *connect.Request[framesv1.AddOrgMemberRequest]) (*connect.Response[framesv1.AddOrgMemberResponse], error) {
+	return nil, unimpl()
+}
+
+func (s *StubService) SetMemberRole(_ context.Context, r *connect.Request[framesv1.SetMemberRoleRequest]) (*connect.Response[framesv1.SetMemberRoleResponse], error) {
+	return nil, unimpl()
+}
+
+func (s *StubService) RemoveOrgMember(_ context.Context, r *connect.Request[framesv1.RemoveOrgMemberRequest]) (*connect.Response[framesv1.RemoveOrgMemberResponse], error) {
+	return nil, unimpl()
+}
+
 // NewStubServer mounts h on an httptest.Server and returns the base URL.
 func NewStubServer(t *testing.T, h framesv1connect.FrameServiceHandler) string {
 	t.Helper()

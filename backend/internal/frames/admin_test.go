@@ -22,16 +22,6 @@ func newAdminService(t *testing.T) (context.Context, *frames.Service, *store.Mem
 	return ctx, svc, repo
 }
 
-// newViewerService returns a viewer caller context, a new Service, and the
-// backing Memory repo. The org is "openteams" with slug "openteams".
-func newViewerService(t *testing.T) (context.Context, *frames.Service, *store.Memory) {
-	t.Helper()
-	repo := store.NewMemory()
-	ctx := seedOrg(t, repo, "viewer", "viewer")
-	svc := frames.NewService(repo)
-	return ctx, svc, repo
-}
-
 // orgID returns the ID of the "openteams" org seeded in repo.
 func orgID(t *testing.T, repo *store.Memory) string {
 	t.Helper()
@@ -220,6 +210,31 @@ func TestListOrgMembersAdminOnly(t *testing.T) {
 				t.Fatalf("expected at least 1 member, got %d", len(resp.Msg.Members))
 			}
 		})
+	}
+}
+
+func TestSetMemberRoleAndLastAdminGuard(t *testing.T) {
+	ctx, svc, repo := newAdminService(t) // admin caller sub="admin"
+	oid := orgID(t, repo)
+
+	// demoting the only admin is rejected
+	if _, err := svc.SetMemberRole(ctx, connect.NewRequest(&framesv1.SetMemberRoleRequest{UserSub: "admin", Role: "viewer"})); connect.CodeOf(err) != connect.CodeFailedPrecondition {
+		t.Fatalf("last-admin demote should fail, got %v", err)
+	}
+
+	// add a second admin, then demotion of the first is allowed
+	_ = repo.AddPendingMembership(ctx, &framesv1.Membership{OrgId: oid, Role: "admin", Email: "a2@x.io"})
+	_ = repo.ActivatePendingMembership(ctx, "a2@x.io", "admin2")
+	if _, err := svc.SetMemberRole(ctx, connect.NewRequest(&framesv1.SetMemberRoleRequest{UserSub: "admin", Role: "viewer"})); err != nil {
+		t.Fatalf("demote with 2 admins should succeed, got %v", err)
+	}
+}
+
+func TestRemoveOrgMemberLastAdminGuard(t *testing.T) {
+	ctx, svc, repo := newAdminService(t)
+	_ = repo
+	if _, err := svc.RemoveOrgMember(ctx, connect.NewRequest(&framesv1.RemoveOrgMemberRequest{UserSub: "admin"})); connect.CodeOf(err) != connect.CodeFailedPrecondition {
+		t.Fatalf("removing last admin should fail, got %v", err)
 	}
 }
 
