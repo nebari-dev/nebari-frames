@@ -12,6 +12,27 @@ import (
 	"github.com/nebari-dev/nebari-frames/backend/internal/store"
 )
 
+func TestResolveCallerReconcilesPendingByEmail(t *testing.T) {
+	ctx := context.Background()
+	repo := store.NewMemory()
+	_ = repo.AddPendingMembership(ctx, &framesv1.Membership{OrgId: "o1", Role: "publisher", Email: "new@x.io"})
+
+	// inject claims for a user with no sub-keyed membership yet
+	ctx = auth.WithClaims(ctx, &auth.Claims{Subject: "sub-new", Email: "new@x.io"})
+
+	caller, err := orgs.ResolveCaller(ctx, repo)
+	if err != nil {
+		t.Fatalf("expected reconciliation, got err %v", err)
+	}
+	if caller.OrgID != "o1" || caller.Role != rbac.RolePublisher {
+		t.Fatalf("unexpected caller %+v", caller)
+	}
+	// second call now resolves directly by sub
+	if _, err := repo.GetMembership(ctx, "sub-new"); err != nil {
+		t.Fatalf("membership should be active after reconcile: %v", err)
+	}
+}
+
 func TestResolveCaller(t *testing.T) {
 	repo := store.NewMemory()
 	base := context.Background()
