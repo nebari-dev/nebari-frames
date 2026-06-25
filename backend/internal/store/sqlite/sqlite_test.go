@@ -256,6 +256,83 @@ func TestSQLite_PublishInsertsVersionAndDefaultGrants(t *testing.T) {
 	}
 }
 
+func TestSQLite_MembershipReads(t *testing.T) {
+	ctx := context.Background()
+
+	type result struct {
+		count int
+		err   error
+	}
+
+	tests := []struct {
+		name    string
+		run     func(r *sqlite.Repository) result
+		wantLen int
+	}{
+		{
+			name: "list org o1 returns 2 memberships",
+			run: func(r *sqlite.Repository) result {
+				l, e := r.ListMembershipsByOrg(ctx, "o1")
+				return result{len(l), e}
+			},
+			wantLen: 2,
+		},
+		{
+			name: "count admins o1 returns 1",
+			run: func(r *sqlite.Repository) result {
+				n, e := r.CountAdmins(ctx, "o1")
+				return result{n, e}
+			},
+			wantLen: 1,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			r := newRepo(t)
+			seedOrg(t, r, "o1", "openteams")
+			seedOrg(t, r, "o2", "other")
+			now := timestamppb.Now()
+			_ = r.UpsertMembership(ctx, &framesv1.Membership{OrgId: "o1", UserSub: "s1", Role: "admin", Email: "a@x.io", AddedAt: now})
+			_ = r.UpsertMembership(ctx, &framesv1.Membership{OrgId: "o1", UserSub: "", Role: "viewer", Email: "p@x.io", AddedAt: now})
+			_ = r.UpsertMembership(ctx, &framesv1.Membership{OrgId: "o2", UserSub: "s9", Role: "admin", Email: "z@x.io", AddedAt: now})
+			res := tt.run(r)
+			if res.err != nil {
+				t.Fatalf("unexpected error: %v", res.err)
+			}
+			if res.count != tt.wantLen {
+				t.Fatalf("got %d want %d", res.count, tt.wantLen)
+			}
+		})
+	}
+
+	// GetPendingMembershipByEmail tests run separately since they are not easily
+	// reducible to a single count result.
+	t.Run("pending lookup returns correct row", func(t *testing.T) {
+		r := newRepo(t)
+		seedOrg(t, r, "o1", "openteams")
+		now := timestamppb.Now()
+		_ = r.UpsertMembership(ctx, &framesv1.Membership{OrgId: "o1", UserSub: "s1", Role: "admin", Email: "a@x.io", AddedAt: now})
+		_ = r.UpsertMembership(ctx, &framesv1.Membership{OrgId: "o1", UserSub: "", Role: "viewer", Email: "p@x.io", AddedAt: now})
+
+		pend, err := r.GetPendingMembershipByEmail(ctx, "p@x.io")
+		if err != nil || pend.UserSub != "" || pend.OrgId != "o1" {
+			t.Fatalf("pending lookup got %+v err %v", pend, err)
+		}
+	})
+
+	t.Run("active email does not match pending lookup", func(t *testing.T) {
+		r := newRepo(t)
+		seedOrg(t, r, "o1", "openteams")
+		now := timestamppb.Now()
+		_ = r.UpsertMembership(ctx, &framesv1.Membership{OrgId: "o1", UserSub: "s1", Role: "admin", Email: "a@x.io", AddedAt: now})
+
+		if _, err := r.GetPendingMembershipByEmail(ctx, "a@x.io"); !errors.Is(err, store.ErrNotFound) {
+			t.Fatalf("active email should return ErrNotFound for pending lookup, got %v", err)
+		}
+	})
+}
+
 // seedFrameWithVersions opens a fresh in-memory repo, creates a test org and
 // frame, and publishes one version per entry in versions (in order), using
 // monotonically increasing published_at values. Returns the repo and frame ID.

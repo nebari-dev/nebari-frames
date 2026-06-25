@@ -117,9 +117,10 @@ func (r *Repository) scanOrg(row *sql.Row) (*framesv1.Org, error) {
 func (r *Repository) GetMembership(ctx context.Context, userSub string) (*framesv1.Membership, error) {
 	var m framesv1.Membership
 	var added string
+	var email sql.NullString
 	err := r.db.QueryRowContext(ctx,
-		`SELECT org_id, user_sub, role, added_at FROM org_memberships WHERE user_sub = ?`, userSub).
-		Scan(&m.OrgId, &m.UserSub, &m.Role, &added)
+		`SELECT org_id, user_sub, role, added_at, email FROM org_memberships WHERE user_sub = ? AND user_sub <> ''`, userSub).
+		Scan(&m.OrgId, &m.UserSub, &m.Role, &added, &email)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, store.ErrNotFound
 	}
@@ -127,15 +128,86 @@ func (r *Repository) GetMembership(ctx context.Context, userSub string) (*frames
 		return nil, err
 	}
 	m.AddedAt = ts(added)
+	m.Email = email.String
 	return &m, nil
 }
 
 func (r *Repository) UpsertMembership(ctx context.Context, m *framesv1.Membership) error {
-	_, err := r.db.ExecContext(ctx,
-		`INSERT INTO org_memberships (org_id, user_sub, role, added_at) VALUES (?, ?, ?, ?)
-		 ON CONFLICT(user_sub) DO UPDATE SET org_id=excluded.org_id, role=excluded.role`,
-		m.OrgId, m.UserSub, m.Role, m.AddedAt.AsTime().UTC().Format(time.RFC3339))
+	res, err := r.db.ExecContext(ctx,
+		`UPDATE org_memberships SET org_id=?, role=?, email=? WHERE user_sub=? AND user_sub <> ''`,
+		m.OrgId, m.Role, nullStr(m.Email), m.UserSub)
+	if err != nil {
+		return err
+	}
+	if n, _ := res.RowsAffected(); n > 0 {
+		return nil
+	}
+	_, err = r.db.ExecContext(ctx,
+		`INSERT INTO org_memberships (org_id, user_sub, role, added_at, email) VALUES (?, ?, ?, ?, ?)`,
+		m.OrgId, m.UserSub, m.Role, m.AddedAt.AsTime().UTC().Format(time.RFC3339), nullStr(m.Email))
+	if isUnique(err) {
+		return store.ErrAlreadyExists
+	}
 	return err
+}
+
+// nullStr maps "" to SQL NULL so the partial unique email index ignores it.
+func nullStr(s string) any {
+	if s == "" {
+		return nil
+	}
+	return s
+}
+
+func (r *Repository) scanMemberships(rows *sql.Rows) ([]*framesv1.Membership, error) {
+	defer func() { _ = rows.Close() }()
+	out := []*framesv1.Membership{}
+	for rows.Next() {
+		var m framesv1.Membership
+		var added string
+		var email sql.NullString
+		if err := rows.Scan(&m.OrgId, &m.UserSub, &m.Role, &added, &email); err != nil {
+			return nil, err
+		}
+		m.AddedAt = ts(added)
+		m.Email = email.String
+		out = append(out, &m)
+	}
+	return out, rows.Err()
+}
+
+func (r *Repository) ListMembershipsByOrg(ctx context.Context, orgID string) ([]*framesv1.Membership, error) {
+	rows, err := r.db.QueryContext(ctx,
+		`SELECT org_id, user_sub, role, added_at, email FROM org_memberships WHERE org_id = ? ORDER BY added_at`, orgID)
+	if err != nil {
+		return nil, err
+	}
+	return r.scanMemberships(rows)
+}
+
+func (r *Repository) GetPendingMembershipByEmail(ctx context.Context, email string) (*framesv1.Membership, error) {
+	var m framesv1.Membership
+	var added string
+	var e sql.NullString
+	err := r.db.QueryRowContext(ctx,
+		`SELECT org_id, user_sub, role, added_at, email FROM org_memberships WHERE email = ? AND user_sub = '' LIMIT 1`, email).
+		Scan(&m.OrgId, &m.UserSub, &m.Role, &added, &e)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, store.ErrNotFound
+	}
+	if err != nil {
+		return nil, err
+	}
+	m.AddedAt = ts(added)
+	m.Email = e.String
+	return &m, nil
+}
+
+func (r *Repository) CountAdmins(ctx context.Context, orgID string) (int, error) {
+	var n int
+	err := r.db.QueryRowContext(ctx,
+		`SELECT COUNT(*) FROM org_memberships WHERE org_id = ? AND role = 'admin'`, orgID).Scan(&n)
+	return n, err
 }
 
 func (r *Repository) CreateFrameVersion(ctx context.Context, in store.CreateFrameVersionInput) error {

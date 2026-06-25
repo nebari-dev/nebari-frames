@@ -48,6 +48,9 @@ type Repository interface {
 	GetOrgBySlug(ctx context.Context, slug string) (*framesv1.Org, error)
 	GetMembership(ctx context.Context, userSub string) (*framesv1.Membership, error)
 	UpsertMembership(ctx context.Context, m *framesv1.Membership) error
+	ListMembershipsByOrg(ctx context.Context, orgID string) ([]*framesv1.Membership, error)
+	GetPendingMembershipByEmail(ctx context.Context, email string) (*framesv1.Membership, error)
+	CountAdmins(ctx context.Context, orgID string) (int, error)
 
 	CreateFrameVersion(ctx context.Context, in CreateFrameVersionInput) error
 	GetFrameBySlugName(ctx context.Context, orgSlug, name string) (*framesv1.Frame, error)

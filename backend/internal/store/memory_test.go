@@ -55,6 +55,42 @@ func TestMemory_OrgAndMembership(t *testing.T) {
 	}
 }
 
+func TestMemoryMembershipReads(t *testing.T) {
+	ctx := context.Background()
+	m := store.NewMemory()
+	_ = m.UpsertMembership(ctx, &framesv1.Membership{OrgId: "o1", UserSub: "s1", Role: "admin", Email: "a@x.io"})
+	_ = m.UpsertMembership(ctx, &framesv1.Membership{OrgId: "o1", UserSub: "", Role: "viewer", Email: "p@x.io"})
+	_ = m.UpsertMembership(ctx, &framesv1.Membership{OrgId: "o2", UserSub: "s9", Role: "admin", Email: "z@x.io"})
+
+	tests := []struct {
+		name    string
+		run     func() (int, error)
+		wantLen int
+	}{
+		{"list org o1", func() (int, error) { l, e := m.ListMembershipsByOrg(ctx, "o1"); return len(l), e }, 2},
+		{"count admins o1", func() (int, error) { return m.CountAdmins(ctx, "o1") }, 1},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := tt.run()
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got != tt.wantLen {
+				t.Fatalf("got %d want %d", got, tt.wantLen)
+			}
+		})
+	}
+
+	pend, err := m.GetPendingMembershipByEmail(ctx, "p@x.io")
+	if err != nil || pend.UserSub != "" || pend.OrgId != "o1" {
+		t.Fatalf("pending lookup got %+v err %v", pend, err)
+	}
+	if _, err := m.GetPendingMembershipByEmail(ctx, "a@x.io"); err == nil {
+		t.Fatal("active email should not match a pending lookup")
+	}
+}
+
 func TestMemory_CreateFrameVersionAndGrants(t *testing.T) {
 	m := store.NewMemory()
 	ctx := context.Background()

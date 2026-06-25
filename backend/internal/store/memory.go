@@ -10,13 +10,13 @@ import (
 // Memory is an in-memory Repository for development and tests.
 type Memory struct {
 	mu          sync.RWMutex
-	orgs        map[string]*framesv1.Org        // id -> org
-	slugToOrg   map[string]string               // slug -> id
-	memberships map[string]*framesv1.Membership // user_sub -> membership
-	frames      map[string]*framesv1.Frame      // id -> frame
-	keyToFrame  map[string]string               // orgID+"/"+name -> id
-	versions    map[string]*frameVersionRow     // frameID+"@"+version
-	grants      map[string][]Grant              // frameID -> grants
+	orgs        map[string]*framesv1.Org    // id -> org
+	slugToOrg   map[string]string           // slug -> id
+	memberships []*framesv1.Membership      // active + pending; active rows have non-empty UserSub
+	frames      map[string]*framesv1.Frame  // id -> frame
+	keyToFrame  map[string]string           // orgID+"/"+name -> id
+	versions    map[string]*frameVersionRow // frameID+"@"+version
+	grants      map[string][]Grant          // frameID -> grants
 }
 
 type frameVersionRow struct {
@@ -29,13 +29,12 @@ var _ Repository = (*Memory)(nil)
 
 func NewMemory() *Memory {
 	return &Memory{
-		orgs:        map[string]*framesv1.Org{},
-		slugToOrg:   map[string]string{},
-		memberships: map[string]*framesv1.Membership{},
-		frames:      map[string]*framesv1.Frame{},
-		keyToFrame:  map[string]string{},
-		versions:    map[string]*frameVersionRow{},
-		grants:      map[string][]Grant{},
+		orgs:       map[string]*framesv1.Org{},
+		slugToOrg:  map[string]string{},
+		frames:     map[string]*framesv1.Frame{},
+		keyToFrame: map[string]string{},
+		versions:   map[string]*frameVersionRow{},
+		grants:     map[string][]Grant{},
 	}
 }
 
@@ -71,8 +70,10 @@ func (m *Memory) GetOrgBySlug(_ context.Context, slug string) (*framesv1.Org, er
 func (m *Memory) GetMembership(_ context.Context, userSub string) (*framesv1.Membership, error) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
-	if mem, ok := m.memberships[userSub]; ok {
-		return mem, nil
+	for _, mem := range m.memberships {
+		if mem.UserSub == userSub && userSub != "" {
+			return mem, nil
+		}
 	}
 	return nil, ErrNotFound
 }
@@ -80,8 +81,49 @@ func (m *Memory) GetMembership(_ context.Context, userSub string) (*framesv1.Mem
 func (m *Memory) UpsertMembership(_ context.Context, mem *framesv1.Membership) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	m.memberships[mem.UserSub] = mem
+	for i, existing := range m.memberships {
+		if existing.UserSub == mem.UserSub && mem.UserSub != "" {
+			m.memberships[i] = mem
+			return nil
+		}
+	}
+	m.memberships = append(m.memberships, mem)
 	return nil
+}
+
+func (m *Memory) ListMembershipsByOrg(_ context.Context, orgID string) ([]*framesv1.Membership, error) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	out := []*framesv1.Membership{}
+	for _, mem := range m.memberships {
+		if mem.OrgId == orgID {
+			out = append(out, mem)
+		}
+	}
+	return out, nil
+}
+
+func (m *Memory) GetPendingMembershipByEmail(_ context.Context, email string) (*framesv1.Membership, error) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	for _, mem := range m.memberships {
+		if mem.UserSub == "" && mem.Email == email {
+			return mem, nil
+		}
+	}
+	return nil, ErrNotFound
+}
+
+func (m *Memory) CountAdmins(_ context.Context, orgID string) (int, error) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	n := 0
+	for _, mem := range m.memberships {
+		if mem.OrgId == orgID && mem.Role == "admin" {
+			n++
+		}
+	}
+	return n, nil
 }
 
 func (m *Memory) CreateFrameVersion(_ context.Context, in CreateFrameVersionInput) error {
