@@ -78,6 +78,8 @@ export function FrameAuthoringPage({ mode }: { mode: "create" | "edit" }) {
           <h1 className="text-2xl font-semibold">{mode === "create" ? "New Frame" : "Edit Frame"}</h1>
           <div className="flex gap-2">
             <Button type="button" variant="outline" onClick={() => navigate(-1)}>Cancel</Button>
+            {/* base-ui Button defaults to type="button"; the render prop wins mergeProps precedence, so set submit on the rendered element */}
+            <Button render={<button type="submit" />} disabled={publish.isPending}>Publish</Button>
           </div>
         </div>
         {formError && <Alert variant="destructive">{formError}</Alert>}
@@ -94,6 +96,7 @@ export function FrameAuthoringPage({ mode }: { mode: "create" | "edit" }) {
 
         <div className="flex justify-end gap-2">
           <Button type="button" variant="outline" onClick={() => navigate(-1)}>Cancel</Button>
+          {/* base-ui Button defaults to type="button"; the render prop wins mergeProps precedence, so set submit on the rendered element */}
           <Button render={<button type="submit" />} disabled={publish.isPending}>Publish</Button>
         </div>
       </form>

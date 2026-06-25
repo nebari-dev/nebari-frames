@@ -24,7 +24,8 @@ it("publishes a filled form and calls the mutation", async () => {
   await userEvent.type(screen.getByPlaceholderText("brand-voice"), "brand-voice");
   await userEvent.type(screen.getByPlaceholderText("OpenTeams brand voice"), "desc");
   await userEvent.type(screen.getByPlaceholderText("1.0.0"), "1.0.0");
-  await userEvent.click(screen.getByRole("button", { name: /^publish$/i }));
+  const publishButtons = screen.getAllByRole("button", { name: /^publish$/i });
+  await userEvent.click(publishButtons[publishButtons.length - 1]);
   await waitFor(() => expect(mutateMock).toHaveBeenCalled());
   const arg = mutateMock.mock.calls[0][0];
   expect(new TextDecoder().decode(arg.content)).toMatch(/name: brand-voice/);
