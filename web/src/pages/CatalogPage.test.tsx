@@ -8,6 +8,18 @@ vi.mock("@connectrpc/connect-query", () => ({ useQuery: () => useQueryMock() }))
 
 import { CatalogPage } from "./CatalogPage";
 
+it("shows Create button only when can_create", () => {
+  useQueryMock.mockReturnValue({ isLoading: false, error: null, data: { frames: [], canCreate: true } });
+  render(<MemoryRouter><CatalogPage /></MemoryRouter>);
+  expect(screen.getByRole("link", { name: /create new frame/i })).toBeInTheDocument();
+});
+
+it("hides Create button when not can_create", () => {
+  useQueryMock.mockReturnValue({ isLoading: false, error: null, data: { frames: [], canCreate: false } });
+  render(<MemoryRouter><CatalogPage /></MemoryRouter>);
+  expect(screen.queryByRole("link", { name: /create new frame/i })).not.toBeInTheDocument();
+});
+
 it("lists frames and filters by search", async () => {
   useQueryMock.mockReturnValue({
     isLoading: false,
