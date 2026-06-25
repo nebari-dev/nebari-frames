@@ -3,6 +3,7 @@ package frames_test
 import (
 	"bytes"
 	"context"
+	"errors"
 	"testing"
 
 	"connectrpc.com/connect"
@@ -287,5 +288,65 @@ func TestService_GetMeReportsRole(t *testing.T) {
 	}
 	if resp.Msg.Role != "publisher" || !resp.Msg.CanCreate || resp.Msg.Org.Slug != "openteams" {
 		t.Fatalf("unexpected GetMe: %+v", resp.Msg)
+	}
+}
+
+func TestPublishFrame_ValidationErrorDetail(t *testing.T) {
+	// An invalid doc: bad name (uppercase), empty description, empty version.
+	const badFrame = `name: Bad_Name
+description: ""
+version: ""
+slots:
+  rules:
+    - ""
+`
+	tests := []struct {
+		name      string
+		wantField string // a field path that MUST appear among the violations
+	}{
+		{name: "bad name reported", wantField: "name"},
+		{name: "empty description reported", wantField: "description"},
+		{name: "empty version reported", wantField: "version"},
+		{name: "empty rule reported", wantField: "slots.rules[0]"},
+	}
+
+	repo := store.NewMemory()
+	pubCtx := seedOrg(t, repo, "pub", "publisher")
+	svc := frames.NewService(repo)
+
+	_, err := svc.PublishFrame(pubCtx, connect.NewRequest(&framesv1.PublishFrameRequest{Content: []byte(badFrame)}))
+	if err == nil {
+		t.Fatal("want error, got nil")
+	}
+	if connect.CodeOf(err) != connect.CodeInvalidArgument {
+		t.Fatalf("want CodeInvalidArgument, got %v", connect.CodeOf(err))
+	}
+
+	var connErr *connect.Error
+	if !errors.As(err, &connErr) {
+		t.Fatalf("want *connect.Error, got %T", err)
+	}
+	// Collect field paths from the FieldViolations detail.
+	got := map[string]bool{}
+	for _, d := range connErr.Details() {
+		msg, verr := d.Value()
+		if verr != nil {
+			continue
+		}
+		if fv, ok := msg.(*framesv1.FieldViolations); ok {
+			for _, v := range fv.Violations {
+				got[v.Field] = true
+			}
+		}
+	}
+	if len(got) == 0 {
+		t.Fatal("no FieldViolations detail attached to error")
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			if !got[tc.wantField] {
+				t.Fatalf("violation for %q missing; got fields %v", tc.wantField, got)
+			}
+		})
 	}
 }

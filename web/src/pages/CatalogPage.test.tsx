@@ -8,6 +8,30 @@ vi.mock("@connectrpc/connect-query", () => ({ useQuery: () => useQueryMock() }))
 
 import { CatalogPage } from "./CatalogPage";
 
+it("shows Create button only when can_create", () => {
+  useQueryMock.mockReturnValue({ isLoading: false, error: null, data: { frames: [], canCreate: true } });
+  render(<MemoryRouter><CatalogPage /></MemoryRouter>);
+  expect(screen.getByRole("link", { name: /create new frame/i })).toBeInTheDocument();
+});
+
+it("hides Create button when not can_create", () => {
+  useQueryMock.mockReturnValue({ isLoading: false, error: null, data: { frames: [], canCreate: false } });
+  render(<MemoryRouter><CatalogPage /></MemoryRouter>);
+  expect(screen.queryByRole("link", { name: /create new frame/i })).not.toBeInTheDocument();
+});
+
+it("renders skeletons while loading", () => {
+  useQueryMock.mockReturnValue({ isLoading: true, error: null, data: undefined });
+  const { container } = render(<MemoryRouter><CatalogPage /></MemoryRouter>);
+  expect(container.querySelectorAll('[data-slot="skeleton"]').length).toBeGreaterThan(0);
+});
+
+it("renders an error state on failure", () => {
+  useQueryMock.mockReturnValue({ isLoading: false, error: new Error("boom"), data: undefined });
+  render(<MemoryRouter><CatalogPage /></MemoryRouter>);
+  expect(screen.getByText(/could not load frames/i)).toBeInTheDocument();
+});
+
 it("lists frames and filters by search", async () => {
   useQueryMock.mockReturnValue({
     isLoading: false,

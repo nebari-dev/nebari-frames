@@ -1,4 +1,4 @@
-import { useParams } from "react-router";
+import { Link, useParams } from "react-router";
 import { useQuery } from "@connectrpc/connect-query";
 import { Code, ConnectError } from "@connectrpc/connect";
 import { FrameService } from "@gen/frames/v1/frame_service_pb";
@@ -7,6 +7,7 @@ import { FrameSlots } from "@/components/slots/FrameSlots";
 import { InheritanceTrail } from "@/components/frame/InheritanceTrail";
 import { VersionHistory } from "@/components/frame/VersionHistory";
 import { UseThisFrame } from "@/components/frame/UseThisFrame";
+import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 
 export function FrameDetailPage() {
@@ -36,12 +37,15 @@ export function FrameDetailPage() {
   return (
     <div className="grid gap-6 lg:grid-cols-[1fr_18rem]">
       <div className="space-y-4">
-        <header className="space-y-1">
-          <h1 className="text-2xl font-semibold">{resp.frame!.name}</h1>
-          <p className="text-muted-foreground">{resp.frame!.description}</p>
-          <p className="text-xs text-muted-foreground">
-            v{resp.version!.version} - {resp.frame!.ownerSub}
-          </p>
+        <header className="flex items-start justify-between">
+          <div className="space-y-1">
+            <h1 className="text-2xl font-semibold">{resp.frame!.name}</h1>
+            <p className="text-muted-foreground">{resp.frame!.description}</p>
+            <p className="text-xs text-muted-foreground">v{resp.version!.version} - {resp.frame!.ownerSub}</p>
+          </div>
+          {resp.permissions?.canEdit && (
+            <Button variant="outline" render={<Link to={`/frames/${org}/${name}/edit`} />}>Edit</Button>
+          )}
         </header>
         <FrameSlots doc={doc} />
         <VersionHistory versions={versionsQ.data?.versions ?? []} />

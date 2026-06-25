@@ -7,6 +7,7 @@ import { CallbackPage } from "@/pages/CallbackPage";
 import { NoAccessPage } from "@/pages/NoAccessPage";
 import { CatalogPage } from "@/pages/CatalogPage";
 import { FrameDetailPage } from "@/pages/FrameDetailPage";
+import { FrameAuthoringPage } from "@/pages/FrameAuthoringPage";
 
 export function AppRoutes() {
   return (
@@ -18,7 +19,9 @@ export function AppRoutes() {
         <Route element={<RequireMembership />}>
           <Route element={<AppShell />}>
             <Route path="/" element={<CatalogPage />} />
+            <Route path="/frames/new" element={<FrameAuthoringPage mode="create" />} />
             <Route path="/frames/:org/:name" element={<FrameDetailPage />} />
+            <Route path="/frames/:org/:name/edit" element={<FrameAuthoringPage mode="edit" />} />
           </Route>
         </Route>
       </Route>

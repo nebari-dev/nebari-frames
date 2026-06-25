@@ -661,6 +661,106 @@ func (x *ListFrameVersionsResponse) GetVersions() []*FrameVersionSummary {
 	return nil
 }
 
+// FieldViolation is one validation failure at a specific field path
+// (e.g. "slots.terminology[2].definition", matching backend validate.go paths).
+type FieldViolation struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Field         string                 `protobuf:"bytes,1,opt,name=field,proto3" json:"field,omitempty"`
+	Message       string                 `protobuf:"bytes,2,opt,name=message,proto3" json:"message,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *FieldViolation) Reset() {
+	*x = FieldViolation{}
+	mi := &file_frames_v1_frame_service_proto_msgTypes[12]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *FieldViolation) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*FieldViolation) ProtoMessage() {}
+
+func (x *FieldViolation) ProtoReflect() protoreflect.Message {
+	mi := &file_frames_v1_frame_service_proto_msgTypes[12]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use FieldViolation.ProtoReflect.Descriptor instead.
+func (*FieldViolation) Descriptor() ([]byte, []int) {
+	return file_frames_v1_frame_service_proto_rawDescGZIP(), []int{12}
+}
+
+func (x *FieldViolation) GetField() string {
+	if x != nil {
+		return x.Field
+	}
+	return ""
+}
+
+func (x *FieldViolation) GetMessage() string {
+	if x != nil {
+		return x.Message
+	}
+	return ""
+}
+
+// FieldViolations is attached as a Connect error detail on PublishFrame when
+// schema validation fails, so clients can map failures to individual inputs.
+type FieldViolations struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Violations    []*FieldViolation      `protobuf:"bytes,1,rep,name=violations,proto3" json:"violations,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *FieldViolations) Reset() {
+	*x = FieldViolations{}
+	mi := &file_frames_v1_frame_service_proto_msgTypes[13]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *FieldViolations) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*FieldViolations) ProtoMessage() {}
+
+func (x *FieldViolations) ProtoReflect() protoreflect.Message {
+	mi := &file_frames_v1_frame_service_proto_msgTypes[13]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use FieldViolations.ProtoReflect.Descriptor instead.
+func (*FieldViolations) Descriptor() ([]byte, []int) {
+	return file_frames_v1_frame_service_proto_rawDescGZIP(), []int{13}
+}
+
+func (x *FieldViolations) GetViolations() []*FieldViolation {
+	if x != nil {
+		return x.Violations
+	}
+	return nil
+}
+
 var File_frames_v1_frame_service_proto protoreflect.FileDescriptor
 
 const file_frames_v1_frame_service_proto_rawDesc = "" +
@@ -705,7 +805,14 @@ const file_frames_v1_frame_service_proto_rawDesc = "" +
 	"\borg_slug\x18\x01 \x01(\tR\aorgSlug\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\"W\n" +
 	"\x19ListFrameVersionsResponse\x12:\n" +
-	"\bversions\x18\x01 \x03(\v2\x1e.frames.v1.FrameVersionSummaryR\bversions2\xdc\x03\n" +
+	"\bversions\x18\x01 \x03(\v2\x1e.frames.v1.FrameVersionSummaryR\bversions\"@\n" +
+	"\x0eFieldViolation\x12\x14\n" +
+	"\x05field\x18\x01 \x01(\tR\x05field\x12\x18\n" +
+	"\amessage\x18\x02 \x01(\tR\amessage\"L\n" +
+	"\x0fFieldViolations\x129\n" +
+	"\n" +
+	"violations\x18\x01 \x03(\v2\x19.frames.v1.FieldViolationR\n" +
+	"violations2\xdc\x03\n" +
 	"\fFrameService\x12O\n" +
 	"\fPublishFrame\x12\x1e.frames.v1.PublishFrameRequest\x1a\x1f.frames.v1.PublishFrameResponse\x12I\n" +
 	"\n" +
@@ -729,7 +836,7 @@ func file_frames_v1_frame_service_proto_rawDescGZIP() []byte {
 	return file_frames_v1_frame_service_proto_rawDescData
 }
 
-var file_frames_v1_frame_service_proto_msgTypes = make([]protoimpl.MessageInfo, 12)
+var file_frames_v1_frame_service_proto_msgTypes = make([]protoimpl.MessageInfo, 14)
 var file_frames_v1_frame_service_proto_goTypes = []any{
 	(*PublishFrameRequest)(nil),       // 0: frames.v1.PublishFrameRequest
 	(*PublishFrameResponse)(nil),      // 1: frames.v1.PublishFrameResponse
@@ -743,41 +850,44 @@ var file_frames_v1_frame_service_proto_goTypes = []any{
 	(*GetMeResponse)(nil),             // 9: frames.v1.GetMeResponse
 	(*ListFrameVersionsRequest)(nil),  // 10: frames.v1.ListFrameVersionsRequest
 	(*ListFrameVersionsResponse)(nil), // 11: frames.v1.ListFrameVersionsResponse
-	(*Frame)(nil),                     // 12: frames.v1.Frame
-	(*FrameVersion)(nil),              // 13: frames.v1.FrameVersion
-	(*FrameSummary)(nil),              // 14: frames.v1.FrameSummary
-	(*ParentRef)(nil),                 // 15: frames.v1.ParentRef
-	(*Permissions)(nil),               // 16: frames.v1.Permissions
-	(*Org)(nil),                       // 17: frames.v1.Org
-	(*FrameVersionSummary)(nil),       // 18: frames.v1.FrameVersionSummary
+	(*FieldViolation)(nil),            // 12: frames.v1.FieldViolation
+	(*FieldViolations)(nil),           // 13: frames.v1.FieldViolations
+	(*Frame)(nil),                     // 14: frames.v1.Frame
+	(*FrameVersion)(nil),              // 15: frames.v1.FrameVersion
+	(*FrameSummary)(nil),              // 16: frames.v1.FrameSummary
+	(*ParentRef)(nil),                 // 17: frames.v1.ParentRef
+	(*Permissions)(nil),               // 18: frames.v1.Permissions
+	(*Org)(nil),                       // 19: frames.v1.Org
+	(*FrameVersionSummary)(nil),       // 20: frames.v1.FrameVersionSummary
 }
 var file_frames_v1_frame_service_proto_depIdxs = []int32{
-	12, // 0: frames.v1.PublishFrameResponse.frame:type_name -> frames.v1.Frame
-	13, // 1: frames.v1.PublishFrameResponse.version:type_name -> frames.v1.FrameVersion
-	14, // 2: frames.v1.ListFramesResponse.frames:type_name -> frames.v1.FrameSummary
-	12, // 3: frames.v1.GetFrameResponse.frame:type_name -> frames.v1.Frame
-	13, // 4: frames.v1.GetFrameResponse.version:type_name -> frames.v1.FrameVersion
-	15, // 5: frames.v1.GetFrameResponse.extends:type_name -> frames.v1.ParentRef
-	16, // 6: frames.v1.GetFrameResponse.permissions:type_name -> frames.v1.Permissions
-	17, // 7: frames.v1.GetMeResponse.org:type_name -> frames.v1.Org
-	18, // 8: frames.v1.ListFrameVersionsResponse.versions:type_name -> frames.v1.FrameVersionSummary
-	0,  // 9: frames.v1.FrameService.PublishFrame:input_type -> frames.v1.PublishFrameRequest
-	2,  // 10: frames.v1.FrameService.ListFrames:input_type -> frames.v1.ListFramesRequest
-	4,  // 11: frames.v1.FrameService.GetFrame:input_type -> frames.v1.GetFrameRequest
-	6,  // 12: frames.v1.FrameService.ResolveFrame:input_type -> frames.v1.ResolveFrameRequest
-	8,  // 13: frames.v1.FrameService.GetMe:input_type -> frames.v1.GetMeRequest
-	10, // 14: frames.v1.FrameService.ListFrameVersions:input_type -> frames.v1.ListFrameVersionsRequest
-	1,  // 15: frames.v1.FrameService.PublishFrame:output_type -> frames.v1.PublishFrameResponse
-	3,  // 16: frames.v1.FrameService.ListFrames:output_type -> frames.v1.ListFramesResponse
-	5,  // 17: frames.v1.FrameService.GetFrame:output_type -> frames.v1.GetFrameResponse
-	7,  // 18: frames.v1.FrameService.ResolveFrame:output_type -> frames.v1.ResolveFrameResponse
-	9,  // 19: frames.v1.FrameService.GetMe:output_type -> frames.v1.GetMeResponse
-	11, // 20: frames.v1.FrameService.ListFrameVersions:output_type -> frames.v1.ListFrameVersionsResponse
-	15, // [15:21] is the sub-list for method output_type
-	9,  // [9:15] is the sub-list for method input_type
-	9,  // [9:9] is the sub-list for extension type_name
-	9,  // [9:9] is the sub-list for extension extendee
-	0,  // [0:9] is the sub-list for field type_name
+	14, // 0: frames.v1.PublishFrameResponse.frame:type_name -> frames.v1.Frame
+	15, // 1: frames.v1.PublishFrameResponse.version:type_name -> frames.v1.FrameVersion
+	16, // 2: frames.v1.ListFramesResponse.frames:type_name -> frames.v1.FrameSummary
+	14, // 3: frames.v1.GetFrameResponse.frame:type_name -> frames.v1.Frame
+	15, // 4: frames.v1.GetFrameResponse.version:type_name -> frames.v1.FrameVersion
+	17, // 5: frames.v1.GetFrameResponse.extends:type_name -> frames.v1.ParentRef
+	18, // 6: frames.v1.GetFrameResponse.permissions:type_name -> frames.v1.Permissions
+	19, // 7: frames.v1.GetMeResponse.org:type_name -> frames.v1.Org
+	20, // 8: frames.v1.ListFrameVersionsResponse.versions:type_name -> frames.v1.FrameVersionSummary
+	12, // 9: frames.v1.FieldViolations.violations:type_name -> frames.v1.FieldViolation
+	0,  // 10: frames.v1.FrameService.PublishFrame:input_type -> frames.v1.PublishFrameRequest
+	2,  // 11: frames.v1.FrameService.ListFrames:input_type -> frames.v1.ListFramesRequest
+	4,  // 12: frames.v1.FrameService.GetFrame:input_type -> frames.v1.GetFrameRequest
+	6,  // 13: frames.v1.FrameService.ResolveFrame:input_type -> frames.v1.ResolveFrameRequest
+	8,  // 14: frames.v1.FrameService.GetMe:input_type -> frames.v1.GetMeRequest
+	10, // 15: frames.v1.FrameService.ListFrameVersions:input_type -> frames.v1.ListFrameVersionsRequest
+	1,  // 16: frames.v1.FrameService.PublishFrame:output_type -> frames.v1.PublishFrameResponse
+	3,  // 17: frames.v1.FrameService.ListFrames:output_type -> frames.v1.ListFramesResponse
+	5,  // 18: frames.v1.FrameService.GetFrame:output_type -> frames.v1.GetFrameResponse
+	7,  // 19: frames.v1.FrameService.ResolveFrame:output_type -> frames.v1.ResolveFrameResponse
+	9,  // 20: frames.v1.FrameService.GetMe:output_type -> frames.v1.GetMeResponse
+	11, // 21: frames.v1.FrameService.ListFrameVersions:output_type -> frames.v1.ListFrameVersionsResponse
+	16, // [16:22] is the sub-list for method output_type
+	10, // [10:16] is the sub-list for method input_type
+	10, // [10:10] is the sub-list for extension type_name
+	10, // [10:10] is the sub-list for extension extendee
+	0,  // [0:10] is the sub-list for field type_name
 }
 
 func init() { file_frames_v1_frame_service_proto_init() }
@@ -792,7 +902,7 @@ func file_frames_v1_frame_service_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_frames_v1_frame_service_proto_rawDesc), len(file_frames_v1_frame_service_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   12,
+			NumMessages:   14,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

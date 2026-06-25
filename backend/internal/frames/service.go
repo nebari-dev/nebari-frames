@@ -82,7 +82,20 @@ func (s *Service) PublishFrame(ctx context.Context, req *connect.Request[framesv
 		return nil, connect.NewError(connect.CodeInvalidArgument, err)
 	}
 	if verr := Validate(doc); verr != nil {
-		return nil, connect.NewError(connect.CodeInvalidArgument, verr)
+		cerr := connect.NewError(connect.CodeInvalidArgument, verr)
+		var ve *ValidationError
+		if errors.As(verr, &ve) {
+			fv := &framesv1.FieldViolations{}
+			for _, fe := range ve.Errors {
+				fv.Violations = append(fv.Violations, &framesv1.FieldViolation{
+					Field: fe.Path, Message: fe.Message,
+				})
+			}
+			if detail, derr := connect.NewErrorDetail(fv); derr == nil {
+				cerr.AddDetail(detail)
+			}
+		}
+		return nil, cerr
 	}
 
 	org, err := s.repo.GetOrgByID(ctx, caller.OrgID)

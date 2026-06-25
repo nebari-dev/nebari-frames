@@ -3,6 +3,7 @@ import { Link } from "react-router";
 import { useQuery } from "@connectrpc/connect-query";
 import { FrameService } from "@gen/frames/v1/frame_service_pb";
 import { filterFrames } from "@/lib/filter";
+import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -25,12 +26,17 @@ export function CatalogPage() {
   const frames = filterFrames(data?.frames ?? [], query);
   return (
     <div className="space-y-6">
-      <Input
-        placeholder="Search frames..."
-        value={query}
-        onChange={(e) => setQuery(e.target.value)}
-        className="max-w-sm"
-      />
+      <div className="flex items-center justify-between gap-4">
+        <Input
+          placeholder="Search frames..."
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          className="max-w-sm"
+        />
+        {data?.canCreate && (
+          <Button render={<Link to="/frames/new" />}>Create new Frame</Button>
+        )}
+      </div>
       {frames.length === 0 ? (
         <p className="text-muted-foreground">No frames found.</p>
       ) : (
