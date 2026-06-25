@@ -10,6 +10,9 @@ export function AppShell() {
         <div className="mx-auto max-w-6xl flex items-center justify-between px-4 h-14">
           <Link to="/" className="font-semibold">Nebari Frames</Link>
           <div className="flex items-center gap-3 text-sm">
+            <Link to="/connect" className="text-muted-foreground hover:text-foreground">
+              Connect
+            </Link>
             <span className="text-muted-foreground">{user?.profile?.email ?? ""}</span>
             <Button variant="ghost" size="sm" onClick={() => void logout()}>Log out</Button>
           </div>
