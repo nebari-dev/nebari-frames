@@ -1,12 +1,12 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useForm, FormProvider } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { useNavigate } from "react-router";
+import { useNavigate, useParams } from "react-router";
 import { useMutation, useQuery, createConnectQueryKey } from "@connectrpc/connect-query";
 import { useQueryClient } from "@tanstack/react-query";
 import { FrameService } from "@gen/frames/v1/frame_service_pb";
-import { authoringFormSchema, emptyFrameDoc } from "@/lib/authoring-schema";
-import { serializeFrameDoc } from "@/lib/frame-yaml";
+import { authoringFormSchema, emptyFrameDoc, suggestNextVersion } from "@/lib/authoring-schema";
+import { serializeFrameDoc, parseFrameContent } from "@/lib/frame-yaml";
 import { mapPublishError } from "@/lib/publish-errors";
 import { type AuthoringForm, formToDoc, docToForm } from "@/components/form/form-model";
 import { MetadataFields } from "@/components/form/MetadataFields";
@@ -38,6 +38,26 @@ export function FrameAuthoringPage({ mode }: { mode: "create" | "edit" }) {
     defaultValues: docToForm(emptyFrameDoc(), ""),
   });
 
+  const { org = "", name = "" } = useParams();
+  const editQ = useQuery(
+    FrameService.method.getFrame,
+    { orgSlug: org, name },
+    { enabled: mode === "edit" },
+  );
+
+  useEffect(() => {
+    if (mode !== "edit" || !editQ.data?.version) return;
+    try {
+      const doc = parseFrameContent(editQ.data.version.content);
+      methods.reset(docToForm({ ...doc, version: suggestNextVersion(doc.version) }, ""));
+    } catch {
+      // Schedule outside the effect body to satisfy react-hooks/set-state-in-effect
+      setTimeout(() => setFormError("This frame's content could not be loaded for editing."), 0);
+    }
+    // reset only when the loaded version changes
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mode, editQ.data?.version?.digest]);
+
   // Org slug for post-publish navigation. PublishFrameResponse carries orgId,
   // not the slug, and the detail route is keyed by slug, so read it from GetMe.
   const meQ = useQuery(FrameService.method.getMe, {});
@@ -57,7 +77,7 @@ export function FrameAuthoringPage({ mode }: { mode: "create" | "edit" }) {
               cardinality: "finite",
             }),
           });
-          const slug = meQ.data?.org?.slug ?? "";
+          const slug = mode === "edit" ? org : (meQ.data?.org?.slug ?? "");
           navigate(`/frames/${slug}/${form.name}`);
         },
         onError: (err: unknown) => {
