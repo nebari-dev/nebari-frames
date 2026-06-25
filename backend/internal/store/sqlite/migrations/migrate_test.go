@@ -3,6 +3,7 @@ package migrations_test
 import (
 	"context"
 	"database/sql"
+	"path/filepath"
 	"testing"
 
 	_ "modernc.org/sqlite"
@@ -70,6 +71,33 @@ func TestRun_FrameSchemaAndForeignKeys(t *testing.T) {
 	}
 	if status != "published" || reviewedBy.Valid {
 		t.Fatalf("want status=published reviewed_by=NULL, got status=%q reviewed_by.Valid=%v", status, reviewedBy.Valid)
+	}
+}
+
+func TestMigration004AddsEmailColumn(t *testing.T) {
+	db, err := sqlite.Open(filepath.Join(t.TempDir(), "m.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = db.Close() }()
+	if err := migrations.Run(context.Background(), db); err != nil {
+		t.Fatal(err)
+	}
+	rows, err := db.Query(`SELECT name FROM pragma_table_info('org_memberships')`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = rows.Close() }()
+	cols := map[string]bool{}
+	for rows.Next() {
+		var n string
+		if err := rows.Scan(&n); err != nil {
+			t.Fatal(err)
+		}
+		cols[n] = true
+	}
+	if !cols["email"] {
+		t.Fatalf("expected email column, got columns %v", cols)
 	}
 }
 

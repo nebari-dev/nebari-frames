@@ -17,6 +17,7 @@ message Membership {
   string user_sub = 2;
   string role = 3; // "viewer" | "publisher" | "admin"
   google.protobuf.Timestamp added_at = 4;
+  string email = 5; // invite/display email; empty until set by an admin invite
 }
 
 message Frame {

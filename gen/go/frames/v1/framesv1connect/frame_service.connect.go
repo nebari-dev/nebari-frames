@@ -48,6 +48,21 @@ const (
 	// FrameServiceListFrameVersionsProcedure is the fully-qualified name of the FrameService's
 	// ListFrameVersions RPC.
 	FrameServiceListFrameVersionsProcedure = "/frames.v1.FrameService/ListFrameVersions"
+	// FrameServiceDeleteFrameProcedure is the fully-qualified name of the FrameService's DeleteFrame
+	// RPC.
+	FrameServiceDeleteFrameProcedure = "/frames.v1.FrameService/DeleteFrame"
+	// FrameServiceListOrgMembersProcedure is the fully-qualified name of the FrameService's
+	// ListOrgMembers RPC.
+	FrameServiceListOrgMembersProcedure = "/frames.v1.FrameService/ListOrgMembers"
+	// FrameServiceAddOrgMemberProcedure is the fully-qualified name of the FrameService's AddOrgMember
+	// RPC.
+	FrameServiceAddOrgMemberProcedure = "/frames.v1.FrameService/AddOrgMember"
+	// FrameServiceSetMemberRoleProcedure is the fully-qualified name of the FrameService's
+	// SetMemberRole RPC.
+	FrameServiceSetMemberRoleProcedure = "/frames.v1.FrameService/SetMemberRole"
+	// FrameServiceRemoveOrgMemberProcedure is the fully-qualified name of the FrameService's
+	// RemoveOrgMember RPC.
+	FrameServiceRemoveOrgMemberProcedure = "/frames.v1.FrameService/RemoveOrgMember"
 )
 
 // FrameServiceClient is a client for the frames.v1.FrameService service.
@@ -64,6 +79,16 @@ type FrameServiceClient interface {
 	GetMe(context.Context, *connect.Request[v1.GetMeRequest]) (*connect.Response[v1.GetMeResponse], error)
 	// Read - lists a frame's published versions, newest first. 404 if no read.
 	ListFrameVersions(context.Context, *connect.Request[v1.ListFrameVersionsRequest]) (*connect.Response[v1.ListFrameVersionsResponse], error)
+	// Write - delete a frame. Blocks if the frame is a parent unless force=true.
+	DeleteFrame(context.Context, *connect.Request[v1.DeleteFrameRequest]) (*connect.Response[v1.DeleteFrameResponse], error)
+	// Admin only - list the caller's org members.
+	ListOrgMembers(context.Context, *connect.Request[v1.ListOrgMembersRequest]) (*connect.Response[v1.ListOrgMembersResponse], error)
+	// Admin only - add a member to the caller's org by email (pending until login).
+	AddOrgMember(context.Context, *connect.Request[v1.AddOrgMemberRequest]) (*connect.Response[v1.AddOrgMemberResponse], error)
+	// Admin only - change a member's role.
+	SetMemberRole(context.Context, *connect.Request[v1.SetMemberRoleRequest]) (*connect.Response[v1.SetMemberRoleResponse], error)
+	// Admin only - remove a member from the caller's org.
+	RemoveOrgMember(context.Context, *connect.Request[v1.RemoveOrgMemberRequest]) (*connect.Response[v1.RemoveOrgMemberResponse], error)
 }
 
 // NewFrameServiceClient constructs a client for the frames.v1.FrameService service. By default, it
@@ -113,6 +138,36 @@ func NewFrameServiceClient(httpClient connect.HTTPClient, baseURL string, opts .
 			connect.WithSchema(frameServiceMethods.ByName("ListFrameVersions")),
 			connect.WithClientOptions(opts...),
 		),
+		deleteFrame: connect.NewClient[v1.DeleteFrameRequest, v1.DeleteFrameResponse](
+			httpClient,
+			baseURL+FrameServiceDeleteFrameProcedure,
+			connect.WithSchema(frameServiceMethods.ByName("DeleteFrame")),
+			connect.WithClientOptions(opts...),
+		),
+		listOrgMembers: connect.NewClient[v1.ListOrgMembersRequest, v1.ListOrgMembersResponse](
+			httpClient,
+			baseURL+FrameServiceListOrgMembersProcedure,
+			connect.WithSchema(frameServiceMethods.ByName("ListOrgMembers")),
+			connect.WithClientOptions(opts...),
+		),
+		addOrgMember: connect.NewClient[v1.AddOrgMemberRequest, v1.AddOrgMemberResponse](
+			httpClient,
+			baseURL+FrameServiceAddOrgMemberProcedure,
+			connect.WithSchema(frameServiceMethods.ByName("AddOrgMember")),
+			connect.WithClientOptions(opts...),
+		),
+		setMemberRole: connect.NewClient[v1.SetMemberRoleRequest, v1.SetMemberRoleResponse](
+			httpClient,
+			baseURL+FrameServiceSetMemberRoleProcedure,
+			connect.WithSchema(frameServiceMethods.ByName("SetMemberRole")),
+			connect.WithClientOptions(opts...),
+		),
+		removeOrgMember: connect.NewClient[v1.RemoveOrgMemberRequest, v1.RemoveOrgMemberResponse](
+			httpClient,
+			baseURL+FrameServiceRemoveOrgMemberProcedure,
+			connect.WithSchema(frameServiceMethods.ByName("RemoveOrgMember")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
@@ -124,6 +179,11 @@ type frameServiceClient struct {
 	resolveFrame      *connect.Client[v1.ResolveFrameRequest, v1.ResolveFrameResponse]
 	getMe             *connect.Client[v1.GetMeRequest, v1.GetMeResponse]
 	listFrameVersions *connect.Client[v1.ListFrameVersionsRequest, v1.ListFrameVersionsResponse]
+	deleteFrame       *connect.Client[v1.DeleteFrameRequest, v1.DeleteFrameResponse]
+	listOrgMembers    *connect.Client[v1.ListOrgMembersRequest, v1.ListOrgMembersResponse]
+	addOrgMember      *connect.Client[v1.AddOrgMemberRequest, v1.AddOrgMemberResponse]
+	setMemberRole     *connect.Client[v1.SetMemberRoleRequest, v1.SetMemberRoleResponse]
+	removeOrgMember   *connect.Client[v1.RemoveOrgMemberRequest, v1.RemoveOrgMemberResponse]
 }
 
 // PublishFrame calls frames.v1.FrameService.PublishFrame.
@@ -156,6 +216,31 @@ func (c *frameServiceClient) ListFrameVersions(ctx context.Context, req *connect
 	return c.listFrameVersions.CallUnary(ctx, req)
 }
 
+// DeleteFrame calls frames.v1.FrameService.DeleteFrame.
+func (c *frameServiceClient) DeleteFrame(ctx context.Context, req *connect.Request[v1.DeleteFrameRequest]) (*connect.Response[v1.DeleteFrameResponse], error) {
+	return c.deleteFrame.CallUnary(ctx, req)
+}
+
+// ListOrgMembers calls frames.v1.FrameService.ListOrgMembers.
+func (c *frameServiceClient) ListOrgMembers(ctx context.Context, req *connect.Request[v1.ListOrgMembersRequest]) (*connect.Response[v1.ListOrgMembersResponse], error) {
+	return c.listOrgMembers.CallUnary(ctx, req)
+}
+
+// AddOrgMember calls frames.v1.FrameService.AddOrgMember.
+func (c *frameServiceClient) AddOrgMember(ctx context.Context, req *connect.Request[v1.AddOrgMemberRequest]) (*connect.Response[v1.AddOrgMemberResponse], error) {
+	return c.addOrgMember.CallUnary(ctx, req)
+}
+
+// SetMemberRole calls frames.v1.FrameService.SetMemberRole.
+func (c *frameServiceClient) SetMemberRole(ctx context.Context, req *connect.Request[v1.SetMemberRoleRequest]) (*connect.Response[v1.SetMemberRoleResponse], error) {
+	return c.setMemberRole.CallUnary(ctx, req)
+}
+
+// RemoveOrgMember calls frames.v1.FrameService.RemoveOrgMember.
+func (c *frameServiceClient) RemoveOrgMember(ctx context.Context, req *connect.Request[v1.RemoveOrgMemberRequest]) (*connect.Response[v1.RemoveOrgMemberResponse], error) {
+	return c.removeOrgMember.CallUnary(ctx, req)
+}
+
 // FrameServiceHandler is an implementation of the frames.v1.FrameService service.
 type FrameServiceHandler interface {
 	// Write - publisher/admin only. Org is derived from the caller.
@@ -170,6 +255,16 @@ type FrameServiceHandler interface {
 	GetMe(context.Context, *connect.Request[v1.GetMeRequest]) (*connect.Response[v1.GetMeResponse], error)
 	// Read - lists a frame's published versions, newest first. 404 if no read.
 	ListFrameVersions(context.Context, *connect.Request[v1.ListFrameVersionsRequest]) (*connect.Response[v1.ListFrameVersionsResponse], error)
+	// Write - delete a frame. Blocks if the frame is a parent unless force=true.
+	DeleteFrame(context.Context, *connect.Request[v1.DeleteFrameRequest]) (*connect.Response[v1.DeleteFrameResponse], error)
+	// Admin only - list the caller's org members.
+	ListOrgMembers(context.Context, *connect.Request[v1.ListOrgMembersRequest]) (*connect.Response[v1.ListOrgMembersResponse], error)
+	// Admin only - add a member to the caller's org by email (pending until login).
+	AddOrgMember(context.Context, *connect.Request[v1.AddOrgMemberRequest]) (*connect.Response[v1.AddOrgMemberResponse], error)
+	// Admin only - change a member's role.
+	SetMemberRole(context.Context, *connect.Request[v1.SetMemberRoleRequest]) (*connect.Response[v1.SetMemberRoleResponse], error)
+	// Admin only - remove a member from the caller's org.
+	RemoveOrgMember(context.Context, *connect.Request[v1.RemoveOrgMemberRequest]) (*connect.Response[v1.RemoveOrgMemberResponse], error)
 }
 
 // NewFrameServiceHandler builds an HTTP handler from the service implementation. It returns the
@@ -215,6 +310,36 @@ func NewFrameServiceHandler(svc FrameServiceHandler, opts ...connect.HandlerOpti
 		connect.WithSchema(frameServiceMethods.ByName("ListFrameVersions")),
 		connect.WithHandlerOptions(opts...),
 	)
+	frameServiceDeleteFrameHandler := connect.NewUnaryHandler(
+		FrameServiceDeleteFrameProcedure,
+		svc.DeleteFrame,
+		connect.WithSchema(frameServiceMethods.ByName("DeleteFrame")),
+		connect.WithHandlerOptions(opts...),
+	)
+	frameServiceListOrgMembersHandler := connect.NewUnaryHandler(
+		FrameServiceListOrgMembersProcedure,
+		svc.ListOrgMembers,
+		connect.WithSchema(frameServiceMethods.ByName("ListOrgMembers")),
+		connect.WithHandlerOptions(opts...),
+	)
+	frameServiceAddOrgMemberHandler := connect.NewUnaryHandler(
+		FrameServiceAddOrgMemberProcedure,
+		svc.AddOrgMember,
+		connect.WithSchema(frameServiceMethods.ByName("AddOrgMember")),
+		connect.WithHandlerOptions(opts...),
+	)
+	frameServiceSetMemberRoleHandler := connect.NewUnaryHandler(
+		FrameServiceSetMemberRoleProcedure,
+		svc.SetMemberRole,
+		connect.WithSchema(frameServiceMethods.ByName("SetMemberRole")),
+		connect.WithHandlerOptions(opts...),
+	)
+	frameServiceRemoveOrgMemberHandler := connect.NewUnaryHandler(
+		FrameServiceRemoveOrgMemberProcedure,
+		svc.RemoveOrgMember,
+		connect.WithSchema(frameServiceMethods.ByName("RemoveOrgMember")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/frames.v1.FrameService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case FrameServicePublishFrameProcedure:
@@ -229,6 +354,16 @@ func NewFrameServiceHandler(svc FrameServiceHandler, opts ...connect.HandlerOpti
 			frameServiceGetMeHandler.ServeHTTP(w, r)
 		case FrameServiceListFrameVersionsProcedure:
 			frameServiceListFrameVersionsHandler.ServeHTTP(w, r)
+		case FrameServiceDeleteFrameProcedure:
+			frameServiceDeleteFrameHandler.ServeHTTP(w, r)
+		case FrameServiceListOrgMembersProcedure:
+			frameServiceListOrgMembersHandler.ServeHTTP(w, r)
+		case FrameServiceAddOrgMemberProcedure:
+			frameServiceAddOrgMemberHandler.ServeHTTP(w, r)
+		case FrameServiceSetMemberRoleProcedure:
+			frameServiceSetMemberRoleHandler.ServeHTTP(w, r)
+		case FrameServiceRemoveOrgMemberProcedure:
+			frameServiceRemoveOrgMemberHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -260,4 +395,24 @@ func (UnimplementedFrameServiceHandler) GetMe(context.Context, *connect.Request[
 
 func (UnimplementedFrameServiceHandler) ListFrameVersions(context.Context, *connect.Request[v1.ListFrameVersionsRequest]) (*connect.Response[v1.ListFrameVersionsResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("frames.v1.FrameService.ListFrameVersions is not implemented"))
+}
+
+func (UnimplementedFrameServiceHandler) DeleteFrame(context.Context, *connect.Request[v1.DeleteFrameRequest]) (*connect.Response[v1.DeleteFrameResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("frames.v1.FrameService.DeleteFrame is not implemented"))
+}
+
+func (UnimplementedFrameServiceHandler) ListOrgMembers(context.Context, *connect.Request[v1.ListOrgMembersRequest]) (*connect.Response[v1.ListOrgMembersResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("frames.v1.FrameService.ListOrgMembers is not implemented"))
+}
+
+func (UnimplementedFrameServiceHandler) AddOrgMember(context.Context, *connect.Request[v1.AddOrgMemberRequest]) (*connect.Response[v1.AddOrgMemberResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("frames.v1.FrameService.AddOrgMember is not implemented"))
+}
+
+func (UnimplementedFrameServiceHandler) SetMemberRole(context.Context, *connect.Request[v1.SetMemberRoleRequest]) (*connect.Response[v1.SetMemberRoleResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("frames.v1.FrameService.SetMemberRole is not implemented"))
+}
+
+func (UnimplementedFrameServiceHandler) RemoveOrgMember(context.Context, *connect.Request[v1.RemoveOrgMemberRequest]) (*connect.Response[v1.RemoveOrgMemberResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("frames.v1.FrameService.RemoveOrgMember is not implemented"))
 }

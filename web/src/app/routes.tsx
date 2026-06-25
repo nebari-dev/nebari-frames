@@ -1,6 +1,7 @@
 import { Route, Routes } from "react-router";
 import { RequireAuth } from "./RequireAuth";
 import { RequireMembership } from "./RequireMembership";
+import { RequireAdmin } from "./RequireAdmin";
 import { AppShell } from "./AppShell";
 import { LoginPage } from "@/pages/LoginPage";
 import { CallbackPage } from "@/pages/CallbackPage";
@@ -10,6 +11,9 @@ import { FrameDetailPage } from "@/pages/FrameDetailPage";
 import { FrameAuthoringPage } from "@/pages/FrameAuthoringPage";
 import { ConnectHubPage } from "@/pages/ConnectHubPage";
 import { ConnectProviderPage } from "@/pages/ConnectProviderPage";
+import { AdminHomePage } from "@/pages/AdminHomePage";
+import { AdminMembersPage } from "@/pages/AdminMembersPage";
+import { AdminFramesPage } from "@/pages/AdminFramesPage";
 
 export function AppRoutes() {
   return (
@@ -26,6 +30,11 @@ export function AppRoutes() {
             <Route path="/frames/:org/:name/edit" element={<FrameAuthoringPage mode="edit" />} />
             <Route path="/connect" element={<ConnectHubPage />} />
             <Route path="/connect/:provider" element={<ConnectProviderPage />} />
+            <Route element={<RequireAdmin />}>
+              <Route path="/admin" element={<AdminHomePage />} />
+              <Route path="/admin/members" element={<AdminMembersPage />} />
+              <Route path="/admin/frames" element={<AdminFramesPage />} />
+            </Route>
           </Route>
         </Route>
       </Route>

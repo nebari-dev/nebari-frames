@@ -24,10 +24,25 @@ func ResolveCaller(ctx context.Context, repo store.Repository) (rbac.Caller, err
 	}
 	m, err := repo.GetMembership(ctx, claims.Subject)
 	if err != nil {
-		if errors.Is(err, store.ErrNotFound) {
+		if !errors.Is(err, store.ErrNotFound) {
+			return rbac.Caller{}, err
+		}
+		// No sub-keyed membership: try matching a pending invite by email.
+		if claims.Email == "" {
 			return rbac.Caller{}, ErrNoMembership
 		}
-		return rbac.Caller{}, err
+		pending, perr := repo.GetPendingMembershipByEmail(ctx, claims.Email)
+		if perr != nil {
+			if errors.Is(perr, store.ErrNotFound) {
+				return rbac.Caller{}, ErrNoMembership
+			}
+			return rbac.Caller{}, perr
+		}
+		if aerr := repo.ActivatePendingMembership(ctx, claims.Email, claims.Subject); aerr != nil {
+			return rbac.Caller{}, aerr
+		}
+		m = pending
+		m.UserSub = claims.Subject
 	}
 	return rbac.Caller{
 		Subject: claims.Subject,
