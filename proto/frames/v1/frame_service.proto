@@ -18,6 +18,16 @@ service FrameService {
   rpc GetMe(GetMeRequest) returns (GetMeResponse);
   // Read - lists a frame's published versions, newest first. 404 if no read.
   rpc ListFrameVersions(ListFrameVersionsRequest) returns (ListFrameVersionsResponse);
+  // Write - delete a frame. Blocks if the frame is a parent unless force=true.
+  rpc DeleteFrame(DeleteFrameRequest) returns (DeleteFrameResponse);
+  // Admin only - list the caller's org members.
+  rpc ListOrgMembers(ListOrgMembersRequest) returns (ListOrgMembersResponse);
+  // Admin only - add a member to the caller's org by email (pending until login).
+  rpc AddOrgMember(AddOrgMemberRequest) returns (AddOrgMemberResponse);
+  // Admin only - change a member's role.
+  rpc SetMemberRole(SetMemberRoleRequest) returns (SetMemberRoleResponse);
+  // Admin only - remove a member from the caller's org.
+  rpc RemoveOrgMember(RemoveOrgMemberRequest) returns (RemoveOrgMemberResponse);
 }
 
 message PublishFrameRequest {
@@ -85,3 +95,45 @@ message FieldViolation {
 message FieldViolations {
   repeated FieldViolation violations = 1;
 }
+
+message DeleteFrameRequest {
+  string org_slug = 1;
+  string name = 2;
+  bool force = 3; // detach dependent extends edges then delete
+}
+message DeleteFrameResponse {}
+
+// DeleteBlocked is attached as a Connect error detail on DeleteFrame when the
+// target is a parent of other frames and force=false.
+message DeleteBlocked {
+  repeated string blocking_frames = 1; // "org_slug/name" of frames that extend the target
+}
+
+message ListOrgMembersRequest {}
+message ListOrgMembersResponse {
+  repeated Membership members = 1;
+}
+
+message AddOrgMemberRequest {
+  string email = 1;
+  string role = 2; // "viewer" | "publisher" | "admin"
+}
+message AddOrgMemberResponse {
+  Membership member = 1;
+}
+
+// Identify a member by user_sub (active) or email (pending). Exactly one is set.
+message SetMemberRoleRequest {
+  string user_sub = 1;
+  string email = 2;
+  string role = 3;
+}
+message SetMemberRoleResponse {
+  Membership member = 1;
+}
+
+message RemoveOrgMemberRequest {
+  string user_sub = 1;
+  string email = 2;
+}
+message RemoveOrgMemberResponse {}
