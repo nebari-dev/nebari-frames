@@ -3,7 +3,16 @@ import { MemoryRouter, Route, Routes } from "react-router";
 import { expect, it, vi } from "vitest";
 
 const useQueryMock = vi.fn();
-vi.mock("@connectrpc/connect-query", () => ({ useQuery: (...a: unknown[]) => useQueryMock(...a) }));
+vi.mock("@connectrpc/connect-query", () => ({
+  useQuery: (...a: unknown[]) => useQueryMock(...a),
+  useMutation: () => ({ mutate: vi.fn(), isPending: false }),
+  createConnectQueryKey: () => ["k"],
+}));
+vi.mock("@tanstack/react-query", () => ({ useQueryClient: () => ({ invalidateQueries: vi.fn() }) }));
+vi.mock("react-router", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("react-router")>();
+  return { ...actual, useNavigate: () => vi.fn() };
+});
 
 import { FrameDetailPage } from "./FrameDetailPage";
 import { FrameService } from "@gen/frames/v1/frame_service_pb";
@@ -13,7 +22,7 @@ const yamlContent = new TextEncoder().encode(
   "name: brand-voice\ndescription: voice\nversion: 1.0.0\nslots:\n  rules:\n    - no hype\n",
 );
 
-function renderDetail(permissions: { canEdit: boolean } | undefined) {
+function renderDetail(permissions: { canEdit?: boolean; canDelete?: boolean } | undefined) {
   useQueryMock.mockImplementation((method: unknown) => {
     if (method === FrameService.method.getFrame) {
       return {
@@ -42,6 +51,16 @@ it("shows Edit link when canEdit is true", () => {
 it("hides Edit link when canEdit is false", () => {
   renderDetail({ canEdit: false });
   expect(screen.queryByRole("link", { name: /edit/i })).not.toBeInTheDocument();
+});
+
+it("shows Delete button when canDelete is true", () => {
+  renderDetail({ canDelete: true });
+  expect(screen.getByRole("button", { name: /^delete$/i })).toBeInTheDocument();
+});
+
+it("hides Delete button when canDelete is false", () => {
+  renderDetail({ canDelete: false });
+  expect(screen.queryByRole("button", { name: /^delete$/i })).not.toBeInTheDocument();
 });
 
 it("renders loading skeletons", () => {

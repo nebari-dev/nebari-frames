@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { Link, useParams } from "react-router";
 import { useQuery } from "@connectrpc/connect-query";
 import { Code, ConnectError } from "@connectrpc/connect";
@@ -7,11 +8,13 @@ import { FrameSlots } from "@/components/slots/FrameSlots";
 import { InheritanceTrail } from "@/components/frame/InheritanceTrail";
 import { VersionHistory } from "@/components/frame/VersionHistory";
 import { UseThisFrame } from "@/components/frame/UseThisFrame";
+import { DeleteFrameDialog } from "@/components/frame/DeleteFrameDialog";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 
 export function FrameDetailPage() {
   const { org = "", name = "" } = useParams();
+  const [deleteOpen, setDeleteOpen] = useState(false);
   const frameQ = useQuery(FrameService.method.getFrame, { orgSlug: org, name });
   const versionsQ = useQuery(FrameService.method.listFrameVersions, { orgSlug: org, name });
 
@@ -43,9 +46,14 @@ export function FrameDetailPage() {
             <p className="text-muted-foreground">{resp.frame!.description}</p>
             <p className="text-xs text-muted-foreground">v{resp.version!.version} - {resp.frame!.ownerSub}</p>
           </div>
-          {resp.permissions?.canEdit && (
-            <Button variant="outline" render={<Link to={`/frames/${org}/${name}/edit`} />}>Edit</Button>
-          )}
+          <div className="flex gap-2">
+            {resp.permissions?.canEdit && (
+              <Button variant="outline" render={<Link to={`/frames/${org}/${name}/edit`} />}>Edit</Button>
+            )}
+            {resp.permissions?.canDelete && (
+              <Button variant="outline" onClick={() => setDeleteOpen(true)}>Delete</Button>
+            )}
+          </div>
         </header>
         <FrameSlots doc={doc} />
         <VersionHistory versions={versionsQ.data?.versions ?? []} />
@@ -54,6 +62,7 @@ export function FrameDetailPage() {
         <UseThisFrame org={org} name={name} />
         <InheritanceTrail parents={resp.extends} />
       </aside>
+      <DeleteFrameDialog org={org} name={name} open={deleteOpen} onOpenChange={setDeleteOpen} />
     </div>
   );
 }
