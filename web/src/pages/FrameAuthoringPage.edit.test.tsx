@@ -5,7 +5,6 @@ import { expect, it, vi } from "vitest";
 vi.mock("react-router", async (orig) => ({
   ...(await orig<typeof import("react-router")>()),
   useNavigate: () => vi.fn(),
-  useBlocker: () => ({ state: "unblocked" }),
 }));
 
 // Delegate to a mock-prefixed fn (vitest's hoisting-safe naming exception) so we

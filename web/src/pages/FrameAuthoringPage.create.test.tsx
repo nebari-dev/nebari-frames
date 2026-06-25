@@ -7,7 +7,6 @@ const navigateMock = vi.fn();
 vi.mock("react-router", async (orig) => ({
   ...(await orig<typeof import("react-router")>()),
   useNavigate: () => navigateMock,
-  useBlocker: () => ({ state: "unblocked" }),
 }));
 
 const mutateMock = vi.fn();

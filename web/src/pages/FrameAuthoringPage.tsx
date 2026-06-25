@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { useForm, FormProvider, useWatch } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { useNavigate, useParams, useBlocker } from "react-router";
+import { useNavigate, useParams } from "react-router";
 import { useMutation, useQuery, createConnectQueryKey } from "@connectrpc/connect-query";
 import { useQueryClient } from "@tanstack/react-query";
 import { FrameService } from "@gen/frames/v1/frame_service_pb";
@@ -69,7 +69,10 @@ export function FrameAuthoringPage({ mode }: { mode: "create" | "edit" }) {
   const publish = useMutation(FrameService.method.publishFrame);
 
   const isDirty = methods.formState.isDirty && !publish.isSuccess;
-  useBlocker(() => isDirty);
+  // In-app SPA route-change blocking would require migrating to a data router
+  // (createBrowserRouter + RouterProvider); deferred. The beforeunload handler
+  // below covers browser-level navigation (tab close / refresh / hard nav) per
+  // the design doc's "browser confirmation" requirement.
 
   useEffect(() => {
     const handler = (e: BeforeUnloadEvent) => { if (isDirty) e.preventDefault(); };
