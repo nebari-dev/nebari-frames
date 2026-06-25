@@ -73,3 +73,15 @@ message ListFrameVersionsRequest {
 message ListFrameVersionsResponse {
   repeated FrameVersionSummary versions = 1;
 }
+
+// FieldViolation is one validation failure at a specific field path
+// (e.g. "slots.terminology[2].definition", matching backend validate.go paths).
+message FieldViolation {
+  string field = 1;
+  string message = 2;
+}
+// FieldViolations is attached as a Connect error detail on PublishFrame when
+// schema validation fails, so clients can map failures to individual inputs.
+message FieldViolations {
+  repeated FieldViolation violations = 1;
+}
