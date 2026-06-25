@@ -22,6 +22,26 @@ func newAdminService(t *testing.T) (context.Context, *frames.Service, *store.Mem
 	return ctx, svc, repo
 }
 
+// newViewerService returns a viewer caller context, a new Service, and the
+// backing Memory repo. The org is "openteams" with slug "openteams".
+func newViewerService(t *testing.T) (context.Context, *frames.Service, *store.Memory) {
+	t.Helper()
+	repo := store.NewMemory()
+	ctx := seedOrg(t, repo, "viewer", "viewer")
+	svc := frames.NewService(repo)
+	return ctx, svc, repo
+}
+
+// orgID returns the ID of the "openteams" org seeded in repo.
+func orgID(t *testing.T, repo *store.Memory) string {
+	t.Helper()
+	org, err := repo.GetOrgBySlug(context.Background(), "openteams")
+	if err != nil {
+		t.Fatalf("orgID: %v", err)
+	}
+	return org.Id
+}
+
 // publishFrame publishes a frame from YAML bytes, fataling on error.
 func publishFrame(t *testing.T, ctx context.Context, svc *frames.Service, content []byte) {
 	t.Helper()
@@ -160,6 +180,82 @@ slots:
 			}
 			if got := connect.CodeOf(err); got != connect.CodeNotFound {
 				t.Fatalf("want NotFound (no existence leak), got %v", got)
+			}
+		})
+	}
+}
+
+func TestListOrgMembersAdminOnly(t *testing.T) {
+	tests := []struct {
+		name     string
+		role     string
+		wantCode connect.Code // 0 means OK
+	}{
+		{name: "admin sees members", role: "admin", wantCode: 0},
+		{name: "viewer gets PermissionDenied", role: "viewer", wantCode: connect.CodePermissionDenied},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			repo := store.NewMemory()
+			ctx := seedOrg(t, repo, tt.role, tt.role)
+			svc := frames.NewService(repo)
+
+			// Seed a pending membership so the list is non-empty.
+			_ = repo.AddPendingMembership(ctx, &framesv1.Membership{
+				OrgId: orgID(t, repo), Role: "viewer", Email: "p@x.io",
+			})
+
+			resp, err := svc.ListOrgMembers(ctx, connect.NewRequest(&framesv1.ListOrgMembersRequest{}))
+			if tt.wantCode != 0 {
+				if connect.CodeOf(err) != tt.wantCode {
+					t.Fatalf("want code %v, got %v (err=%v)", tt.wantCode, connect.CodeOf(err), err)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if len(resp.Msg.Members) < 1 {
+				t.Fatalf("expected at least 1 member, got %d", len(resp.Msg.Members))
+			}
+		})
+	}
+}
+
+func TestAddOrgMemberCreatesPending(t *testing.T) {
+	tests := []struct {
+		name     string
+		email    string
+		role     string
+		wantCode connect.Code // 0 means OK
+	}{
+		{name: "valid publisher invite", email: "new@x.io", role: "publisher", wantCode: 0},
+		{name: "invalid role returns InvalidArgument", email: "x@x.io", role: "wizard", wantCode: connect.CodeInvalidArgument},
+		{name: "empty email returns InvalidArgument", email: "", role: "viewer", wantCode: connect.CodeInvalidArgument},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ctx, svc, repo := newAdminService(t)
+
+			resp, err := svc.AddOrgMember(ctx, connect.NewRequest(&framesv1.AddOrgMemberRequest{
+				Email: tt.email, Role: tt.role,
+			}))
+			if tt.wantCode != 0 {
+				if connect.CodeOf(err) != tt.wantCode {
+					t.Fatalf("want code %v, got %v (err=%v)", tt.wantCode, connect.CodeOf(err), err)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if resp.Msg.Member.UserSub != "" || resp.Msg.Member.Email != tt.email || resp.Msg.Member.Role != tt.role {
+				t.Fatalf("unexpected member %+v", resp.Msg.Member)
+			}
+			if _, err := repo.GetPendingMembershipByEmail(ctx, tt.email); err != nil {
+				t.Fatalf("pending row not persisted: %v", err)
 			}
 		})
 	}
