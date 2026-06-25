@@ -432,3 +432,108 @@ func (r *Repository) FrameGrants(ctx context.Context, frameID string) ([]store.G
 	}
 	return out, nil
 }
+
+func (r *Repository) AddPendingMembership(ctx context.Context, m *framesv1.Membership) error {
+	_, err := r.db.ExecContext(ctx,
+		`INSERT INTO org_memberships (org_id, user_sub, role, added_at, email) VALUES (?, '', ?, ?, ?)`,
+		m.OrgId, m.Role, m.AddedAt.AsTime().UTC().Format(time.RFC3339), nullStr(m.Email))
+	if isUnique(err) {
+		return store.ErrAlreadyExists
+	}
+	return err
+}
+
+func (r *Repository) ActivatePendingMembership(ctx context.Context, email, sub string) error {
+	res, err := r.db.ExecContext(ctx,
+		`UPDATE org_memberships SET user_sub = ? WHERE email = ? AND user_sub = ''`, sub, email)
+	if err != nil {
+		return err
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return store.ErrNotFound
+	}
+	return nil
+}
+
+func (r *Repository) UpdateMembershipRole(ctx context.Context, orgID, userSub, email, role string) error {
+	var res sql.Result
+	var err error
+	if userSub != "" {
+		res, err = r.db.ExecContext(ctx,
+			`UPDATE org_memberships SET role = ? WHERE org_id = ? AND user_sub = ?`, role, orgID, userSub)
+	} else {
+		res, err = r.db.ExecContext(ctx,
+			`UPDATE org_memberships SET role = ? WHERE org_id = ? AND email = ? AND user_sub = ''`, role, orgID, email)
+	}
+	if err != nil {
+		return err
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return store.ErrNotFound
+	}
+	return nil
+}
+
+func (r *Repository) DeleteMembership(ctx context.Context, orgID, userSub, email string) error {
+	var res sql.Result
+	var err error
+	if userSub != "" {
+		res, err = r.db.ExecContext(ctx,
+			`DELETE FROM org_memberships WHERE org_id = ? AND user_sub = ?`, orgID, userSub)
+	} else {
+		res, err = r.db.ExecContext(ctx,
+			`DELETE FROM org_memberships WHERE org_id = ? AND email = ? AND user_sub = ''`, orgID, email)
+	}
+	if err != nil {
+		return err
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return store.ErrNotFound
+	}
+	return nil
+}
+
+func (r *Repository) FrameChildren(ctx context.Context, parentFrameID string) ([]*framesv1.Frame, error) {
+	rows, err := r.db.QueryContext(ctx,
+		`SELECT DISTINCT f.id, f.org_id, f.name, f.description, f.owner_sub, f.latest_version, f.created_at, f.updated_at
+		   FROM frames f
+		   JOIN frame_extends fe ON fe.frame_id = f.id
+		  WHERE fe.parent_frame_id = ? AND f.id <> ?`, parentFrameID, parentFrameID)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = rows.Close() }()
+	out := []*framesv1.Frame{}
+	for rows.Next() {
+		var f framesv1.Frame
+		var created, updated string
+		if err := rows.Scan(&f.Id, &f.OrgId, &f.Name, &f.Description, &f.OwnerSub, &f.LatestVersion, &created, &updated); err != nil {
+			return nil, err
+		}
+		f.CreatedAt, f.UpdatedAt = ts(created), ts(updated)
+		out = append(out, &f)
+	}
+	return out, rows.Err()
+}
+
+func (r *Repository) DeleteFrame(ctx context.Context, frameID string) error {
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback() }()
+	// Detach incoming inheritance edges (children survive; only the edge is removed).
+	if _, err := tx.ExecContext(ctx, `DELETE FROM frame_extends WHERE parent_frame_id = ?`, frameID); err != nil {
+		return err
+	}
+	// Deleting the frame cascades its frame_versions, frame_grants, and its own
+	// outgoing frame_extends/excludes (ON DELETE CASCADE).
+	res, err := tx.ExecContext(ctx, `DELETE FROM frames WHERE id = ?`, frameID)
+	if err != nil {
+		return err
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return store.ErrNotFound
+	}
+	return tx.Commit()
+}

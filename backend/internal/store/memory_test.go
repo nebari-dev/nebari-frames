@@ -7,6 +7,7 @@ import (
 
 	"github.com/nebari-dev/nebari-frames/backend/internal/store"
 	framesv1 "github.com/nebari-dev/nebari-frames/gen/go/frames/v1"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 func TestMemory_OrgAndMembership(t *testing.T) {
@@ -88,6 +89,63 @@ func TestMemoryMembershipReads(t *testing.T) {
 	}
 	if _, err := m.GetPendingMembershipByEmail(ctx, "a@x.io"); err == nil {
 		t.Fatal("active email should not match a pending lookup")
+	}
+}
+
+func TestMemoryMembershipWrites(t *testing.T) {
+	ctx := context.Background()
+	m := store.NewMemory()
+	if err := m.AddPendingMembership(ctx, &framesv1.Membership{OrgId: "o1", Role: "viewer", Email: "p@x.io"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := m.AddPendingMembership(ctx, &framesv1.Membership{OrgId: "o1", Role: "viewer", Email: "p@x.io"}); err != store.ErrAlreadyExists {
+		t.Fatalf("want ErrAlreadyExists, got %v", err)
+	}
+	if err := m.ActivatePendingMembership(ctx, "p@x.io", "sub-1"); err != nil {
+		t.Fatal(err)
+	}
+	got, err := m.GetMembership(ctx, "sub-1")
+	if err != nil || got.OrgId != "o1" || got.Email != "p@x.io" {
+		t.Fatalf("activate result %+v err %v", got, err)
+	}
+	if err := m.UpdateMembershipRole(ctx, "o1", "sub-1", "", "admin"); err != nil {
+		t.Fatal(err)
+	}
+	if g, _ := m.GetMembership(ctx, "sub-1"); g.Role != "admin" {
+		t.Fatalf("role not updated: %+v", g)
+	}
+	if err := m.DeleteMembership(ctx, "o1", "sub-1", ""); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := m.GetMembership(ctx, "sub-1"); err != store.ErrNotFound {
+		t.Fatalf("want ErrNotFound after delete, got %v", err)
+	}
+}
+
+func TestMemoryDeleteFrameDetachesChildren(t *testing.T) {
+	ctx := context.Background()
+	m := store.NewMemory()
+	_ = m.CreateOrg(ctx, &framesv1.Org{Id: "o1", Slug: "openteams", DisplayName: "OT", CreatedAt: timestamppb.Now()})
+	parent := &framesv1.Frame{Id: "p", OrgId: "o1", Name: "parent", LatestVersion: "1.0.0", CreatedAt: timestamppb.Now(), UpdatedAt: timestamppb.Now()}
+	child := &framesv1.Frame{Id: "c", OrgId: "o1", Name: "child", LatestVersion: "1.0.0", CreatedAt: timestamppb.Now(), UpdatedAt: timestamppb.Now()}
+	_ = m.CreateFrameVersion(ctx, store.CreateFrameVersionInput{Frame: parent, Version: &framesv1.FrameVersion{Version: "1.0.0", PublishedAt: timestamppb.Now()}, IsNewFrame: true})
+	_ = m.CreateFrameVersion(ctx, store.CreateFrameVersionInput{Frame: child, Version: &framesv1.FrameVersion{Version: "1.0.0", PublishedAt: timestamppb.Now()}, Extends: []store.ParentEdge{{ParentFrameID: "p", ParentVersion: "1.0.0", OrderIndex: 0}}, IsNewFrame: true})
+
+	kids, err := m.FrameChildren(ctx, "p")
+	if err != nil || len(kids) != 1 || kids[0].Id != "c" {
+		t.Fatalf("children %+v err %v", kids, err)
+	}
+	if err := m.DeleteFrame(ctx, "p"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := m.GetFrameByID(ctx, "p"); err != store.ErrNotFound {
+		t.Fatalf("parent should be gone, got %v", err)
+	}
+	if _, err := m.GetFrameByID(ctx, "c"); err != nil {
+		t.Fatalf("child should survive, got %v", err)
+	}
+	if kids, _ := m.FrameChildren(ctx, "p"); len(kids) != 0 {
+		t.Fatalf("edges should be detached, got %+v", kids)
 	}
 }
 

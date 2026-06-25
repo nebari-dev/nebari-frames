@@ -52,6 +52,11 @@ type Repository interface {
 	GetPendingMembershipByEmail(ctx context.Context, email string) (*framesv1.Membership, error)
 	CountAdmins(ctx context.Context, orgID string) (int, error)
 
+	AddPendingMembership(ctx context.Context, m *framesv1.Membership) error
+	ActivatePendingMembership(ctx context.Context, email, sub string) error
+	UpdateMembershipRole(ctx context.Context, orgID, userSub, email, role string) error
+	DeleteMembership(ctx context.Context, orgID, userSub, email string) error
+
 	CreateFrameVersion(ctx context.Context, in CreateFrameVersionInput) error
 	GetFrameBySlugName(ctx context.Context, orgSlug, name string) (*framesv1.Frame, error)
 	GetFrameByID(ctx context.Context, id string) (*framesv1.Frame, error)
@@ -59,4 +64,7 @@ type Repository interface {
 	ListFrameVersions(ctx context.Context, frameID string) ([]*framesv1.FrameVersionSummary, error)
 	ListFramesByOrg(ctx context.Context, orgID string) ([]*framesv1.Frame, error)
 	FrameGrants(ctx context.Context, frameID string) ([]Grant, error)
+
+	FrameChildren(ctx context.Context, parentFrameID string) ([]*framesv1.Frame, error)
+	DeleteFrame(ctx context.Context, frameID string) error
 }

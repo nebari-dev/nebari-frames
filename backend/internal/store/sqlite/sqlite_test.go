@@ -397,6 +397,197 @@ func TestListFrameVersions(t *testing.T) {
 	}
 }
 
+func TestSQLite_MembershipWrites(t *testing.T) {
+	ctx := context.Background()
+
+	tests := []struct {
+		name string
+		run  func(t *testing.T, r *sqlite.Repository)
+	}{
+		{
+			name: "AddPendingMembership duplicate returns ErrAlreadyExists",
+			run: func(t *testing.T, r *sqlite.Repository) {
+				seedOrg(t, r, "o1", "openteams")
+				now := timestamppb.Now()
+				mem := &framesv1.Membership{OrgId: "o1", Role: "viewer", Email: "p@x.io", AddedAt: now}
+				if err := r.AddPendingMembership(ctx, mem); err != nil {
+					t.Fatalf("first AddPendingMembership: %v", err)
+				}
+				if err := r.AddPendingMembership(ctx, mem); !errors.Is(err, store.ErrAlreadyExists) {
+					t.Fatalf("want ErrAlreadyExists, got %v", err)
+				}
+			},
+		},
+		{
+			name: "ActivatePendingMembership sets user_sub and GetMembership returns row",
+			run: func(t *testing.T, r *sqlite.Repository) {
+				seedOrg(t, r, "o1", "openteams")
+				now := timestamppb.Now()
+				if err := r.AddPendingMembership(ctx, &framesv1.Membership{OrgId: "o1", Role: "viewer", Email: "p@x.io", AddedAt: now}); err != nil {
+					t.Fatalf("AddPendingMembership: %v", err)
+				}
+				if err := r.ActivatePendingMembership(ctx, "p@x.io", "sub-1"); err != nil {
+					t.Fatalf("ActivatePendingMembership: %v", err)
+				}
+				got, err := r.GetMembership(ctx, "sub-1")
+				if err != nil {
+					t.Fatalf("GetMembership: %v", err)
+				}
+				if got.OrgId != "o1" || got.Email != "p@x.io" {
+					t.Fatalf("unexpected membership: %+v", got)
+				}
+			},
+		},
+		{
+			name: "ActivatePendingMembership not-found returns ErrNotFound",
+			run: func(t *testing.T, r *sqlite.Repository) {
+				if err := r.ActivatePendingMembership(ctx, "nobody@x.io", "sub-x"); !errors.Is(err, store.ErrNotFound) {
+					t.Fatalf("want ErrNotFound, got %v", err)
+				}
+			},
+		},
+		{
+			name: "UpdateMembershipRole by userSub succeeds",
+			run: func(t *testing.T, r *sqlite.Repository) {
+				seedOrg(t, r, "o1", "openteams")
+				now := timestamppb.Now()
+				_ = r.UpsertMembership(ctx, &framesv1.Membership{OrgId: "o1", UserSub: "s1", Role: "viewer", Email: "a@x.io", AddedAt: now})
+				if err := r.UpdateMembershipRole(ctx, "o1", "s1", "", "admin"); err != nil {
+					t.Fatalf("UpdateMembershipRole: %v", err)
+				}
+				got, err := r.GetMembership(ctx, "s1")
+				if err != nil || got.Role != "admin" {
+					t.Fatalf("role not updated: %+v err %v", got, err)
+				}
+			},
+		},
+		{
+			name: "UpdateMembershipRole not-found returns ErrNotFound",
+			run: func(t *testing.T, r *sqlite.Repository) {
+				if err := r.UpdateMembershipRole(ctx, "o1", "ghost", "", "admin"); !errors.Is(err, store.ErrNotFound) {
+					t.Fatalf("want ErrNotFound, got %v", err)
+				}
+			},
+		},
+		{
+			name: "DeleteMembership by userSub succeeds",
+			run: func(t *testing.T, r *sqlite.Repository) {
+				seedOrg(t, r, "o1", "openteams")
+				now := timestamppb.Now()
+				_ = r.UpsertMembership(ctx, &framesv1.Membership{OrgId: "o1", UserSub: "s1", Role: "viewer", Email: "a@x.io", AddedAt: now})
+				if err := r.DeleteMembership(ctx, "o1", "s1", ""); err != nil {
+					t.Fatalf("DeleteMembership: %v", err)
+				}
+				if _, err := r.GetMembership(ctx, "s1"); !errors.Is(err, store.ErrNotFound) {
+					t.Fatalf("want ErrNotFound after delete, got %v", err)
+				}
+			},
+		},
+		{
+			name: "DeleteMembership not-found returns ErrNotFound",
+			run: func(t *testing.T, r *sqlite.Repository) {
+				if err := r.DeleteMembership(ctx, "o1", "ghost", ""); !errors.Is(err, store.ErrNotFound) {
+					t.Fatalf("want ErrNotFound, got %v", err)
+				}
+			},
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			r := newRepo(t)
+			tc.run(t, r)
+		})
+	}
+}
+
+func TestSQLite_DeleteFrameDetachesChildren(t *testing.T) {
+	ctx := context.Background()
+
+	tests := []struct {
+		name string
+		run  func(t *testing.T, r *sqlite.Repository)
+	}{
+		{
+			name: "delete parent - child survives and edge is detached",
+			run: func(t *testing.T, r *sqlite.Repository) {
+				seedOrg(t, r, "o1", "openteams")
+				now := timestamppb.Now()
+
+				parentIn := store.CreateFrameVersionInput{
+					Frame: &framesv1.Frame{
+						Id: "p", OrgId: "o1", Name: "parent",
+						OwnerSub: "u1", LatestVersion: "1.0.0",
+						CreatedAt: now, UpdatedAt: now,
+					},
+					Version:    &framesv1.FrameVersion{Version: "1.0.0", Content: []byte("p"), Digest: "dp", SizeBytes: 1, PublishedBy: "u1", PublishedAt: now},
+					IsNewFrame: true,
+				}
+				if err := r.CreateFrameVersion(ctx, parentIn); err != nil {
+					t.Fatalf("create parent: %v", err)
+				}
+
+				childIn := store.CreateFrameVersionInput{
+					Frame: &framesv1.Frame{
+						Id: "c", OrgId: "o1", Name: "child",
+						OwnerSub: "u1", LatestVersion: "1.0.0",
+						CreatedAt: now, UpdatedAt: now,
+					},
+					Version:    &framesv1.FrameVersion{Version: "1.0.0", Content: []byte("c"), Digest: "dc", SizeBytes: 1, PublishedBy: "u1", PublishedAt: now},
+					Extends:    []store.ParentEdge{{ParentFrameID: "p", ParentVersion: "1.0.0", OrderIndex: 0}},
+					IsNewFrame: true,
+				}
+				if err := r.CreateFrameVersion(ctx, childIn); err != nil {
+					t.Fatalf("create child: %v", err)
+				}
+
+				kids, err := r.FrameChildren(ctx, "p")
+				if err != nil {
+					t.Fatalf("FrameChildren before delete: %v", err)
+				}
+				if len(kids) != 1 || kids[0].Id != "c" {
+					t.Fatalf("expected 1 child 'c', got %+v", kids)
+				}
+
+				if err := r.DeleteFrame(ctx, "p"); err != nil {
+					t.Fatalf("DeleteFrame: %v", err)
+				}
+
+				if _, err := r.GetFrameByID(ctx, "p"); !errors.Is(err, store.ErrNotFound) {
+					t.Fatalf("parent should be gone, got %v", err)
+				}
+
+				if _, err := r.GetFrameByID(ctx, "c"); err != nil {
+					t.Fatalf("child should survive, got %v", err)
+				}
+
+				kids, err = r.FrameChildren(ctx, "p")
+				if err != nil {
+					t.Fatalf("FrameChildren after delete: %v", err)
+				}
+				if len(kids) != 0 {
+					t.Fatalf("edges should be detached, got %+v", kids)
+				}
+			},
+		},
+		{
+			name: "delete non-existent frame returns ErrNotFound",
+			run: func(t *testing.T, r *sqlite.Repository) {
+				if err := r.DeleteFrame(ctx, "does-not-exist"); !errors.Is(err, store.ErrNotFound) {
+					t.Fatalf("want ErrNotFound, got %v", err)
+				}
+			},
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			r := newRepo(t)
+			tc.run(t, r)
+		})
+	}
+}
+
 // TestSQLite_PublishAtomicRollback verifies that a CreateFrameVersion call that
 // fails mid-transaction (due to a FK violation on frame_extends) rolls back the
 // entire transaction: no frames row, no grants row, and no frame version are
