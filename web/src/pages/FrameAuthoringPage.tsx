@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
-import { useForm, FormProvider } from "react-hook-form";
+import { useForm, FormProvider, useWatch } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { useNavigate, useParams } from "react-router";
+import { useNavigate, useParams, useBlocker } from "react-router";
 import { useMutation, useQuery, createConnectQueryKey } from "@connectrpc/connect-query";
 import { useQueryClient } from "@tanstack/react-query";
 import { FrameService } from "@gen/frames/v1/frame_service_pb";
@@ -18,6 +18,7 @@ import { MarkdownField } from "@/components/form/MarkdownField";
 import { ChangelogField } from "@/components/form/ChangelogField";
 import { Button } from "@/components/ui/button";
 import { Alert } from "@/components/ui/alert";
+import { ResolvedPreview } from "@/components/form/ResolvedPreview";
 
 const PROSE: { name: `slots.${string}`; label: string }[] = [
   { name: "slots.tool_specs", label: "Tool Specifications" },
@@ -38,6 +39,7 @@ export function FrameAuthoringPage({ mode }: { mode: "create" | "edit" }) {
     defaultValues: docToForm(emptyFrameDoc(), ""),
   });
 
+  const [previewOpen, setPreviewOpen] = useState(false);
   const { org = "", name = "" } = useParams();
   const editQ = useQuery(
     FrameService.method.getFrame,
@@ -58,10 +60,22 @@ export function FrameAuthoringPage({ mode }: { mode: "create" | "edit" }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mode, editQ.data?.version?.digest]);
 
+  const extendsVal = useWatch({ control: methods.control, name: "extends" }) as { ref: string }[] | undefined;
+  const hasParents = (extendsVal ?? []).some((e) => e.ref?.trim());
+
   // Org slug for post-publish navigation. PublishFrameResponse carries orgId,
   // not the slug, and the detail route is keyed by slug, so read it from GetMe.
   const meQ = useQuery(FrameService.method.getMe, {});
   const publish = useMutation(FrameService.method.publishFrame);
+
+  const isDirty = methods.formState.isDirty && !publish.isSuccess;
+  useBlocker(() => isDirty);
+
+  useEffect(() => {
+    const handler = (e: BeforeUnloadEvent) => { if (isDirty) e.preventDefault(); };
+    window.addEventListener("beforeunload", handler);
+    return () => window.removeEventListener("beforeunload", handler);
+  }, [isDirty]);
 
   const onSubmit = (form: AuthoringForm) => {
     setFormError(null);
@@ -97,6 +111,7 @@ export function FrameAuthoringPage({ mode }: { mode: "create" | "edit" }) {
         <div className="flex items-center justify-between">
           <h1 className="text-2xl font-semibold">{mode === "create" ? "New Frame" : "Edit Frame"}</h1>
           <div className="flex gap-2">
+            <Button type="button" variant="outline" disabled={!hasParents} onClick={() => setPreviewOpen(true)}>Preview as resolved Frame</Button>
             <Button type="button" variant="outline" onClick={() => navigate(-1)}>Cancel</Button>
             {/* base-ui Button defaults to type="button"; the render prop wins mergeProps precedence, so set submit on the rendered element */}
             <Button render={<button type="submit" />} disabled={publish.isPending}>Publish</Button>
@@ -119,6 +134,14 @@ export function FrameAuthoringPage({ mode }: { mode: "create" | "edit" }) {
           {/* base-ui Button defaults to type="button"; the render prop wins mergeProps precedence, so set submit on the rendered element */}
           <Button render={<button type="submit" />} disabled={publish.isPending}>Publish</Button>
         </div>
+
+        <ResolvedPreview
+          org={org}
+          name={methods.getValues("name")}
+          version={methods.getValues("version")}
+          open={previewOpen}
+          onClose={() => setPreviewOpen(false)}
+        />
       </form>
     </FormProvider>
   );
