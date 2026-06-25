@@ -39,7 +39,10 @@ func (s *Service) DeleteFrame(ctx context.Context, req *connect.Request[framesv1
 	if len(children) > 0 && !req.Msg.Force {
 		refs := make([]string, 0, len(children))
 		for _, c := range children {
-			org, _ := s.repo.GetOrgByID(ctx, c.OrgId)
+			org, err := s.repo.GetOrgByID(ctx, c.OrgId)
+			if err != nil && !errors.Is(err, store.ErrNotFound) {
+				return nil, connect.NewError(connect.CodeInternal, err)
+			}
 			slug := ""
 			if org != nil {
 				slug = org.Slug

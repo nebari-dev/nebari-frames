@@ -118,8 +118,8 @@ slots:
 
 func TestDeleteFrameDeniedForViewer(t *testing.T) {
 	tests := []struct {
-		name   string
-		setup  func(t *testing.T, repo *store.Memory) context.Context
+		name  string
+		setup func(t *testing.T, repo *store.Memory) context.Context
 	}{
 		{
 			name: "viewer in same org gets NotFound",
