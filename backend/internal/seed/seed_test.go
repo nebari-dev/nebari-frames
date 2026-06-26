@@ -9,6 +9,82 @@ import (
 	framesv1 "github.com/nebari-dev/nebari-frames/gen/go/frames/v1"
 )
 
+func TestRun_AdminEmail(t *testing.T) {
+	ctx := context.Background()
+	tests := []struct {
+		name        string
+		seedEmail   string
+		preSeed     func(t *testing.T, repo store.Repository, orgID string)
+		wantPending bool // expect a pending (UserSub=="") admin invite for the email
+	}{
+		{
+			name:        "fresh email adds pending admin invite",
+			seedEmail:   "admin@example.com",
+			wantPending: true,
+		},
+		{
+			name:      "idempotent when invite already pending",
+			seedEmail: "admin@example.com",
+			preSeed: func(t *testing.T, repo store.Repository, orgID string) {
+				if err := repo.AddPendingMembership(ctx, &framesv1.Membership{OrgId: orgID, Email: "admin@example.com", Role: "admin"}); err != nil {
+					t.Fatal(err)
+				}
+			},
+			wantPending: true,
+		},
+		{
+			name:      "no-op when email already an active member",
+			seedEmail: "admin@example.com",
+			preSeed: func(t *testing.T, repo store.Repository, orgID string) {
+				if err := repo.UpsertMembership(ctx, &framesv1.Membership{OrgId: orgID, UserSub: "sub-123", Email: "admin@example.com", Role: "admin"}); err != nil {
+					t.Fatal(err)
+				}
+			},
+			wantPending: false,
+		},
+		{
+			name:        "seed twice with same AdminEmail: second run idempotent",
+			seedEmail:   "twice@example.com",
+			wantPending: true,
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			repo := store.NewMemory()
+			// Seed org first so preSeed has an org id.
+			if err := seed.Run(ctx, repo, seed.Config{OrgSlug: "acme", OrgDisplayName: "Acme"}); err != nil {
+				t.Fatalf("seed org: %v", err)
+			}
+			org, err := repo.GetOrgBySlug(ctx, "acme")
+			if err != nil {
+				t.Fatal(err)
+			}
+			if tc.preSeed != nil {
+				tc.preSeed(t, repo, org.Id)
+			}
+			if err := seed.Run(ctx, repo, seed.Config{OrgSlug: "acme", AdminEmail: tc.seedEmail}); err != nil {
+				t.Fatalf("seed admin email: %v", err)
+			}
+			pending, err := repo.GetPendingMembershipByEmail(ctx, tc.seedEmail)
+			gotPending := err == nil && pending != nil && pending.UserSub == ""
+			if gotPending != tc.wantPending {
+				t.Fatalf("pending invite = %v, want %v (err=%v)", gotPending, tc.wantPending, err)
+			}
+			// For "twice" test case, run seed again and verify it's idempotent.
+			if tc.name == "seed twice with same AdminEmail: second run idempotent" {
+				if err := seed.Run(ctx, repo, seed.Config{OrgSlug: "acme", AdminEmail: tc.seedEmail}); err != nil {
+					t.Fatalf("second seed run: %v", err)
+				}
+				// Verify still exactly one pending invite for this email.
+				pending2, err2 := repo.GetPendingMembershipByEmail(ctx, tc.seedEmail)
+				if err2 != nil || pending2 == nil || pending2.UserSub != "" {
+					t.Fatalf("second run corrupted pending invite: %+v (err=%v)", pending2, err2)
+				}
+			}
+		})
+	}
+}
+
 func TestSeed_Run(t *testing.T) {
 	tests := []struct {
 		name string

@@ -1,0 +1,22 @@
+Nebari Frames {{ .Chart.AppVersion }} installed as release {{ .Release.Name }}.
+
+{{- if not .Values.persistence.enabled }}
+WARNING: persistence.enabled is false - the SQLite database lives in the pod's
+ephemeral filesystem and ALL DATA IS LOST on restart. Enable persistence for any
+non-throwaway use.
+{{- end }}
+
+{{- if .Values.nebariapp.enabled }}
+Nebari mode: reachable at https://{{ .Values.nebariapp.hostname }} once the
+nebari-operator has provisioned routing, TLS, and the OIDC client secret
+"{{ include "nebari-frames.oidcSecretName" . }}". The pod stays NotReady (/readyz
+503) until OIDC discovery succeeds - this is expected during provisioning.
+{{- else if .Values.auth.devMode }}
+Standalone DEV mode: authentication is DISABLED (FRAMES_DEV_MODE=true). Do not
+use this mode in production. Port-forward to try it:
+  kubectl port-forward svc/{{ include "nebari-frames.fullname" . }} {{ .Values.service.port }}:{{ .Values.service.port }}
+{{- else }}
+Standalone with self-managed OIDC issuer {{ .Values.auth.oidc.issuerUrl }}.
+{{- end }}
+
+First admin: {{ .Values.seed.adminEmail | default "(none configured - set seed.adminEmail)" }}

@@ -1,0 +1,50 @@
+image:
+  repository: ghcr.io/nebari-dev/nebari-frames
+  tag: ""          # defaults to .Chart.AppVersion when empty
+  pullPolicy: IfNotPresent
+
+# SQLite is single-writer. Do not raise replicaCount in this slice.
+replicaCount: 1
+
+nameOverride: ""
+fullnameOverride: ""
+
+service:
+  port: 8080
+
+persistence:
+  enabled: true
+  mountPath: /data
+  dbFile: nebari-frames.db
+  size: 1Gi
+  storageClass: ""
+  accessMode: ReadWriteOnce
+
+resources: {}
+
+seed:
+  orgSlug: ""
+  orgDisplayName: ""
+  adminEmail: ""   # first admin (reconciled to OIDC sub on first login)
+
+# Auth mode is selected as follows (fail-closed; mirrors the backend):
+#   nebariapp.enabled && nebariapp.auth.enabled -> OIDC env from operator secret
+#   else auth.devMode==true                     -> FRAMES_DEV_MODE=true (no auth)
+#   else                                        -> auth.oidc.* (self-managed OIDC)
+auth:
+  devMode: false
+  oidc:
+    issuerUrl: ""
+    clientId: ""
+    deviceClientId: ""
+
+nebariapp:
+  enabled: false
+  hostname: ""
+  gateway: public
+  auth:
+    enabled: true
+    scopes:
+      - openid
+      - profile
+      - email

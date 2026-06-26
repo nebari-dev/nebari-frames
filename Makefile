@@ -1,4 +1,4 @@
-.PHONY: proto lint test build build-web run-dev clean
+.PHONY: proto lint test build build-web run-dev clean image
 
 # Local dev runner: builds the SPA into the binary, then starts the server in
 # dev mode (no OIDC). The auth interceptor injects a fixed dev-user identity;
@@ -38,3 +38,9 @@ run-dev: build-web
 
 clean:
 	rm -f nebari-frames-server coverage.out *.db
+
+IMAGE_REPO ?= ghcr.io/nebari-dev/nebari-frames
+IMAGE_TAG ?= dev
+
+image:
+	docker build --platform=linux/amd64 -t $(IMAGE_REPO):$(IMAGE_TAG) .
