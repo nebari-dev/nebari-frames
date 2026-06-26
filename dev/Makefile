@@ -22,11 +22,11 @@ image-load:
 install:
 	kubectl create namespace $(NAMESPACE) --dry-run=client -o yaml | kubectl apply -f -
 	kubectl label namespace $(NAMESPACE) nebari.dev/managed=true --overwrite
-	helm upgrade --install frames ../chart -n $(NAMESPACE) -f ../examples/nebari-values.yaml
+	helm upgrade --install frames ../chart -n $(NAMESPACE) -f ../chart/examples/nebari-values.yaml
 
 install-standalone:
 	kubectl create namespace $(NAMESPACE) --dry-run=client -o yaml | kubectl apply -f -
-	helm upgrade --install frames ../chart -n $(NAMESPACE) -f ../examples/standalone-values.yaml
+	helm upgrade --install frames ../chart -n $(NAMESPACE) -f ../chart/examples/standalone-values.yaml
 
 down:
 	kind delete cluster --name $(CLUSTER)

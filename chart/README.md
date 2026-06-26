@@ -22,7 +22,7 @@ Label the target namespace so the Nebari operator manages it, then install with 
 ```bash
 kubectl create namespace nebari-frames
 kubectl label namespace nebari-frames nebari.dev/managed=true --overwrite
-helm install frames . -n nebari-frames -f ../examples/nebari-values.yaml
+helm install frames . -n nebari-frames -f examples/nebari-values.yaml
 ```
 
 With `nebariapp.enabled: true`, the operator provisions the route, TLS certificate, and OIDC clients for you, and writes a secret named `<release>-nebari-frames-oidc-client`. The Deployment reads its OIDC settings (issuer URL, SPA client id, device client id) from that secret.
@@ -45,7 +45,7 @@ On startup this creates a pending admin invite keyed to that email. The first ti
 For local or demo use without a Nebari cluster, install with the standalone values:
 
 ```bash
-helm install frames . -n nebari-frames -f ../examples/standalone-values.yaml
+helm install frames . -n nebari-frames -f examples/standalone-values.yaml
 ```
 
 This runs in dev mode with authentication disabled and is meant for local use only. In dev mode the identity is fixed to `dev-user` / `dev@localhost`, so `seed.adminEmail` has no effect here. It only takes effect once real OIDC is configured (either through NebariApp or a self-managed `auth.oidc.*` block).
