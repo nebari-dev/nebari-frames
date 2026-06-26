@@ -1,4 +1,4 @@
-.PHONY: proto lint test build clean
+.PHONY: proto lint test build build-web clean
 
 proto:
 	cd proto && buf lint
@@ -12,6 +12,10 @@ test:
 
 build:
 	CGO_ENABLED=0 go build -o nebari-frames-server ./backend/cmd/server
+
+build-web:
+	cd web && npm ci && npm run build
+	$(MAKE) build
 
 clean:
 	rm -f nebari-frames-server coverage.out *.db

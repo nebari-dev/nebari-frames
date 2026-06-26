@@ -10,6 +10,7 @@ import (
 	"github.com/nebari-dev/nebari-frames/backend/internal/frames"
 	"github.com/nebari-dev/nebari-frames/backend/internal/store"
 	"github.com/nebari-dev/nebari-frames/gen/go/frames/v1/framesv1connect"
+	webui "github.com/nebari-dev/nebari-frames/web"
 )
 
 // Server wraps the combined HTTP mux that serves /healthz and the FrameService.
@@ -32,6 +33,7 @@ func New(repo store.Repository, validator auth.TokenValidator, authCfg auth.Conf
 		connect.WithInterceptors(interceptor),
 	)
 	mux.Handle(path, handler)
+	mux.Handle("/", webui.NewHandler(webui.Assets(), webui.Config{IssuerURL: authCfg.IssuerURL}))
 	return &Server{handler: mux}
 }
 
