@@ -96,7 +96,7 @@ The Frames server requires the following environment variables to enable the MCP
 Once configured, verify the setup by:
 
 1. **Check metadata discovery**: Visit `<OIDC_ISSUER_URL>/.well-known/openid-configuration` and confirm it includes the realm's OAuth endpoints.
-2. **Check resource metadata**: Visit `<FRAMES_PUBLIC_URL>/.well-known/oauth-protected-resource` and confirm the `audience` field matches your configured audience.
+2. **Check resource metadata**: Visit `<FRAMES_PUBLIC_URL>/.well-known/oauth-protected-resource` and confirm the `resource` field equals `<FRAMES_PUBLIC_URL>/mcp` and `authorization_servers` lists your Keycloak realm.
 3. **Test OAuth flow**: Use the Claude.ai test plan (see `docs/connect/claude-ai.md`) to verify the full authentication flow.
 
 ## Troubleshooting
