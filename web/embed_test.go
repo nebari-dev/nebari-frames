@@ -80,6 +80,42 @@ func TestHandler_SecurityHeaders(t *testing.T) {
 	}
 }
 
+// TestHandler_SecurityHeaders_AllBranches proves that security headers are set
+// on every response branch: the 404 path (missing asset) and the 200 path
+// (client-route fallback to index.html).
+func TestHandler_SecurityHeaders_AllBranches(t *testing.T) {
+	tests := []struct {
+		name     string
+		path     string
+		wantCode int
+	}{
+		{name: "404 branch - missing asset", path: "/assets/missing.js", wantCode: http.StatusNotFound},
+		{name: "200 branch - client route fallback", path: "/frames/acme/voice", wantCode: http.StatusOK},
+	}
+	h := webui.NewHandler(testFS(), webui.Config{})
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodGet, tc.path, nil)
+			rr := httptest.NewRecorder()
+			h.ServeHTTP(rr, req)
+
+			if rr.Code != tc.wantCode {
+				t.Fatalf("%s: status = %d, want %d", tc.path, rr.Code, tc.wantCode)
+			}
+			if got := rr.Header().Get("X-Content-Type-Options"); got != "nosniff" {
+				t.Fatalf("%s: X-Content-Type-Options = %q, want nosniff", tc.path, got)
+			}
+			if got := rr.Header().Get("Referrer-Policy"); got != "same-origin" {
+				t.Fatalf("%s: Referrer-Policy = %q, want same-origin", tc.path, got)
+			}
+			csp := rr.Header().Get("Content-Security-Policy")
+			if !strings.HasPrefix(csp, "default-src 'self';") {
+				t.Fatalf("%s: CSP missing default-src: %q", tc.path, csp)
+			}
+		})
+	}
+}
+
 func TestAssets_HasIndex(t *testing.T) {
 	if _, err := webui.Assets().Open("index.html"); err != nil {
 		t.Fatalf("embedded assets missing index.html: %v", err)

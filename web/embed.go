@@ -35,6 +35,8 @@ type Config struct {
 // NewHandler returns an http.Handler that serves the SPA from fsys. Existing
 // files are served directly; missing requests under /assets/ return 404, and
 // any other missing path returns index.html (SPA deep-link fallback).
+// fsys must return files whose Open result implements io.ReadSeeker; both
+// embed.FS and fstest.MapFS satisfy this contract.
 func NewHandler(fsys fs.FS, cfg Config) http.Handler {
 	csp := buildCSP(cfg.IssuerURL)
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
