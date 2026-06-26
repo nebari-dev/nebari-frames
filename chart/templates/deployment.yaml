@@ -1,0 +1,104 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "nebari-frames.fullname" . }}
+  labels:
+    {{- include "nebari-frames.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      {{- include "nebari-frames.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "nebari-frames.selectorLabels" . | nindent 8 }}
+    spec:
+      serviceAccountName: {{ include "nebari-frames.fullname" . }}
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        fsGroup: 65532
+      containers:
+        - name: frames
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: {{ .Values.service.port }}
+          env:
+            - name: PORT
+              value: {{ .Values.service.port | quote }}
+            - name: DB_PATH
+              value: {{ printf "%s/%s" .Values.persistence.mountPath .Values.persistence.dbFile | quote }}
+            {{- if .Values.seed.orgSlug }}
+            - name: SEED_ORG_SLUG
+              value: {{ .Values.seed.orgSlug | quote }}
+            - name: SEED_ORG_DISPLAY_NAME
+              value: {{ .Values.seed.orgDisplayName | default .Values.seed.orgSlug | quote }}
+            {{- end }}
+            {{- if .Values.seed.adminEmail }}
+            - name: SEED_ADMIN_EMAIL
+              value: {{ .Values.seed.adminEmail | quote }}
+            {{- end }}
+            {{- if and .Values.nebariapp.enabled .Values.nebariapp.auth.enabled }}
+            - name: OIDC_ISSUER_URL
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "nebari-frames.oidcSecretName" . }}
+                  key: issuer-url
+            - name: OIDC_CLIENT_ID
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "nebari-frames.oidcSecretName" . }}
+                  key: spa-client-id
+            - name: OIDC_DEVICE_CLIENT_ID
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "nebari-frames.oidcSecretName" . }}
+                  key: device-client-id
+            {{- else if .Values.auth.devMode }}
+            - name: FRAMES_DEV_MODE
+              value: "true"
+            {{- else }}
+            - name: OIDC_ISSUER_URL
+              value: {{ required "auth.oidc.issuerUrl is required when not Nebari-managed and auth.devMode is false" .Values.auth.oidc.issuerUrl | quote }}
+            - name: OIDC_CLIENT_ID
+              value: {{ required "auth.oidc.clientId is required when not Nebari-managed and auth.devMode is false" .Values.auth.oidc.clientId | quote }}
+            {{- if .Values.auth.oidc.deviceClientId }}
+            - name: OIDC_DEVICE_CLIENT_ID
+              value: {{ .Values.auth.oidc.deviceClientId | quote }}
+            {{- end }}
+            {{- end }}
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          startupProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            failureThreshold: 30
+            periodSeconds: 2
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: http
+            periodSeconds: 10
+          {{- if .Values.persistence.enabled }}
+          volumeMounts:
+            - name: data
+              mountPath: {{ .Values.persistence.mountPath }}
+          {{- end }}
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+      {{- if .Values.persistence.enabled }}
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: {{ include "nebari-frames.fullname" . }}-data
+      {{- end }}

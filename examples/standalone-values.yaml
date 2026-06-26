@@ -1,0 +1,11 @@
+# Standalone (non-Nebari) install for local/demo use. Auth disabled (dev mode).
+nebariapp:
+  enabled: false
+auth:
+  devMode: true
+seed:
+  orgSlug: dev-org
+  orgDisplayName: Dev Org
+  adminEmail: admin@example.com
+image:
+  tag: dev
