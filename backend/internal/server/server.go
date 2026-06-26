@@ -16,18 +16,19 @@ import (
 // Server wraps the combined HTTP mux that serves /healthz and the FrameService.
 type Server struct{ handler http.Handler }
 
-// New creates a Server mounting /healthz, /auth/config (unauthenticated), and
-// the FrameService handler at its generated path. The auth interceptor is wired
-// in for the FrameService; passing nil for validator enables dev mode (requests
-// pass through with stub claims).
-func New(repo store.Repository, validator auth.TokenValidator, authCfg auth.Config) *Server {
+// New creates a Server mounting /healthz, /readyz, /auth/config (unauthenticated),
+// and the FrameService handler at its generated path. The auth interceptor is wired
+// in for the FrameService. When devMode is true, requests pass through with stub
+// claims and /readyz always returns 200.
+func New(repo store.Repository, validator auth.TokenValidator, authCfg auth.Config, devMode bool) *Server {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/healthz", func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write([]byte("ok"))
 	})
+	mux.HandleFunc("/readyz", handleReadyz(readinessFunc(validator, devMode)))
 	mux.HandleFunc("/auth/config", handleAuthConfig(authCfg))
-	interceptor := auth.NewInterceptor(validator)
+	interceptor := auth.NewInterceptor(validator, devMode)
 	path, handler := framesv1connect.NewFrameServiceHandler(
 		frames.NewService(repo),
 		connect.WithInterceptors(interceptor),
@@ -35,6 +36,34 @@ func New(repo store.Repository, validator auth.TokenValidator, authCfg auth.Conf
 	mux.Handle(path, handler)
 	mux.Handle("/", webui.NewHandler(webui.Assets(), webui.Config{IssuerURL: authCfg.IssuerURL}))
 	return &Server{handler: mux}
+}
+
+// readinessFunc resolves how /readyz answers. Dev mode is always ready; in auth
+// mode readiness tracks the validator if it reports it. The fallback (a non-dev
+// validator that does not report readiness) defaults to not-ready, staying fail
+// closed: /readyz only reports ready once a readiness-aware validator confirms
+// it. This branch is unreachable in production, where the validator is always a
+// *auth.LazyValidator.
+func readinessFunc(v auth.TokenValidator, devMode bool) func() bool {
+	if devMode {
+		return func() bool { return true }
+	}
+	if rv, ok := v.(auth.ReadinessValidator); ok {
+		return rv.Ready
+	}
+	return func() bool { return false }
+}
+
+func handleReadyz(ready func() bool) http.HandlerFunc {
+	return func(w http.ResponseWriter, _ *http.Request) {
+		if ready() {
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte("ready"))
+			return
+		}
+		w.WriteHeader(http.StatusServiceUnavailable)
+		_, _ = w.Write([]byte("not ready"))
+	}
 }
 
 // Handler returns the underlying http.Handler for use with http.Server.
