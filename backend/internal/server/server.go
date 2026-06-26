@@ -39,8 +39,10 @@ func New(repo store.Repository, validator auth.TokenValidator, authCfg auth.Conf
 }
 
 // readinessFunc resolves how /readyz answers. Dev mode is always ready; in auth
-// mode readiness tracks the validator if it reports it. The defensive fallback
-// (always-ready) is never hit in production, where the validator is a
+// mode readiness tracks the validator if it reports it. The fallback (a non-dev
+// validator that does not report readiness) defaults to not-ready, staying fail
+// closed: /readyz only reports ready once a readiness-aware validator confirms
+// it. This branch is unreachable in production, where the validator is always a
 // *auth.LazyValidator.
 func readinessFunc(v auth.TokenValidator, devMode bool) func() bool {
 	if devMode {
@@ -49,7 +51,7 @@ func readinessFunc(v auth.TokenValidator, devMode bool) func() bool {
 	if rv, ok := v.(auth.ReadinessValidator); ok {
 		return rv.Ready
 	}
-	return func() bool { return true }
+	return func() bool { return false }
 }
 
 func handleReadyz(ready func() bool) http.HandlerFunc {

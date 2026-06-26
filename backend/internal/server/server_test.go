@@ -175,8 +175,9 @@ func TestServer_Readyz(t *testing.T) {
 		{name: "auth ready", validator: fakeReadiness{ready: true}, devMode: false, wantCode: http.StatusOK},
 		{name: "auth not ready", validator: fakeReadiness{ready: false}, devMode: false, wantCode: http.StatusServiceUnavailable},
 		// plainValidator does not implement ReadinessValidator, so readinessFunc
-		// falls through to the defensive always-ready branch and returns 200.
-		{name: "plain validator without ReadinessValidator is always ready", validator: plainValidator{}, devMode: false, wantCode: http.StatusOK},
+		// falls through to the fail-closed branch and reports not-ready (503):
+		// /readyz only goes green once a readiness-aware validator confirms it.
+		{name: "plain validator without ReadinessValidator is not ready", validator: plainValidator{}, devMode: false, wantCode: http.StatusServiceUnavailable},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
