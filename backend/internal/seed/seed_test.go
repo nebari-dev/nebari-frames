@@ -9,6 +9,66 @@ import (
 	framesv1 "github.com/nebari-dev/nebari-frames/gen/go/frames/v1"
 )
 
+func TestRun_AdminEmail(t *testing.T) {
+	ctx := context.Background()
+	tests := []struct {
+		name        string
+		seedEmail   string
+		preSeed     func(t *testing.T, repo store.Repository, orgID string)
+		wantPending bool // expect a pending (UserSub=="") admin invite for the email
+	}{
+		{
+			name:        "fresh email adds pending admin invite",
+			seedEmail:   "admin@example.com",
+			wantPending: true,
+		},
+		{
+			name:      "idempotent when invite already pending",
+			seedEmail: "admin@example.com",
+			preSeed: func(t *testing.T, repo store.Repository, orgID string) {
+				if err := repo.AddPendingMembership(ctx, &framesv1.Membership{OrgId: orgID, Email: "admin@example.com", Role: "admin"}); err != nil {
+					t.Fatal(err)
+				}
+			},
+			wantPending: true,
+		},
+		{
+			name:      "no-op when email already an active member",
+			seedEmail: "admin@example.com",
+			preSeed: func(t *testing.T, repo store.Repository, orgID string) {
+				if err := repo.UpsertMembership(ctx, &framesv1.Membership{OrgId: orgID, UserSub: "sub-123", Email: "admin@example.com", Role: "admin"}); err != nil {
+					t.Fatal(err)
+				}
+			},
+			wantPending: false,
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			repo := store.NewMemory()
+			// Seed org first so preSeed has an org id.
+			if err := seed.Run(ctx, repo, seed.Config{OrgSlug: "acme", OrgDisplayName: "Acme"}); err != nil {
+				t.Fatalf("seed org: %v", err)
+			}
+			org, err := repo.GetOrgBySlug(ctx, "acme")
+			if err != nil {
+				t.Fatal(err)
+			}
+			if tc.preSeed != nil {
+				tc.preSeed(t, repo, org.Id)
+			}
+			if err := seed.Run(ctx, repo, seed.Config{OrgSlug: "acme", AdminEmail: tc.seedEmail}); err != nil {
+				t.Fatalf("seed admin email: %v", err)
+			}
+			pending, err := repo.GetPendingMembershipByEmail(ctx, tc.seedEmail)
+			gotPending := err == nil && pending != nil && pending.UserSub == ""
+			if gotPending != tc.wantPending {
+				t.Fatalf("pending invite = %v, want %v (err=%v)", gotPending, tc.wantPending, err)
+			}
+		})
+	}
+}
+
 func TestSeed_Run(t *testing.T) {
 	tests := []struct {
 		name string

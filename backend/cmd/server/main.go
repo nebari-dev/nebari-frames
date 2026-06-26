@@ -38,14 +38,16 @@ func main() {
 		OrgSlug:        os.Getenv("SEED_ORG_SLUG"),
 		OrgDisplayName: os.Getenv("SEED_ORG_DISPLAY_NAME"),
 		AdminSub:       os.Getenv("SEED_ADMIN_SUB"),
+		AdminEmail:     os.Getenv("SEED_ADMIN_EMAIL"),
 	}); err != nil {
 		log.Fatalf("seed: %v", err)
 	}
 
 	authCfg := auth.Config{
-		IssuerURL:   os.Getenv("OIDC_ISSUER_URL"),
-		ClientID:    os.Getenv("OIDC_CLIENT_ID"),
-		GroupsClaim: envOr("OIDC_GROUPS_CLAIM", "groups"),
+		IssuerURL:      os.Getenv("OIDC_ISSUER_URL"),
+		ClientID:       os.Getenv("OIDC_CLIENT_ID"),
+		DeviceClientID: os.Getenv("OIDC_DEVICE_CLIENT_ID"),
+		GroupsClaim:    envOr("OIDC_GROUPS_CLAIM", "groups"),
 	}
 	devMode, err := selectAuthMode(os.Getenv("FRAMES_DEV_MODE"), authCfg.IssuerURL, authCfg.ClientID)
 	if err != nil {

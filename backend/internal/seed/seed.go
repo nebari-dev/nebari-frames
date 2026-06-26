@@ -18,6 +18,7 @@ type Config struct {
 	OrgSlug        string
 	OrgDisplayName string
 	AdminSub       string
+	AdminEmail     string
 }
 
 func Run(ctx context.Context, repo store.Repository, cfg Config) error {
@@ -42,15 +43,38 @@ func Run(ctx context.Context, repo store.Repository, cfg Config) error {
 	} else if err != nil {
 		return err
 	}
-	if cfg.AdminSub == "" {
-		return nil
+	if cfg.AdminSub != "" {
+		if _, err := repo.GetMembership(ctx, cfg.AdminSub); errors.Is(err, store.ErrNotFound) {
+			if err := repo.UpsertMembership(ctx, &framesv1.Membership{
+				OrgId: org.Id, UserSub: cfg.AdminSub, Role: "admin", AddedAt: timestamppb.Now(),
+			}); err != nil {
+				return err
+			}
+		} else if err != nil {
+			return err
+		}
 	}
-	if _, err := repo.GetMembership(ctx, cfg.AdminSub); errors.Is(err, store.ErrNotFound) {
-		return repo.UpsertMembership(ctx, &framesv1.Membership{
-			OrgId: org.Id, UserSub: cfg.AdminSub, Role: "admin", AddedAt: timestamppb.Now(),
+
+	if cfg.AdminEmail != "" {
+		// Idempotent: skip if already invited (pending) or already an active member.
+		if _, err := repo.GetPendingMembershipByEmail(ctx, cfg.AdminEmail); err == nil {
+			return nil
+		} else if !errors.Is(err, store.ErrNotFound) {
+			return err
+		}
+		members, err := repo.ListMembershipsByOrg(ctx, org.Id)
+		if err != nil {
+			return err
+		}
+		for _, m := range members {
+			if m.Email == cfg.AdminEmail && m.UserSub != "" {
+				return nil
+			}
+		}
+		return repo.AddPendingMembership(ctx, &framesv1.Membership{
+			OrgId: org.Id, Email: cfg.AdminEmail, Role: "admin", AddedAt: timestamppb.Now(),
 		})
-	} else if err != nil {
-		return err
 	}
+
 	return nil
 }
