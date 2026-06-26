@@ -50,7 +50,7 @@ func TestComposeMarkdown(t *testing.T) {
 		{
 			name:        "no extends omits inherits header",
 			doc:         &frames.Doc{Name: "base", Description: "Root.", Version: "1.0.0"},
-			mustContain: []string{"# Frame: base", "Root."},
+			mustContain: []string{"# Frame: base", "Root.", "> Resolved at: 2026-06-26T12:00:00Z"},
 			mustNotHave: []string{"> Inherits from:"},
 		},
 	}
