@@ -1,0 +1,29 @@
+{{- if .Values.nebariapp.enabled }}
+apiVersion: reconcilers.nebari.dev/v1
+kind: NebariApp
+metadata:
+  name: {{ include "nebari-frames.fullname" . }}
+  labels:
+    {{- include "nebari-frames.labels" . | nindent 4 }}
+spec:
+  hostname: {{ required "nebariapp.hostname is required when nebariapp.enabled" .Values.nebariapp.hostname }}
+  gateway: {{ .Values.nebariapp.gateway }}
+  serviceAccountName: {{ include "nebari-frames.fullname" . }}
+  service:
+    name: {{ include "nebari-frames.fullname" . }}
+    port: {{ .Values.service.port }}
+  {{- if .Values.nebariapp.auth.enabled }}
+  auth:
+    enabled: true
+    provider: keycloak
+    provisionClient: true
+    enforceAtGateway: false
+    redirectURI: /auth/callback
+    spaClient:
+      enabled: true
+    deviceFlowClient:
+      enabled: true
+    scopes:
+      {{- toYaml .Values.nebariapp.auth.scopes | nindent 6 }}
+  {{- end }}
+{{- end }}
