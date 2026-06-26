@@ -8,6 +8,7 @@ import (
 
 	"github.com/nebari-dev/nebari-frames/backend/internal/auth"
 	"github.com/nebari-dev/nebari-frames/backend/internal/frames"
+	mcppkg "github.com/nebari-dev/nebari-frames/backend/internal/mcp"
 	"github.com/nebari-dev/nebari-frames/backend/internal/store"
 	"github.com/nebari-dev/nebari-frames/gen/go/frames/v1/framesv1connect"
 	webui "github.com/nebari-dev/nebari-frames/web"
@@ -19,8 +20,9 @@ type Server struct{ handler http.Handler }
 // New creates a Server mounting /healthz, /readyz, /auth/config (unauthenticated),
 // and the FrameService handler at its generated path. The auth interceptor is wired
 // in for the FrameService. When devMode is true, requests pass through with stub
-// claims and /readyz always returns 200.
-func New(repo store.Repository, validator auth.TokenValidator, authCfg auth.Config, devMode bool) *Server {
+// claims and /readyz always returns 200. Pass a non-nil mcpComponent to also mount
+// the MCP endpoint routes.
+func New(repo store.Repository, validator auth.TokenValidator, authCfg auth.Config, devMode bool, mcpComponent *mcppkg.Component) *Server {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/healthz", func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
@@ -34,6 +36,9 @@ func New(repo store.Repository, validator auth.TokenValidator, authCfg auth.Conf
 		connect.WithInterceptors(interceptor),
 	)
 	mux.Handle(path, handler)
+	if mcpComponent != nil {
+		mcpComponent.Mount(mux)
+	}
 	mux.Handle("/", webui.NewHandler(webui.Assets(), webui.Config{IssuerURL: authCfg.IssuerURL}))
 	return &Server{handler: mux}
 }

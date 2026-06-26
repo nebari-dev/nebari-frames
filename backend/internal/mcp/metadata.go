@@ -35,6 +35,11 @@ func (c Config) audienceOrDefault() string {
 	return c.canonicalResourceURL()
 }
 
+// ResolvedAudience returns the effective audience value that token validators
+// must enforce. It is the configured Audience when set, or the canonical
+// resource URL otherwise.
+func (c Config) ResolvedAudience() string { return c.audienceOrDefault() }
+
 // buildMetadata builds the RFC 9728 protected-resource metadata document.
 func buildMetadata(c Config) *oauthex.ProtectedResourceMetadata {
 	return &oauthex.ProtectedResourceMetadata{
