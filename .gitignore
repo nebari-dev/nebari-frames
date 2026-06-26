@@ -25,9 +25,10 @@ coverage.out
 *.db
 
 # Build
-dist/
+/dist/
 node_modules/
-web/dist/
+web/dist/*
+!web/dist/index.html
 *.tsbuildinfo
 web/vite.config.js
 web/vite.config.d.ts
