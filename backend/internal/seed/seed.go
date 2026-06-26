@@ -71,9 +71,12 @@ func Run(ctx context.Context, repo store.Repository, cfg Config) error {
 				return nil
 			}
 		}
-		return repo.AddPendingMembership(ctx, &framesv1.Membership{
+		if err := repo.AddPendingMembership(ctx, &framesv1.Membership{
 			OrgId: org.Id, Email: cfg.AdminEmail, Role: "admin", AddedAt: timestamppb.Now(),
-		})
+		}); err != nil && !errors.Is(err, store.ErrAlreadyExists) {
+			return err
+		}
+		return nil
 	}
 
 	return nil

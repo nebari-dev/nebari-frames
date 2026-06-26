@@ -42,6 +42,11 @@ func TestRun_AdminEmail(t *testing.T) {
 			},
 			wantPending: false,
 		},
+		{
+			name:        "seed twice with same AdminEmail: second run idempotent",
+			seedEmail:   "twice@example.com",
+			wantPending: true,
+		},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -64,6 +69,17 @@ func TestRun_AdminEmail(t *testing.T) {
 			gotPending := err == nil && pending != nil && pending.UserSub == ""
 			if gotPending != tc.wantPending {
 				t.Fatalf("pending invite = %v, want %v (err=%v)", gotPending, tc.wantPending, err)
+			}
+			// For "twice" test case, run seed again and verify it's idempotent.
+			if tc.name == "seed twice with same AdminEmail: second run idempotent" {
+				if err := seed.Run(ctx, repo, seed.Config{OrgSlug: "acme", AdminEmail: tc.seedEmail}); err != nil {
+					t.Fatalf("second seed run: %v", err)
+				}
+				// Verify still exactly one pending invite for this email.
+				pending2, err2 := repo.GetPendingMembershipByEmail(ctx, tc.seedEmail)
+				if err2 != nil || pending2 == nil || pending2.UserSub != "" {
+					t.Fatalf("second run corrupted pending invite: %+v (err=%v)", pending2, err2)
+				}
 			}
 		})
 	}
