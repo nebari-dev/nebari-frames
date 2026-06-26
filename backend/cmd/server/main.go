@@ -12,6 +12,8 @@ import (
 	_ "modernc.org/sqlite"
 
 	"github.com/nebari-dev/nebari-frames/backend/internal/auth"
+	"github.com/nebari-dev/nebari-frames/backend/internal/frames"
+	mcppkg "github.com/nebari-dev/nebari-frames/backend/internal/mcp"
 	"github.com/nebari-dev/nebari-frames/backend/internal/seed"
 	"github.com/nebari-dev/nebari-frames/backend/internal/server"
 	sqlitestore "github.com/nebari-dev/nebari-frames/backend/internal/store/sqlite"
@@ -60,9 +62,29 @@ func main() {
 		validator = auth.NewLazyValidator(context.Background(), authCfg)
 		log.Printf("auth enabled (issuer: %s); validating OIDC readiness in background", authCfg.IssuerURL)
 	}
+
+	mcpCfg := mcppkg.Config{
+		PublicURL: os.Getenv("FRAMES_PUBLIC_URL"),
+		IssuerURL: authCfg.IssuerURL,
+		Audience:  os.Getenv("OIDC_MCP_AUDIENCE"),
+		DevMode:   devMode,
+	}
+	var mcpValidator auth.TokenValidator
+	if !devMode && mcpCfg.PublicURL != "" {
+		mcpAuthCfg := authCfg
+		mcpAuthCfg.ClientID = mcpCfg.ResolvedAudience()
+		mcpValidator = auth.NewLazyValidator(context.Background(), mcpAuthCfg)
+		log.Printf("MCP endpoint enabled (resource: %s)", mcpCfg.ResolvedAudience())
+	}
+	var mcpComponent *mcppkg.Component
+	if mcpCfg.PublicURL != "" || devMode {
+		framesService := frames.NewService(repo)
+		mcpComponent = mcppkg.NewComponent(mcpCfg, framesService, mcpValidator)
+	}
+
 	srv := &http.Server{
 		Addr:              ":" + port,
-		Handler:           server.New(repo, validator, authCfg, devMode).Handler(),
+		Handler:           server.New(repo, validator, authCfg, devMode, mcpComponent).Handler(),
 		ReadHeaderTimeout: 10 * time.Second,
 		ReadTimeout:       30 * time.Second,
 		WriteTimeout:      60 * time.Second,

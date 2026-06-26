@@ -8,13 +8,6 @@ import (
 	"connectrpc.com/connect"
 )
 
-// devClaims are injected when running without an OIDC provider so that
-// write/authenticated operations work in local development.
-var devClaims = &Claims{
-	Subject: "dev-user",
-	Email:   "dev@localhost",
-}
-
 // NewInterceptor returns a ConnectRPC unary interceptor enforcing OIDC auth.
 // When devMode is true, authentication is skipped and fixed dev-user claims are
 // injected (local development only). Otherwise a valid Bearer token is required:
@@ -24,7 +17,7 @@ func NewInterceptor(v TokenValidator, devMode bool) connect.UnaryInterceptorFunc
 	return func(next connect.UnaryFunc) connect.UnaryFunc {
 		return func(ctx context.Context, req connect.AnyRequest) (connect.AnyResponse, error) {
 			if devMode {
-				ctx = WithClaims(ctx, devClaims)
+				ctx = WithClaims(ctx, DevClaims())
 				return next(ctx, req)
 			}
 

@@ -35,7 +35,7 @@ func TestServer_Healthz(t *testing.T) {
 		},
 	}
 
-	srv := server.New(store.NewMemory(), nil, auth.Config{}, true) // dev mode
+	srv := server.New(store.NewMemory(), nil, auth.Config{}, true, nil) // dev mode
 	ts := httptest.NewServer(srv.Handler())
 	t.Cleanup(ts.Close)
 
@@ -81,7 +81,7 @@ func TestServer_AuthConfig(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			srv := server.New(store.NewMemory(), nil, tt.cfg, true)
+			srv := server.New(store.NewMemory(), nil, tt.cfg, true, nil)
 			ts := httptest.NewServer(srv.Handler())
 			t.Cleanup(ts.Close)
 			resp, err := http.Get(ts.URL + "/auth/config")
@@ -118,7 +118,7 @@ func TestServer_AuthConfig(t *testing.T) {
 }
 
 func TestServer_AuthConfig_MethodNotAllowed(t *testing.T) {
-	srv := server.New(store.NewMemory(), nil, auth.Config{IssuerURL: "https://oidc.example", ClientID: "web"}, true)
+	srv := server.New(store.NewMemory(), nil, auth.Config{IssuerURL: "https://oidc.example", ClientID: "web"}, true, nil)
 	ts := httptest.NewServer(srv.Handler())
 	t.Cleanup(ts.Close)
 
@@ -181,7 +181,7 @@ func TestServer_Readyz(t *testing.T) {
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			srv := server.New(store.NewMemory(), tc.validator, auth.Config{}, tc.devMode)
+			srv := server.New(store.NewMemory(), tc.validator, auth.Config{}, tc.devMode, nil)
 			ts := httptest.NewServer(srv.Handler())
 			t.Cleanup(ts.Close)
 			resp, err := http.Get(ts.URL + "/readyz")

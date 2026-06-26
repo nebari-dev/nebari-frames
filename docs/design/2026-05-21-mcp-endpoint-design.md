@@ -100,6 +100,8 @@ The `/mcp` endpoint is a thin protocol adapter. It does not implement any busine
 
 ### 3.2 Authentication
 
+> **Superseded by the [MCP Endpoint implementation spec](../superpowers/specs/2026-06-26-mcp-endpoint.md) (§1.2, §3.2).** Per the current MCP authorization spec (2025-06-18), the MCP server is an OAuth 2.1 **Resource Server only** - it does not implement `/authorize`, `/token`, or `/register`. The Authorization Server is the existing Keycloak realm; Claude runs auth-code+PKCE directly against it via Dynamic Client Registration. Our OAuth surface is limited to serving `/.well-known/oauth-protected-resource`, challenging with `401`+`WWW-Authenticate`, and validating bearer tokens with audience binding (RFC 8707) to the canonical `/mcp` URL. The framing below ("OAuth 2.1 + PKCE on the MCP side", a `nebari-frames-mcp` client registration) is retained for product rationale but is not how the build works.
+
 **OAuth 2.1 with PKCE** (the auth flow MCP remote connectors use). Same OIDC provider as the CLI device flow - just a different OAuth client registration:
 
 | Client | Flow | OIDC client ID |
@@ -215,6 +217,8 @@ Empty slots are **omitted from the rendered markdown** (no empty headers). The f
 Per-provider docs land in the web app's "Connect" pages (see [web app design](./2026-05-21-web-app-design.md), §3.4). One page per client; each page is a small step-by-step with screenshots.
 
 ### 3.6 Endpoint surface
+
+> **Superseded by the [MCP Endpoint implementation spec](../superpowers/specs/2026-06-26-mcp-endpoint.md) (§1.2).** The endpoint uses the **Streamable HTTP** transport (via the official Go MCP SDK), not SSE - SSE is deprecated in the current MCP spec. The single-`/mcp`-endpoint, remote-only intent below is unchanged.
 
 The MCP server speaks a single endpoint `/mcp` over HTTPS with Server-Sent Events (SSE) transport, matching the remote-connector convention used by Claude.ai. Stdio transport (for local clients) is not in MVP; remote clients are the audience that matters.
 
