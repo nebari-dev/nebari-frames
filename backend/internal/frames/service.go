@@ -271,16 +271,63 @@ func (s *Service) ListFrameVersions(ctx context.Context, req *connect.Request[fr
 	return connect.NewResponse(&framesv1.ListFrameVersionsResponse{Versions: versions}), nil
 }
 
-func (s *Service) ResolveFrame(ctx context.Context, req *connect.Request[framesv1.ResolveFrameRequest]) (*connect.Response[framesv1.ResolveFrameResponse], error) {
+// ReadableFrame is a flattened, RBAC-readable frame summary for non-RPC consumers
+// (e.g. the MCP adapter). Returned by ListReadable.
+type ReadableFrame struct {
+	OrgSlug     string
+	OrgDisplay  string
+	Name        string
+	Version     string // latest version
+	Description string
+}
+
+// ListReadable returns the caller's RBAC-readable frames in their org. It applies
+// the same Read check ListFrames uses; unreadable frames are omitted.
+func (s *Service) ListReadable(ctx context.Context) ([]ReadableFrame, error) {
 	caller, err := s.resolveCaller(ctx)
 	if err != nil {
 		return nil, err
 	}
-	frame, version, _, _, err := s.loadForRead(ctx, caller, req.Msg.OrgSlug, req.Msg.Name, req.Msg.Version)
+	org, err := s.repo.GetOrgByID(ctx, caller.OrgID)
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInternal, err)
+	}
+	all, err := s.repo.ListFramesByOrg(ctx, caller.OrgID)
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInternal, err)
+	}
+	out := []ReadableFrame{}
+	for _, f := range all {
+		canRead, err := rbac.Can(ctx, s.lookup, caller, f.OrgId, f.Id, rbac.PermRead)
+		if err != nil {
+			return nil, connect.NewError(connect.CodeInternal, err)
+		}
+		if !canRead {
+			continue
+		}
+		out = append(out, ReadableFrame{
+			OrgSlug:     org.Slug,
+			OrgDisplay:  org.DisplayName,
+			Name:        f.Name,
+			Version:     f.LatestVersion,
+			Description: f.Description,
+		})
+	}
+	return out, nil
+}
+
+// ResolveDoc returns the inheritance-merged Doc for a frame, read-enforced.
+// A denied or missing read returns connect.CodeNotFound (no existence leak).
+func (s *Service) ResolveDoc(ctx context.Context, orgSlug, name, version string) (*Doc, error) {
+	caller, err := s.resolveCaller(ctx)
 	if err != nil {
 		return nil, err
 	}
-	doc, err := Parse(version.Content)
+	_, v, _, _, err := s.loadForRead(ctx, caller, orgSlug, name, version)
+	if err != nil {
+		return nil, err
+	}
+	doc, err := Parse(v.Content)
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
@@ -300,7 +347,14 @@ func (s *Service) ResolveFrame(ctx context.Context, req *connect.Request[framesv
 		}
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
-	_ = frame
+	return resolved, nil
+}
+
+func (s *Service) ResolveFrame(ctx context.Context, req *connect.Request[framesv1.ResolveFrameRequest]) (*connect.Response[framesv1.ResolveFrameResponse], error) {
+	resolved, err := s.ResolveDoc(ctx, req.Msg.OrgSlug, req.Msg.Name, req.Msg.Version)
+	if err != nil {
+		return nil, err
+	}
 	out, err := Marshal(resolved)
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)
