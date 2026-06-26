@@ -21,6 +21,7 @@ func TestSelectAuthMode(t *testing.T) {
 		{name: "missing issuer", clientID: "web", wantErr: true, errContains: []string{"OIDC_ISSUER_URL"}},
 		{name: "missing client id", issuerURL: "https://idp", wantErr: true, errContains: []string{"OIDC_CLIENT_ID"}},
 		{name: "missing both", wantErr: true, errContains: []string{"OIDC_ISSUER_URL", "OIDC_CLIENT_ID", "FRAMES_DEV_MODE"}},
+		{name: "non-true dev value with missing OIDC errors", devModeEnv: "1", wantErr: true, errContains: []string{"OIDC_ISSUER_URL", "OIDC_CLIENT_ID"}},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
