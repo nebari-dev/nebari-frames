@@ -11,6 +11,7 @@ export async function fetchAuthConfig(): Promise<AuthConfig> {
   if (!res.ok) {
     throw new Error(`auth config request failed: ${res.status}`);
   }
-  const body = (await res.json()) as { issuer: string; client_id: string };
-  return { issuer: body.issuer, clientId: body.client_id };
+  // Backend emits snake_case issuer_url / client_id (server.go authConfigResponse).
+  const body = (await res.json()) as { issuer_url: string; client_id: string };
+  return { issuer: body.issuer_url, clientId: body.client_id };
 }
