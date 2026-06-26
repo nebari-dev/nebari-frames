@@ -52,6 +52,7 @@ func (v *Validator) Validate(ctx context.Context, rawToken string) (*Claims, err
 
 	claims := &Claims{
 		Subject: idToken.Subject,
+		Expiry:  idToken.Expiry,
 	}
 
 	if email, ok := raw["email"].(string); ok {
