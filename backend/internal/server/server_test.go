@@ -1,6 +1,7 @@
 package server_test
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -34,7 +35,7 @@ func TestServer_Healthz(t *testing.T) {
 		},
 	}
 
-	srv := server.New(store.NewMemory(), nil, auth.Config{}) // nil validator = dev mode
+	srv := server.New(store.NewMemory(), nil, auth.Config{}, true) // dev mode
 	ts := httptest.NewServer(srv.Handler())
 	t.Cleanup(ts.Close)
 
@@ -54,12 +55,12 @@ func TestServer_Healthz(t *testing.T) {
 
 func TestServer_AuthConfig(t *testing.T) {
 	tests := []struct {
-		name             string
-		cfg              auth.Config
-		wantEnabled      bool
-		wantIssuer       string
-		wantClientID     string
-		wantDevClientID  string
+		name            string
+		cfg             auth.Config
+		wantEnabled     bool
+		wantIssuer      string
+		wantClientID    string
+		wantDevClientID string
 	}{
 		{
 			name:            "enabled",
@@ -80,7 +81,7 @@ func TestServer_AuthConfig(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			srv := server.New(store.NewMemory(), nil, tt.cfg)
+			srv := server.New(store.NewMemory(), nil, tt.cfg, true)
 			ts := httptest.NewServer(srv.Handler())
 			t.Cleanup(ts.Close)
 			resp, err := http.Get(ts.URL + "/auth/config")
@@ -117,7 +118,7 @@ func TestServer_AuthConfig(t *testing.T) {
 }
 
 func TestServer_AuthConfig_MethodNotAllowed(t *testing.T) {
-	srv := server.New(store.NewMemory(), nil, auth.Config{IssuerURL: "https://oidc.example", ClientID: "web"})
+	srv := server.New(store.NewMemory(), nil, auth.Config{IssuerURL: "https://oidc.example", ClientID: "web"}, true)
 	ts := httptest.NewServer(srv.Handler())
 	t.Cleanup(ts.Close)
 
@@ -142,6 +143,42 @@ func TestServer_AuthConfig_MethodNotAllowed(t *testing.T) {
 			t.Cleanup(func() { _ = resp.Body.Close() })
 			if resp.StatusCode != http.StatusMethodNotAllowed {
 				t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusMethodNotAllowed)
+			}
+		})
+	}
+}
+
+// fakeReadiness is a TokenValidator that reports a fixed readiness state.
+type fakeReadiness struct{ ready bool }
+
+func (f fakeReadiness) Validate(context.Context, string) (*auth.Claims, error) {
+	return nil, auth.ErrNotReady
+}
+func (f fakeReadiness) Ready() bool { return f.ready }
+
+func TestServer_Readyz(t *testing.T) {
+	tests := []struct {
+		name      string
+		validator auth.TokenValidator
+		devMode   bool
+		wantCode  int
+	}{
+		{name: "dev mode is ready", validator: nil, devMode: true, wantCode: http.StatusOK},
+		{name: "auth ready", validator: fakeReadiness{ready: true}, devMode: false, wantCode: http.StatusOK},
+		{name: "auth not ready", validator: fakeReadiness{ready: false}, devMode: false, wantCode: http.StatusServiceUnavailable},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			srv := server.New(store.NewMemory(), tc.validator, auth.Config{}, tc.devMode)
+			ts := httptest.NewServer(srv.Handler())
+			t.Cleanup(ts.Close)
+			resp, err := http.Get(ts.URL + "/readyz")
+			if err != nil {
+				t.Fatalf("get /readyz: %v", err)
+			}
+			t.Cleanup(func() { _ = resp.Body.Close() })
+			if resp.StatusCode != tc.wantCode {
+				t.Fatalf("/readyz = %d, want %d", resp.StatusCode, tc.wantCode)
 			}
 		})
 	}

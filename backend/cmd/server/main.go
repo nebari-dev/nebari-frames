@@ -57,9 +57,10 @@ func main() {
 		log.Println("WARNING: running in dev mode with authentication disabled")
 	}
 
+	devMode := os.Getenv("FRAMES_DEV_MODE") == "true"
 	srv := &http.Server{
 		Addr:              ":" + port,
-		Handler:           server.New(repo, validator, authCfg).Handler(),
+		Handler:           server.New(repo, validator, authCfg, devMode).Handler(),
 		ReadHeaderTimeout: 10 * time.Second,
 		ReadTimeout:       30 * time.Second,
 		WriteTimeout:      60 * time.Second,
