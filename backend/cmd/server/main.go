@@ -2,9 +2,11 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"net/http"
 	"os"
+	"strings"
 	"time"
 
 	_ "modernc.org/sqlite"
@@ -45,19 +47,17 @@ func main() {
 		ClientID:    os.Getenv("OIDC_CLIENT_ID"),
 		GroupsClaim: envOr("OIDC_GROUPS_CLAIM", "groups"),
 	}
-	var validator auth.TokenValidator
-	if authCfg.IssuerURL != "" {
-		v, err := auth.NewValidator(context.Background(), authCfg)
-		if err != nil {
-			log.Fatalf("init auth: %v", err)
-		}
-		validator = v
-		log.Printf("auth enabled (issuer: %s)", authCfg.IssuerURL)
-	} else {
-		log.Println("WARNING: running in dev mode with authentication disabled")
+	devMode, err := selectAuthMode(os.Getenv("FRAMES_DEV_MODE"), authCfg.IssuerURL, authCfg.ClientID)
+	if err != nil {
+		log.Fatalf("%v", err)
 	}
-
-	devMode := os.Getenv("FRAMES_DEV_MODE") == "true"
+	var validator auth.TokenValidator
+	if devMode {
+		log.Println("WARNING: FRAMES_DEV_MODE=true - authentication DISABLED; injecting fixed dev-user identity")
+	} else {
+		validator = auth.NewLazyValidator(context.Background(), authCfg)
+		log.Printf("auth enabled (issuer: %s); validating OIDC readiness in background", authCfg.IssuerURL)
+	}
 	srv := &http.Server{
 		Addr:              ":" + port,
 		Handler:           server.New(repo, validator, authCfg, devMode).Handler(),
@@ -77,4 +77,28 @@ func envOr(key, fallback string) string {
 		return v
 	}
 	return fallback
+}
+
+// selectAuthMode resolves the auth bootstrap decision from environment values.
+// FRAMES_DEV_MODE=true (exactly) disables auth. Otherwise OIDC_ISSUER_URL and
+// OIDC_CLIENT_ID are both required; a missing one is a fatal misconfiguration.
+func selectAuthMode(devModeEnv, issuerURL, clientID string) (devMode bool, err error) {
+	if devModeEnv == "true" {
+		return true, nil
+	}
+	var missing []string
+	if issuerURL == "" {
+		missing = append(missing, "OIDC_ISSUER_URL")
+	}
+	if clientID == "" {
+		missing = append(missing, "OIDC_CLIENT_ID")
+	}
+	if len(missing) > 0 {
+		return false, fmt.Errorf(
+			"authentication is required but OIDC configuration is incomplete: %s not set; "+
+				"set OIDC_ISSUER_URL and OIDC_CLIENT_ID, or set FRAMES_DEV_MODE=true for local development without authentication",
+			strings.Join(missing, " and "),
+		)
+	}
+	return false, nil
 }
