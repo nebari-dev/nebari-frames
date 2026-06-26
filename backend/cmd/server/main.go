@@ -64,9 +64,9 @@ func main() {
 	}
 
 	mcpCfg := mcppkg.Config{
-		PublicURL: os.Getenv("PUBLIC_URL"),
+		PublicURL: os.Getenv("FRAMES_PUBLIC_URL"),
 		IssuerURL: authCfg.IssuerURL,
-		Audience:  os.Getenv("MCP_AUDIENCE"),
+		Audience:  os.Getenv("OIDC_MCP_AUDIENCE"),
 		DevMode:   devMode,
 	}
 	var mcpValidator auth.TokenValidator
