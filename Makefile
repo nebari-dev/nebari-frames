@@ -43,4 +43,4 @@ IMAGE_REPO ?= ghcr.io/nebari-dev/nebari-frames
 IMAGE_TAG ?= dev
 
 image:
-	docker build -t $(IMAGE_REPO):$(IMAGE_TAG) .
+	docker build --platform=linux/amd64 -t $(IMAGE_REPO):$(IMAGE_TAG) .

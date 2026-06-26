@@ -10,3 +10,4 @@ node_modules
 *.db-wal
 coverage.out
 nebari-frames-server
+.superpowers

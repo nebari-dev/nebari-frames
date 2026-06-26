@@ -19,10 +19,12 @@ COPY . .
 COPY --from=web /src/web/dist ./web/dist
 RUN CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags="-s -w" \
     -o /out/nebari-frames-server ./backend/cmd/server
+RUN mkdir -p /data
 
 # 3) Minimal nonroot runtime.
 FROM gcr.io/distroless/static:nonroot
 COPY --from=build /out/nebari-frames-server /nebari-frames-server
+COPY --from=build --chown=65532:65532 /data /data
 ENV DB_PATH=/data/nebari-frames.db
 EXPOSE 8080
 USER nonroot:nonroot
