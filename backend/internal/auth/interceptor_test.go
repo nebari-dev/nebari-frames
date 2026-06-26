@@ -34,6 +34,7 @@ func TestInterceptor(t *testing.T) {
 		{name: "not-ready validator is unavailable", devMode: false, validator: stubValidator{err: ErrNotReady}, authHeader: "Bearer x", wantCode: connect.CodeUnavailable},
 		{name: "bad token is unauthenticated", devMode: false, validator: stubValidator{err: errors.New("bad sig")}, authHeader: "Bearer x", wantCode: connect.CodeUnauthenticated},
 		{name: "valid token attaches claims", devMode: false, validator: stubValidator{claims: okClaims}, authHeader: "Bearer x", wantSub: "alice"},
+		{name: "nil validator non-dev is unavailable", devMode: false, validator: nil, authHeader: "Bearer x", wantCode: connect.CodeUnavailable},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {

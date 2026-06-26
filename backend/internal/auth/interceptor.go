@@ -28,10 +28,18 @@ func NewInterceptor(v TokenValidator, devMode bool) connect.UnaryInterceptorFunc
 				return next(ctx, req)
 			}
 
+			// Guard the invariant that non-dev mode always has a real validator.
+			// A nil validator here would panic on v.Validate below; returning
+			// CodeUnavailable keeps the service fail-closed rather than crashing.
+			if v == nil {
+				return nil, connect.NewError(connect.CodeUnavailable, errors.New("authentication temporarily unavailable"))
+			}
+
 			// CutPrefix handles both missing prefix and empty token in one check:
 			// "Bearer xyz" -> ("xyz", true), "Bearer " -> ("", true), "Basic x" -> ("", false)
 			token, ok := strings.CutPrefix(req.Header().Get("Authorization"), "Bearer ")
 			if !ok || token == "" {
+				// nil message is intentional: no information leak for an obviously-missing token.
 				return nil, connect.NewError(connect.CodeUnauthenticated, nil)
 			}
 

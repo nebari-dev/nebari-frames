@@ -156,6 +156,14 @@ func (f fakeReadiness) Validate(context.Context, string) (*auth.Claims, error) {
 }
 func (f fakeReadiness) Ready() bool { return f.ready }
 
+// plainValidator implements only TokenValidator (not auth.ReadinessValidator).
+// Used to exercise the defensive always-ready fallback in readinessFunc.
+type plainValidator struct{}
+
+func (plainValidator) Validate(_ context.Context, _ string) (*auth.Claims, error) {
+	return nil, nil
+}
+
 func TestServer_Readyz(t *testing.T) {
 	tests := []struct {
 		name      string
@@ -166,6 +174,9 @@ func TestServer_Readyz(t *testing.T) {
 		{name: "dev mode is ready", validator: nil, devMode: true, wantCode: http.StatusOK},
 		{name: "auth ready", validator: fakeReadiness{ready: true}, devMode: false, wantCode: http.StatusOK},
 		{name: "auth not ready", validator: fakeReadiness{ready: false}, devMode: false, wantCode: http.StatusServiceUnavailable},
+		// plainValidator does not implement ReadinessValidator, so readinessFunc
+		// falls through to the defensive always-ready branch and returns 200.
+		{name: "plain validator without ReadinessValidator is always ready", validator: plainValidator{}, devMode: false, wantCode: http.StatusOK},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
