@@ -23,8 +23,13 @@ func TestServer_Healthz(t *testing.T) {
 			wantCode: http.StatusOK,
 		},
 		{
-			name:     "unknown path returns 404",
+			name:     "unknown client route falls back to SPA index",
 			path:     "/not-found",
+			wantCode: http.StatusOK,
+		},
+		{
+			name:     "missing asset returns 404",
+			path:     "/assets/missing.js",
 			wantCode: http.StatusNotFound,
 		},
 	}
