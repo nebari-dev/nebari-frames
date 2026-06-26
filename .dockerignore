@@ -1,0 +1,12 @@
+.git
+.github
+.claude
+docs
+web/node_modules
+web/dist
+node_modules
+*.db
+*.db-shm
+*.db-wal
+coverage.out
+nebari-frames-server
