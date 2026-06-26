@@ -5,6 +5,7 @@ metadata:
   labels:
     {{- include "nebari-frames.labels" . | nindent 4 }}
 spec:
+  # SQLite is single-writer; keep at 1 (schema enforces max 1). Postgres slice relaxes this.
   replicas: {{ .Values.replicaCount }}
   strategy:
     type: Recreate

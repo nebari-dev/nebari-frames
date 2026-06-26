@@ -5,6 +5,7 @@
     "replicaCount": { "type": "integer", "minimum": 1, "maximum": 1 },
     "image": {
       "type": "object",
+      "additionalProperties": false,
       "properties": {
         "repository": { "type": "string", "minLength": 1 },
         "tag": { "type": "string" },
@@ -17,6 +18,7 @@
     },
     "persistence": {
       "type": "object",
+      "additionalProperties": false,
       "properties": {
         "enabled": { "type": "boolean" },
         "mountPath": { "type": "string", "minLength": 1 },
@@ -28,6 +30,7 @@
     },
     "seed": {
       "type": "object",
+      "additionalProperties": false,
       "properties": {
         "orgSlug": { "type": "string" },
         "orgDisplayName": { "type": "string" },
@@ -40,6 +43,7 @@
         "devMode": { "type": "boolean" },
         "oidc": {
           "type": "object",
+          "additionalProperties": false,
           "properties": {
             "issuerUrl": { "type": "string" },
             "clientId": { "type": "string" },
@@ -56,6 +60,7 @@
         "gateway": { "type": "string", "enum": ["public", "internal"] },
         "auth": {
           "type": "object",
+          "additionalProperties": false,
           "properties": {
             "enabled": { "type": "boolean" },
             "scopes": { "type": "array", "items": { "type": "string" } }
