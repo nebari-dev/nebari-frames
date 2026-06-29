@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"connectrpc.com/connect"
+	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"github.com/nebari-dev/nebari-frames/backend/internal/auth"
 	"github.com/nebari-dev/nebari-frames/backend/internal/frames"
@@ -348,5 +349,97 @@ slots:
 				t.Fatalf("violation for %q missing; got fields %v", tc.wantField, got)
 			}
 		})
+	}
+}
+
+// seedReadableFrameDirect seeds a frame that org member "v" (viewer in org o1) can read.
+// It uses a direct store call so we don't depend on PublishFrame's side-effects.
+func seedReadableFrameDirect(t *testing.T, repo *store.Memory, ctx context.Context) {
+	t.Helper()
+	err := repo.CreateFrameVersion(ctx, store.CreateFrameVersionInput{
+		Frame: &framesv1.Frame{
+			Id: "f-alpha", OrgId: "o1", Name: "alpha", Description: "A",
+			OwnerSub: "pub", LatestVersion: "1.0.0",
+			CreatedAt: timestamppb.Now(), UpdatedAt: timestamppb.Now(),
+		},
+		Version: &framesv1.FrameVersion{
+			Version:     "1.0.0",
+			Content:     []byte("name: alpha\ndescription: A\nversion: 1.0.0\nslots:\n  rules:\n    - r1\n"),
+			PublishedAt: timestamppb.Now(),
+		},
+		Grants:     []store.Grant{{SubjectType: "org", SubjectID: "o1", Permission: "read"}},
+		IsNewFrame: true,
+	})
+	if err != nil {
+		t.Fatalf("seedReadableFrameDirect: %v", err)
+	}
+}
+
+// seedUnreadableFrameDirect seeds a frame that org member "v" cannot read.
+func seedUnreadableFrameDirect(t *testing.T, repo *store.Memory, ctx context.Context) {
+	t.Helper()
+	err := repo.CreateFrameVersion(ctx, store.CreateFrameVersionInput{
+		Frame: &framesv1.Frame{
+			Id: "f-secret", OrgId: "o1", Name: "secret", Description: "S",
+			OwnerSub: "someone-else", LatestVersion: "1.0.0",
+			CreatedAt: timestamppb.Now(), UpdatedAt: timestamppb.Now(),
+		},
+		Version: &framesv1.FrameVersion{
+			Version:     "1.0.0",
+			Content:     []byte("name: secret\ndescription: S\nversion: 1.0.0\nslots:\n  rules:\n    - hidden\n"),
+			PublishedAt: timestamppb.Now(),
+		},
+		Grants:     []store.Grant{{SubjectType: "user", SubjectID: "someone-else", Permission: "read"}},
+		IsNewFrame: true,
+	})
+	if err != nil {
+		t.Fatalf("seedUnreadableFrameDirect: %v", err)
+	}
+}
+
+func TestListReadable_FiltersByRBAC(t *testing.T) {
+	repo := store.NewMemory()
+	// Viewer in org o1 - not admin, so RBAC filtering actually applies.
+	ctx := seedOrg(t, repo, "v", "viewer")
+	svc := frames.NewService(repo)
+
+	// Seed both frames directly so grants are controlled precisely.
+	seedReadableFrameDirect(t, repo, context.Background())
+	seedUnreadableFrameDirect(t, repo, context.Background())
+
+	got, err := svc.ListReadable(ctx)
+	if err != nil {
+		t.Fatalf("ListReadable: %v", err)
+	}
+	names := map[string]bool{}
+	for _, f := range got {
+		names[f.Name] = true
+	}
+	if !names["alpha"] {
+		t.Error("expected readable frame 'alpha' in list")
+	}
+	if names["secret"] {
+		t.Error("unreadable frame 'secret' must not be listed (no existence leak)")
+	}
+	for _, f := range got {
+		if f.OrgSlug == "" || f.OrgDisplay == "" || f.Version == "" {
+			t.Errorf("ReadableFrame missing fields: %+v", f)
+		}
+	}
+}
+
+func TestResolveDoc_DeniedReadIsNotFound(t *testing.T) {
+	repo := store.NewMemory()
+	ctx := seedOrg(t, repo, "v", "viewer")
+	svc := frames.NewService(repo)
+
+	seedUnreadableFrameDirect(t, repo, context.Background())
+
+	_, err := svc.ResolveDoc(ctx, "openteams", "secret", "")
+	if err == nil {
+		t.Fatal("expected not-found error for unreadable frame")
+	}
+	if connect.CodeOf(err) != connect.CodeNotFound {
+		t.Errorf("want CodeNotFound, got %v", connect.CodeOf(err))
 	}
 }

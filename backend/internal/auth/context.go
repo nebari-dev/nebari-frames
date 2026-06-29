@@ -1,12 +1,16 @@
 package auth
 
-import "context"
+import (
+	"context"
+	"time"
+)
 
 // Claims holds the verified identity extracted from an OIDC token.
 type Claims struct {
 	Subject string
 	Email   string
 	Groups  []string
+	Expiry  time.Time // token expiration (exp claim); used by the MCP bearer middleware
 }
 
 type claimsKey struct{}
@@ -24,4 +28,11 @@ func ClaimsFromContext(ctx context.Context) (*Claims, bool) {
 		return nil, false
 	}
 	return c, true
+}
+
+// DevClaims returns a fresh copy of the fixed identity injected when
+// authentication is disabled (FRAMES_DEV_MODE). A new value is returned each
+// call so callers cannot mutate shared state.
+func DevClaims() *Claims {
+	return &Claims{Subject: "dev-user", Email: "dev@localhost"}
 }

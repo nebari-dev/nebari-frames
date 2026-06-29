@@ -16,11 +16,19 @@ import (
 // Server wraps the combined HTTP mux that serves /healthz and the FrameService.
 type Server struct{ handler http.Handler }
 
+// Mounter mounts additional routes (e.g. the MCP endpoint) onto a mux. Taking
+// this interface keeps the server package free of any dependency on the mcp
+// package; *mcp.Component satisfies it.
+type Mounter interface {
+	Mount(*http.ServeMux)
+}
+
 // New creates a Server mounting /healthz, /readyz, /auth/config (unauthenticated),
 // and the FrameService handler at its generated path. The auth interceptor is wired
 // in for the FrameService. When devMode is true, requests pass through with stub
-// claims and /readyz always returns 200.
-func New(repo store.Repository, validator auth.TokenValidator, authCfg auth.Config, devMode bool) *Server {
+// claims and /readyz always returns 200. Pass a non-nil mcpMounter to also mount
+// the MCP endpoint routes.
+func New(repo store.Repository, validator auth.TokenValidator, authCfg auth.Config, devMode bool, mcpMounter Mounter) *Server {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/healthz", func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
@@ -34,6 +42,9 @@ func New(repo store.Repository, validator auth.TokenValidator, authCfg auth.Conf
 		connect.WithInterceptors(interceptor),
 	)
 	mux.Handle(path, handler)
+	if mcpMounter != nil {
+		mcpMounter.Mount(mux)
+	}
 	mux.Handle("/", webui.NewHandler(webui.Assets(), webui.Config{IssuerURL: authCfg.IssuerURL}))
 	return &Server{handler: mux}
 }
