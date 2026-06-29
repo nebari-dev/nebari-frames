@@ -2,6 +2,7 @@ package mcp
 
 import (
 	"context"
+	"log"
 	"net/http"
 	"time"
 
@@ -11,6 +12,9 @@ import (
 	"github.com/nebari-dev/nebari-frames/backend/internal/auth"
 	"github.com/nebari-dev/nebari-frames/backend/internal/frames"
 )
+
+// compile-time assertion that the real service satisfies the adapter's interface.
+var _ FrameSource = (*frames.Service)(nil)
 
 // FrameSource is the subset of frames.Service the MCP adapter needs. Taking an
 // interface keeps the adapter testable with a stub. *frames.Service satisfies it.
@@ -37,8 +41,10 @@ func (rs *resourceServer) claimsFor(req *http.Request) *auth.Claims {
 }
 
 // getServer builds a per-request MCP server whose resources are the caller's
-// RBAC-readable frames. Invoked by the Streamable HTTP handler per request.
-// Returns nil (-> 400) when the caller cannot be identified or listing fails.
+// RBAC-readable frames. The list is rebuilt every request (not cached) so a
+// revoked grant takes effect immediately. Invoked by the Streamable HTTP
+// handler per request. Returns nil (-> 400) only when the caller cannot be
+// identified; a transient listing failure is logged and serves no resources.
 func (rs *resourceServer) getServer(req *http.Request) *gomcp.Server {
 	claims := rs.claimsFor(req)
 	if claims == nil {
@@ -47,7 +53,10 @@ func (rs *resourceServer) getServer(req *http.Request) *gomcp.Server {
 	ctx := auth.WithClaims(req.Context(), claims)
 	readable, err := rs.src.ListReadable(ctx)
 	if err != nil {
-		return nil
+		// The SDK turns a nil server into HTTP 400 (client error), which would
+		// misrepresent a backend fault. Log it and serve an empty resource set.
+		log.Printf("mcp: getServer: ListReadable failed, serving no resources: %v", err)
+		readable = nil
 	}
 	srv := gomcp.NewServer(&gomcp.Implementation{Name: "nebari-frames", Version: "v1"}, nil)
 	read := rs.readHandler(claims)

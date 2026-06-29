@@ -165,31 +165,45 @@ func (s *Service) PublishFrame(ctx context.Context, req *connect.Request[framesv
 	return connect.NewResponse(&framesv1.PublishFrameResponse{Frame: frame, Version: version}), nil
 }
 
-func (s *Service) ListFrames(ctx context.Context, _ *connect.Request[framesv1.ListFramesRequest]) (*connect.Response[framesv1.ListFramesResponse], error) {
+// readableFramesInOrg resolves the caller and returns the frames in their org
+// the caller may read (PermRead). It is the single RBAC read-filter path shared
+// by ListFrames and ListReadable so the rule cannot diverge between them.
+func (s *Service) readableFramesInOrg(ctx context.Context) (rbac.Caller, *framesv1.Org, []*framesv1.Frame, error) {
 	caller, err := s.resolveCaller(ctx)
 	if err != nil {
-		return nil, err
+		return rbac.Caller{}, nil, nil, err
 	}
 	org, err := s.repo.GetOrgByID(ctx, caller.OrgID)
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInternal, err)
+		return rbac.Caller{}, nil, nil, connect.NewError(connect.CodeInternal, err)
 	}
 	all, err := s.repo.ListFramesByOrg(ctx, caller.OrgID)
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInternal, err)
+		return rbac.Caller{}, nil, nil, connect.NewError(connect.CodeInternal, err)
+	}
+	readable := make([]*framesv1.Frame, 0, len(all))
+	for _, f := range all {
+		canRead, err := rbac.Can(ctx, s.lookup, caller, f.OrgId, f.Id, rbac.PermRead)
+		if err != nil {
+			return rbac.Caller{}, nil, nil, connect.NewError(connect.CodeInternal, err)
+		}
+		if canRead {
+			readable = append(readable, f)
+		}
+	}
+	return caller, org, readable, nil
+}
+
+func (s *Service) ListFrames(ctx context.Context, _ *connect.Request[framesv1.ListFramesRequest]) (*connect.Response[framesv1.ListFramesResponse], error) {
+	caller, org, readable, err := s.readableFramesInOrg(ctx)
+	if err != nil {
+		return nil, err
 	}
 	resp := &framesv1.ListFramesResponse{
 		CanCreate: rbac.CanPublish(caller),
 		Frames:    []*framesv1.FrameSummary{},
 	}
-	for _, f := range all {
-		canRead, err := rbac.Can(ctx, s.lookup, caller, f.OrgId, f.Id, rbac.PermRead)
-		if err != nil {
-			return nil, connect.NewError(connect.CodeInternal, err)
-		}
-		if !canRead {
-			continue
-		}
+	for _, f := range readable {
 		canEdit, err := rbac.Can(ctx, s.lookup, caller, f.OrgId, f.Id, rbac.PermEdit)
 		if err != nil {
 			return nil, connect.NewError(connect.CodeInternal, err)
@@ -284,27 +298,12 @@ type ReadableFrame struct {
 // ListReadable returns the caller's RBAC-readable frames in their org. It applies
 // the same Read check ListFrames uses; unreadable frames are omitted.
 func (s *Service) ListReadable(ctx context.Context) ([]ReadableFrame, error) {
-	caller, err := s.resolveCaller(ctx)
+	_, org, readable, err := s.readableFramesInOrg(ctx)
 	if err != nil {
 		return nil, err
 	}
-	org, err := s.repo.GetOrgByID(ctx, caller.OrgID)
-	if err != nil {
-		return nil, connect.NewError(connect.CodeInternal, err)
-	}
-	all, err := s.repo.ListFramesByOrg(ctx, caller.OrgID)
-	if err != nil {
-		return nil, connect.NewError(connect.CodeInternal, err)
-	}
-	out := []ReadableFrame{}
-	for _, f := range all {
-		canRead, err := rbac.Can(ctx, s.lookup, caller, f.OrgId, f.Id, rbac.PermRead)
-		if err != nil {
-			return nil, connect.NewError(connect.CodeInternal, err)
-		}
-		if !canRead {
-			continue
-		}
+	out := make([]ReadableFrame, 0, len(readable))
+	for _, f := range readable {
 		out = append(out, ReadableFrame{
 			OrgSlug:     org.Slug,
 			OrgDisplay:  org.DisplayName,

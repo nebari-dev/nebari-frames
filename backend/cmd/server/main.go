@@ -76,15 +76,17 @@ func main() {
 		mcpValidator = auth.NewLazyValidator(context.Background(), mcpAuthCfg)
 		log.Printf("MCP endpoint enabled (resource: %s)", mcpCfg.ResolvedAudience())
 	}
-	var mcpComponent *mcppkg.Component
+	// Kept as a server.Mounter (interface) so a disabled endpoint is a nil
+	// interface, not a typed-nil *Component that would satisfy a != nil check.
+	var mcpMounter server.Mounter
 	if mcpCfg.PublicURL != "" || devMode {
 		framesService := frames.NewService(repo)
-		mcpComponent = mcppkg.NewComponent(mcpCfg, framesService, mcpValidator)
+		mcpMounter = mcppkg.NewComponent(mcpCfg, framesService, mcpValidator)
 	}
 
 	srv := &http.Server{
 		Addr:              ":" + port,
-		Handler:           server.New(repo, validator, authCfg, devMode, mcpComponent).Handler(),
+		Handler:           server.New(repo, validator, authCfg, devMode, mcpMounter).Handler(),
 		ReadHeaderTimeout: 10 * time.Second,
 		ReadTimeout:       30 * time.Second,
 		WriteTimeout:      60 * time.Second,

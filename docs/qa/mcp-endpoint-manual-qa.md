@@ -363,7 +363,7 @@ Journeys 1, 6, 2 (negative), 7 (denied).
 
 ## Smoke checklist (quick pass/fail)
 
-- [ ] (T1) Server starts in dev mode; logs "MCP endpoint enabled at /mcp".
+- [ ] (T1) Server starts in dev mode; logs "WARNING: FRAMES_DEV_MODE=true ..." (no "MCP endpoint enabled" line in dev mode - that log is auth-mode only).
 - [ ] (T1, J5) `/.well-known/oauth-protected-resource` returns resource=`<url>/mcp`, the issuer, and non-empty scopes.
 - [ ] (T1, J8) MCP Inspector connects to `/mcp` with no token.
 - [ ] (T1, J2+) List shows the seeded frames with `name (Org)` labels and `nebari-frame://` URIs.

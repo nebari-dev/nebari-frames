@@ -3,6 +3,7 @@ package mcp_test
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -11,21 +12,36 @@ import (
 	gomcp "github.com/modelcontextprotocol/go-sdk/mcp"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
+	"github.com/nebari-dev/nebari-frames/backend/internal/auth"
 	"github.com/nebari-dev/nebari-frames/backend/internal/frames"
 	mcppkg "github.com/nebari-dev/nebari-frames/backend/internal/mcp"
 	"github.com/nebari-dev/nebari-frames/backend/internal/store"
 	framesv1 "github.com/nebari-dev/nebari-frames/gen/go/frames/v1"
 )
 
-// newTestServer builds an httptest server mounting only the MCP component.
-// Pass nil verifier - tests 1 and 2 use non-dev cfg but never present a token;
-// test 3 uses DevMode:true so the verifier is not consulted.
+// stubVerifier satisfies auth.TokenValidator for non-dev wiring tests without a
+// live OIDC provider. Tokenless requests are rejected by the bearer middleware
+// before Validate is ever reached, so it only needs to be non-nil.
+type stubVerifier struct{}
+
+func (stubVerifier) Validate(context.Context, string) (*auth.Claims, error) {
+	return nil, errors.New("stub: no validation")
+}
+
+// newTestServer builds an httptest server mounting only the MCP component. In
+// non-dev mode it supplies a stub verifier (Mount requires one); the metadata
+// and 401-challenge tests never present a token, and the dev-mode test sets
+// DevMode:true so the verifier is not consulted.
 func newTestServer(t *testing.T, cfg mcppkg.Config) (*httptest.Server, *store.Memory) {
 	t.Helper()
 	mem := store.NewMemory()
 	seedOrgAndReadableFrame(t, mem)
 	svc := frames.NewService(mem)
-	comp := mcppkg.NewComponent(cfg, svc, nil)
+	var verifier auth.TokenValidator
+	if !cfg.DevMode {
+		verifier = stubVerifier{}
+	}
+	comp := mcppkg.NewComponent(cfg, svc, verifier)
 	mux := http.NewServeMux()
 	comp.Mount(mux)
 	srv := httptest.NewServer(mux)

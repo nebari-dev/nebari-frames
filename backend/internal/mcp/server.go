@@ -29,6 +29,11 @@ func NewComponent(cfg Config, src FrameSource, verifier auth.TokenValidator) *Co
 //   - GET /.well-known/oauth-protected-resource - public RFC 9728 metadata
 //   - /mcp - Streamable HTTP MCP endpoint (bearer-protected in non-dev mode)
 func (c *Component) Mount(mux *http.ServeMux) {
+	// Fail fast at startup on a wiring bug: a bearer-protected endpoint with no
+	// validator would otherwise panic at request time on the first token.
+	if !c.cfg.DevMode && c.verifier == nil {
+		panic("mcp: non-dev mode requires a non-nil TokenValidator")
+	}
 	mux.Handle("/.well-known/oauth-protected-resource", metadataHandler(c.cfg))
 
 	rs := &resourceServer{src: c.src, cfg: c.cfg}

@@ -3,6 +3,7 @@ package mcp
 import (
 	"context"
 	"errors"
+	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
@@ -15,10 +16,11 @@ import (
 type stubSource struct {
 	readable []frames.ReadableFrame
 	docs     map[string]*frames.Doc // key: org/name
+	listErr  error
 }
 
 func (s stubSource) ListReadable(context.Context) ([]frames.ReadableFrame, error) {
-	return s.readable, nil
+	return s.readable, s.listErr
 }
 func (s stubSource) ResolveDoc(_ context.Context, org, name, _ string) (*frames.Doc, error) {
 	d, ok := s.docs[org+"/"+name]
@@ -81,4 +83,27 @@ func TestReadHandler(t *testing.T) {
 			t.Fatal("expected not-found for malformed URI")
 		}
 	})
+}
+
+// A transient ListReadable failure must not produce a nil server: the SDK turns
+// a nil server into HTTP 400 (client error), misrepresenting a backend fault.
+// getServer should log and serve an empty resource set instead.
+func TestGetServer_ListErrorServesEmptyNotNil(t *testing.T) {
+	rs := &resourceServer{src: stubSource{listErr: errors.New("db down")}, cfg: Config{DevMode: true}}
+	req := httptest.NewRequest("POST", "/mcp", nil)
+	if srv := rs.getServer(req); srv == nil {
+		t.Fatal("getServer returned nil on ListReadable error; want non-nil empty server (avoids HTTP 400)")
+	}
+}
+
+// Constructing the bearer-protected endpoint without a validator is a wiring
+// bug; Mount must fail fast at startup rather than panic at request time.
+func TestMount_PanicsWhenNonDevAndNilVerifier(t *testing.T) {
+	defer func() {
+		if r := recover(); r == nil {
+			t.Fatal("expected panic: non-dev mode with nil verifier")
+		}
+	}()
+	c := NewComponent(Config{DevMode: false, PublicURL: "https://frames.example.com"}, stubSource{}, nil)
+	c.Mount(http.NewServeMux())
 }
