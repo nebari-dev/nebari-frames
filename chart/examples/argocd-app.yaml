@@ -6,28 +6,28 @@ metadata:
 spec:
   project: default
   source:
-    repoURL: https://nebari-dev.github.io/helm-repository
-    chart: nebari-frames
-    targetRevision: 0.1.0
+    repoURL: https://github.com/nebari-dev/nebari-frames.git
+    targetRevision: main
+    path: chart
     helm:
-      valueFiles:
-        - values.yaml
       values: |
         nebariapp:
           enabled: true
-          hostname: frames.example.nebari.dev
+          hostname: REPLACE_ME.example.nebari.dev
+          gateway: public
           auth:
             enabled: true
         seed:
           orgSlug: openteams
           orgDisplayName: OpenTeams
-          adminEmail: admin@example.com
+          adminEmail: REPLACE_ME@example.com
+        mcp:
+          enabled: true
+        image:
+          tag: REPLACE_ME   # the pushed <IMG_TAG> from Task 6
   destination:
     server: https://kubernetes.default.svc
     namespace: nebari-frames
   syncPolicy:
-    automated:
-      prune: true
-      selfHeal: true
-    syncOptions:
-      - CreateNamespace=true
+    automated: { prune: true, selfHeal: true }
+    syncOptions: [CreateNamespace=true]
