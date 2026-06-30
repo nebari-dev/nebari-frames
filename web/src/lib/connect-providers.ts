@@ -46,7 +46,7 @@ export const connectProviders: ConnectProvider[] = [
   {
     id: "chatgpt",
     name: "ChatGPT",
-    blurb: "Add the Hub as a custom connector in ChatGPT (Developer Mode) and use your Frames via the list_frames and get_frame tools.",
+    blurb: "Add the Hub as a custom app in ChatGPT (Developer mode) and use your Frames via the list_frames and get_frame tools.",
     status: "available",
     lastVerified: "2026-06-30",
     verifyPrompt:
@@ -54,15 +54,15 @@ export const connectProviders: ConnectProvider[] = [
     steps: [
       {
         title: "Enable Developer Mode",
-        body: "In ChatGPT, open **Settings**, then **Connectors**, then **Advanced settings**, and turn on **Developer Mode**. Custom connectors are available on the Pro, Team, Enterprise, and Edu plans.",
+        body: "In ChatGPT, open **Settings**, then **Apps**, then **Advanced settings**, and turn on **Developer mode**. ChatGPT Apps are available on all plans; your workspace admin must allow developer mode.",
       },
       {
-        title: "Create the connector",
-        body: "Back on **Connectors**, click **Create**. Name it `Nebari Frames`, paste the **Connector URL** above into the URL field, and set **Authentication** to **OAuth**. Submit to continue.",
+        title: "Create the app",
+        body: "Back on **Apps**, click **Create** to open the **New App** dialog. Set the **Name** to `Nebari Frames`, keep **Connection** on **Server URL** and paste the **Connector URL** above, and set **Authentication** to **OAuth**. Tick **I understand and want to continue**, then click **Create**.",
       },
       {
         title: "Authorize access",
-        body: "ChatGPT registers itself and opens the Hub's sign-in page. Log in and approve. Only read access to the Frames you are entitled to is granted; the connector cannot publish or change Frames.",
+        body: "ChatGPT registers itself via Dynamic Client Registration and opens the Hub's sign-in page. Log in and approve. Only read access to the Frames you are entitled to is granted; the app cannot publish or change Frames.",
       },
       {
         title: "Use your Frames in a chat",
