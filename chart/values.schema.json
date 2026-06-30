@@ -59,6 +59,7 @@
         "hostname": { "type": "string" },
         "gateway": { "type": "string", "enum": ["public", "internal"] },
         "routing": { "type": "object" },
+        "landingPage": { "type": "object" },
         "auth": {
           "type": "object",
           "additionalProperties": false,

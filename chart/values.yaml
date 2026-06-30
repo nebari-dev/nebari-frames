@@ -51,6 +51,14 @@ nebariapp:
         pathType: PathPrefix
     tls:
       enabled: true
+  # Tile on the Nebari landing page. The operator advertises it via the app's
+  # serviceDiscovery status; tile visibility follows nebariapp.auth. externalUrl
+  # defaults to https://<hostname>.
+  landingPage:
+    enabled: true
+    displayName: Frames
+    description: Reusable context Frames for AI assistants, with a remote MCP endpoint.
+    category: Platform
   auth:
     enabled: true
     scopes:
