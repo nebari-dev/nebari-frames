@@ -58,6 +58,7 @@
         "enabled": { "type": "boolean" },
         "hostname": { "type": "string" },
         "gateway": { "type": "string", "enum": ["public", "internal"] },
+        "routing": { "type": "object" },
         "auth": {
           "type": "object",
           "additionalProperties": false,
