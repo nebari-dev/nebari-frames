@@ -29,6 +29,12 @@ With `nebariapp.enabled: true`, the operator provisions the route, TLS certifica
 
 Expect the pod to report NotReady at first. The readiness probe (`/readyz`) returns 503 until OIDC discovery against the issuer succeeds. This is normal during startup while the operator finishes wiring up the OIDC client; the pod goes Ready once discovery works.
 
+## Prerequisites
+
+- A current-release NIC dev cluster with the nebari-operator, Envoy Gateway, cert-manager, and Keycloak.
+- The target namespace labeled `nebari.dev/managed=true`.
+- For the MCP endpoint with Claude: the realm must have Dynamic Client Registration enabled and an audience mapper on a default client scope stamping `aud=https://<host>/mcp`. See `docs/connect/keycloak-setup.md`.
+
 ## First admin
 
 Set `seed.adminEmail` to the email of your first administrator:
@@ -49,6 +55,14 @@ helm install frames . -n nebari-frames -f examples/standalone-values.yaml
 ```
 
 This runs in dev mode with authentication disabled and is meant for local use only. In dev mode the identity is fixed to `dev-user` / `dev@localhost`, so `seed.adminEmail` has no effect here. It only takes effect once real OIDC is configured (either through NebariApp or a self-managed `auth.oidc.*` block).
+
+## Known Limitations (Alpha)
+
+- MCP/Claude requires manual Keycloak realm config (DCR + default-scope audience mapper); operator-native support is pending.
+- Wrong-audience rejection and RBAC-negative read isolation are verified in automated/local tests but are not gated in the live Alpha demo.
+- No CI yet; the container image is built and pushed manually.
+- The chart is not yet published to the Nebari helm-repository; ArgoCD syncs it from the git repository.
+- SQLite is single-writer: `replicaCount` must stay 1.
 
 ## Values reference
 
@@ -76,6 +90,8 @@ This runs in dev mode with authentication disabled and is meant for local use on
 | `nebariapp.gateway` | Gateway the operator attaches the route to. Defaults to `public`. |
 | `nebariapp.auth.enabled` | When `true`, the operator provisions OIDC clients and the app uses them. |
 | `nebariapp.auth.scopes` | OIDC scopes requested. Defaults to `openid`, `profile`, `email`. |
+| `mcp.enabled` | Mount the `/mcp` endpoint when a public URL is derivable | `true` |
+| `mcp.publicUrl` | Override the MCP public URL (else `https://<nebariapp.hostname>`) | `""` |
 
 Auth mode is chosen fail-closed: if `nebariapp.enabled` and `nebariapp.auth.enabled` are both true, the app uses the operator-provided OIDC secret. Otherwise, if `auth.devMode` is true, it runs with no auth. Otherwise it uses the self-managed `auth.oidc.*` values.
 
