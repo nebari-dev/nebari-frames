@@ -107,3 +107,63 @@ func TestMount_PanicsWhenNonDevAndNilVerifier(t *testing.T) {
 	c := NewComponent(Config{DevMode: false, PublicURL: "https://frames.example.com"}, stubSource{}, nil)
 	c.Mount(http.NewServeMux())
 }
+
+// toolText concatenates the text content of a tool result.
+func toolText(res *gomcp.CallToolResult) string {
+	var b strings.Builder
+	for _, c := range res.Content {
+		if tc, ok := c.(*gomcp.TextContent); ok {
+			b.WriteString(tc.Text)
+		}
+	}
+	return b.String()
+}
+
+func TestListFramesTool(t *testing.T) {
+	src := stubSource{readable: []frames.ReadableFrame{
+		{OrgSlug: "openteams", OrgDisplay: "OpenTeams", Name: "alpha", Version: "1.0.0", Description: "A"},
+		{OrgSlug: "openteams", OrgDisplay: "OpenTeams", Name: "beta", Version: "2.0.0", Description: "B"},
+	}}
+	rs := &resourceServer{src: src, cfg: Config{DevMode: true}}
+	h := rs.listFramesTool(auth.DevClaims())
+	res, _, err := h(context.Background(), &gomcp.CallToolRequest{}, listFramesInput{})
+	if err != nil {
+		t.Fatalf("list_frames: %v", err)
+	}
+	txt := toolText(res)
+	if !strings.Contains(txt, "alpha") || !strings.Contains(txt, "beta") {
+		t.Errorf("list_frames output missing frames: %q", txt)
+	}
+}
+
+func TestGetFrameTool(t *testing.T) {
+	src := stubSource{
+		readable: []frames.ReadableFrame{{OrgSlug: "openteams", OrgDisplay: "OpenTeams", Name: "alpha", Version: "1.0.0", Description: "A"}},
+		docs:     map[string]*frames.Doc{"openteams/alpha": {Name: "alpha", Description: "A", Version: "1.0.0", Slots: frames.Slots{Rules: []string{"r1"}}}},
+	}
+	rs := &resourceServer{src: src, cfg: Config{DevMode: true}}
+	h := rs.getFrameTool(auth.DevClaims())
+
+	t.Run("returns composed markdown for a readable frame", func(t *testing.T) {
+		res, _, err := h(context.Background(), &gomcp.CallToolRequest{}, getFrameInput{Name: "alpha"})
+		if err != nil {
+			t.Fatalf("get_frame: %v", err)
+		}
+		if res.IsError {
+			t.Fatalf("unexpected IsError; text=%q", toolText(res))
+		}
+		if !strings.Contains(toolText(res), "# Frame: alpha") {
+			t.Errorf("get_frame missing composed markdown: %q", toolText(res))
+		}
+	})
+
+	t.Run("unknown or unreadable frame -> not-found error result", func(t *testing.T) {
+		res, _, err := h(context.Background(), &gomcp.CallToolRequest{}, getFrameInput{Name: "ghost"})
+		if err != nil {
+			t.Fatalf("get_frame: %v", err)
+		}
+		if !res.IsError {
+			t.Errorf("expected IsError result for unknown frame, got: %q", toolText(res))
+		}
+	})
+}
