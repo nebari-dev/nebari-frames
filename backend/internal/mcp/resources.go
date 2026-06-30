@@ -2,8 +2,10 @@ package mcp
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"net/http"
+	"strings"
 	"time"
 
 	mcpauth "github.com/modelcontextprotocol/go-sdk/auth"
@@ -74,6 +76,19 @@ func (rs *resourceServer) getServer(req *http.Request) *gomcp.Server {
 		Name:        "Nebari Frame",
 		MIMEType:    "text/markdown",
 	}, read)
+
+	// Tools, for MCP clients that invoke tools in-conversation (e.g. Claude.ai),
+	// where passive resources are not reachable. Same RBAC + per-request claims
+	// as the resources; thin wrappers over ListReadable/ResolveDoc.
+	gomcp.AddTool(srv, &gomcp.Tool{
+		Name:        "list_frames",
+		Description: "List the Frames the current user can read in their organization (name, version, description). Call this to discover available Frames.",
+	}, rs.listFramesTool(claims))
+	gomcp.AddTool(srv, &gomcp.Tool{
+		Name:        "get_frame",
+		Description: "Get the full composed Markdown of a Frame by name (optionally a specific version). Use this to load an organization Frame as context before writing.",
+	}, rs.getFrameTool(claims))
+
 	return srv
 }
 
@@ -98,4 +113,74 @@ func (rs *resourceServer) readHandler(claims *auth.Claims) gomcp.ResourceHandler
 			Contents: []*gomcp.ResourceContents{{URI: uri, MIMEType: "text/markdown", Text: md}},
 		}, nil
 	}
+}
+
+// listFramesInput takes no arguments (lists the caller's readable frames).
+type listFramesInput struct{}
+
+// listFramesTool lists the caller's RBAC-readable Frames. It closes over the
+// per-request caller claims (like readHandler) and reuses ListReadable.
+func (rs *resourceServer) listFramesTool(claims *auth.Claims) gomcp.ToolHandlerFor[listFramesInput, any] {
+	return func(ctx context.Context, _ *gomcp.CallToolRequest, _ listFramesInput) (*gomcp.CallToolResult, any, error) {
+		ctx = auth.WithClaims(ctx, claims)
+		readable, err := rs.src.ListReadable(ctx)
+		if err != nil {
+			return errorResult("could not list frames"), nil, nil
+		}
+		if len(readable) == 0 {
+			return textResult("No readable Frames in your organization."), nil, nil
+		}
+		var b strings.Builder
+		for _, f := range readable {
+			fmt.Fprintf(&b, "- %s@%s: %s\n", f.Name, f.Version, f.Description)
+		}
+		return textResult(b.String()), nil, nil
+	}
+}
+
+// getFrameInput selects a Frame by name (and optional version).
+type getFrameInput struct {
+	Name    string `json:"name" jsonschema:"the Frame name, e.g. nebari-platform"`
+	Version string `json:"version,omitempty" jsonschema:"optional version; defaults to the latest"`
+}
+
+// getFrameTool returns a Frame's composed Markdown. It finds the named frame
+// among the caller's readable frames (RBAC) to resolve its org, then composes
+// it. Unknown or unreadable names return an error result (no existence leak).
+func (rs *resourceServer) getFrameTool(claims *auth.Claims) gomcp.ToolHandlerFor[getFrameInput, any] {
+	return func(ctx context.Context, _ *gomcp.CallToolRequest, in getFrameInput) (*gomcp.CallToolResult, any, error) {
+		ctx = auth.WithClaims(ctx, claims)
+		readable, err := rs.src.ListReadable(ctx)
+		if err != nil {
+			return errorResult("could not load frame"), nil, nil
+		}
+		var match *frames.ReadableFrame
+		for i := range readable {
+			if readable[i].Name == in.Name {
+				match = &readable[i]
+				break
+			}
+		}
+		if match == nil {
+			return errorResult("frame not found: " + in.Name), nil, nil
+		}
+		version := in.Version
+		if version == "" {
+			version = match.Version
+		}
+		doc, err := rs.src.ResolveDoc(ctx, match.OrgSlug, in.Name, version)
+		if err != nil {
+			return errorResult("frame not found: " + in.Name), nil, nil
+		}
+		return textResult(composeMarkdown(doc, time.Now())), nil, nil
+	}
+}
+
+// textResult / errorResult build single-text-content tool results.
+func textResult(s string) *gomcp.CallToolResult {
+	return &gomcp.CallToolResult{Content: []gomcp.Content{&gomcp.TextContent{Text: s}}}
+}
+
+func errorResult(s string) *gomcp.CallToolResult {
+	return &gomcp.CallToolResult{IsError: true, Content: []gomcp.Content{&gomcp.TextContent{Text: s}}}
 }
