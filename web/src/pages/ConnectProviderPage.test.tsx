@@ -33,9 +33,9 @@ it("renders a not-available state for an unknown provider", () => {
   );
 });
 
-it("renders a not-available state for a coming-soon provider", () => {
+it("renders steps and the connector URL for the now-available ChatGPT provider", () => {
   renderAt("/connect/chatgpt");
-  expect(screen.getByText(/not available yet/i)).toBeInTheDocument();
-  // no setup steps for coming-soon
-  expect(screen.queryByText(/open connector settings/i)).not.toBeInTheDocument();
+  expect(screen.getByRole("heading", { name: /chatgpt/i })).toBeInTheDocument();
+  expect(screen.getByText(`${window.location.origin}/mcp`)).toBeInTheDocument();
+  expect(screen.getByText(/enable developer mode/i)).toBeInTheDocument();
 });
