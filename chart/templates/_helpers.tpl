@@ -25,3 +25,15 @@ app.kubernetes.io/instance: {{ .Release.Name }}
 {{- define "nebari-frames.oidcSecretName" -}}
 {{- printf "%s-oidc-client" (include "nebari-frames.fullname" .) -}}
 {{- end -}}
+
+{{/*
+Public URL for the MCP endpoint: explicit mcp.publicUrl, else derived from the
+NebariApp hostname. Empty string when neither is available (endpoint stays off).
+*/}}
+{{- define "nebari-frames.mcpPublicUrl" -}}
+{{- if .Values.mcp.publicUrl -}}
+{{- .Values.mcp.publicUrl -}}
+{{- else if .Values.nebariapp.enabled -}}
+{{- printf "https://%s" (required "nebariapp.hostname is required when mcp.enabled and mcp.publicUrl is unset" .Values.nebariapp.hostname) -}}
+{{- end -}}
+{{- end -}}

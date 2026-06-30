@@ -1,18 +1,15 @@
-# Deploy on a Nebari cluster. The operator provisions routing, TLS, and OIDC
-# clients, and writes the secret the Deployment reads.
+# Deploy on a Nebari cluster. Change only `nebariapp.hostname` (and optionally
+# the seed values). The operator provisions routing, TLS, and OIDC clients.
 nebariapp:
   enabled: true
-  hostname: frames.example.nebari.dev
+  hostname: REPLACE_ME.example.nebari.dev   # the ONLY required edit
   gateway: public
   auth:
     enabled: true
-    scopes:
-      - openid
-      - profile
-      - email
+    scopes: [openid, profile, email]
 seed:
   orgSlug: openteams
   orgDisplayName: OpenTeams
   adminEmail: admin@example.com
-image:
-  tag: dev
+mcp:
+  enabled: true

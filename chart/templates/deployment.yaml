@@ -34,6 +34,13 @@ spec:
               value: {{ .Values.service.port | quote }}
             - name: DB_PATH
               value: {{ printf "%s/%s" .Values.persistence.mountPath .Values.persistence.dbFile | quote }}
+            {{- if .Values.mcp.enabled }}
+            {{- $mcpURL := include "nebari-frames.mcpPublicUrl" . }}
+            {{- if $mcpURL }}
+            - name: FRAMES_PUBLIC_URL
+              value: {{ $mcpURL | quote }}
+            {{- end }}
+            {{- end }}
             {{- if .Values.seed.orgSlug }}
             - name: SEED_ORG_SLUG
               value: {{ .Values.seed.orgSlug | quote }}
