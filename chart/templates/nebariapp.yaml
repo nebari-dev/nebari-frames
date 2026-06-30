@@ -16,6 +16,10 @@ spec:
   routing:
     {{- toYaml . | nindent 4 }}
   {{- end }}
+  {{- with .Values.nebariapp.landingPage }}
+  landingPage:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
   {{- if .Values.nebariapp.auth.enabled }}
   auth:
     enabled: true
