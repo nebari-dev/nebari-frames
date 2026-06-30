@@ -67,6 +67,14 @@
           }
         }
       }
+    },
+    "mcp": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "publicUrl": { "type": "string" }
+      }
     }
   }
 }

@@ -48,3 +48,9 @@ nebariapp:
       - openid
       - profile
       - email
+
+# MCP endpoint. Enabled by default; mounts only when a public URL is derivable
+# (mcp.publicUrl, else https://<nebariapp.hostname> when nebariapp.enabled).
+mcp:
+  enabled: true
+  publicUrl: ""
