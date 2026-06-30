@@ -12,6 +12,10 @@ spec:
   service:
     name: {{ include "nebari-frames.fullname" . }}
     port: {{ .Values.service.port }}
+  {{- with .Values.nebariapp.routing }}
+  routing:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
   {{- if .Values.nebariapp.auth.enabled }}
   auth:
     enabled: true

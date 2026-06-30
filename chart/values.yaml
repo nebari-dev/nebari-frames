@@ -42,6 +42,15 @@ nebariapp:
   enabled: false
   hostname: ""
   gateway: public
+  # Routing + TLS the nebari-operator uses to create the HTTPRoute and
+  # certificate. Without this the operator reports RoutingNotConfigured /
+  # TLSDisabled and the hostname is unreachable.
+  routing:
+    routes:
+      - pathPrefix: /
+        pathType: PathPrefix
+    tls:
+      enabled: true
   auth:
     enabled: true
     scopes:
