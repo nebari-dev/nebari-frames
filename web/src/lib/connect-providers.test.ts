@@ -10,7 +10,7 @@ describe("connect-providers", () => {
     expect(claude!.lastVerified).toMatch(/^\d{4}-\d{2}-\d{2}$/);
   });
 
-  it("marks every available provider with non-empty steps and a coming-soon provider with none", () => {
+  it("gives every available provider non-empty steps and a verified date, and any coming-soon provider none", () => {
     for (const p of connectProviders) {
       if (p.status === "available") {
         expect(p.steps && p.steps.length).toBeGreaterThan(0);
@@ -19,8 +19,14 @@ describe("connect-providers", () => {
         expect(p.steps).toBeUndefined();
       }
     }
-    // at least one coming-soon provider exists (ChatGPT / Gemini)
-    expect(connectProviders.some((p) => p.status === "coming-soon")).toBe(true);
+  });
+
+  it("exposes ChatGPT and Gemini as live providers with steps", () => {
+    for (const id of ["chatgpt", "gemini"]) {
+      const p = getConnectProvider(id);
+      expect(p?.status).toBe("available");
+      expect(p?.steps && p.steps.length).toBeGreaterThan(0);
+    }
   });
 
   it("returns undefined for an unknown id", () => {
