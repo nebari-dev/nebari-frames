@@ -36,8 +36,8 @@ echo "starting backend on :$PORT (dev mode, fixture seeded)..."
 ./nebari-frames-server &
 backend_pid=$!
 
-echo "installing web deps (if needed) and starting Vite on :5173..."
-( cd web && npm install --no-audit --no-fund >/dev/null 2>&1; exec npm run dev ) &
+echo "installing web deps and starting Vite on :5173..."
+( cd web && npm install --no-audit --no-fund >/dev/null && exec npm run dev ) &
 web_pid=$!
 
 echo
@@ -45,4 +45,8 @@ echo "  Backend:  http://localhost:$PORT"
 echo "  Web (UI): http://localhost:5173   <-- open this"
 echo "  Ctrl-C to stop both."
 echo
-wait
+# Exit as soon as either process dies; the EXIT trap cleans up the survivor.
+while kill -0 "$backend_pid" 2>/dev/null && kill -0 "$web_pid" 2>/dev/null; do
+  sleep 1
+done
+echo "a dev process exited - shutting down the other..."
