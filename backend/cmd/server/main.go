@@ -12,6 +12,7 @@ import (
 	_ "modernc.org/sqlite"
 
 	"github.com/nebari-dev/nebari-frames/backend/internal/auth"
+	"github.com/nebari-dev/nebari-frames/backend/internal/devfixture"
 	"github.com/nebari-dev/nebari-frames/backend/internal/frames"
 	mcppkg "github.com/nebari-dev/nebari-frames/backend/internal/mcp"
 	"github.com/nebari-dev/nebari-frames/backend/internal/seed"
@@ -43,6 +44,13 @@ func main() {
 		AdminEmail:     os.Getenv("SEED_ADMIN_EMAIL"),
 	}); err != nil {
 		log.Fatalf("seed: %v", err)
+	}
+
+	if os.Getenv("SEED_DEV_FIXTURE") == "true" {
+		if err := devfixture.Load(context.Background(), repo, os.Getenv("SEED_ORG_SLUG")); err != nil {
+			log.Fatalf("dev fixture: %v", err)
+		}
+		log.Println("SEED_DEV_FIXTURE=true - seeded representative local-dev fixture data")
 	}
 
 	authCfg := auth.Config{
