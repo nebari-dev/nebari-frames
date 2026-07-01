@@ -12,6 +12,7 @@ export function AdminHomePage() {
       <ul className="space-y-2">
         <li><Link to="/admin/members" className="text-primary hover:underline">Manage members</Link></li>
         <li><Link to="/admin/frames" className="text-primary hover:underline">Manage frames</Link></li>
+        <li><Link to="/hierarchy" className="text-primary hover:underline">Frame hierarchy</Link></li>
       </ul>
     </div>
   );

@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { Link, useParams } from "react-router";
+import { GitFork } from "lucide-react";
 import { useQuery } from "@connectrpc/connect-query";
 import { Code, ConnectError } from "@connectrpc/connect";
 import { timestampDate } from "@bufbuild/protobuf/wkt";
@@ -125,6 +126,13 @@ export function FrameDetailPage() {
       </div>
       <aside className="space-y-4">
         <UseThisFrame org={org} name={name} />
+        <Link
+          to={`/hierarchy?focus=${org}/${name}`}
+          className="flex items-center gap-2 text-sm text-primary hover:underline"
+        >
+          <GitFork className="size-4" />
+          View in hierarchy
+        </Link>
         <InheritanceTrail parents={resp.extends} />
         {(resp.excludes?.length ?? 0) > 0 && (
           <div className="text-sm">
