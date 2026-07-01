@@ -17,7 +17,12 @@ export function Dialog({
       role="presentation"
       onClick={() => onOpenChange(false)}
     >
-      <div role="dialog" aria-modal="true" onClick={(e) => e.stopPropagation()}>
+      <div
+        role="dialog"
+        aria-modal="true"
+        className="flex w-full max-w-[calc(100vw-2rem)] justify-center"
+        onClick={(e) => e.stopPropagation()}
+      >
         {children}
       </div>
     </div>

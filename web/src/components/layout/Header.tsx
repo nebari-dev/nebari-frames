@@ -61,14 +61,14 @@ export function Header() {
             <NavLink to="/" end className={navItemClass}>
               Frames
             </NavLink>
-            <NavLink to="/connect" className={navItemClass}>
-              Connect
-            </NavLink>
             {me?.role === "admin" && (
               <NavLink to="/admin" className={navItemClass}>
                 Admin
               </NavLink>
             )}
+            <NavLink to="/connect" className={navItemClass}>
+              Connect
+            </NavLink>
           </nav>
         </div>
 

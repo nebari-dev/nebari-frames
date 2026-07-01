@@ -34,10 +34,13 @@ it("renders members with active and pending status", () => {
   expect(screen.getByText(/pending/i)).toBeInTheDocument();
 });
 
-it("submits an add-member form", async () => {
+it("submits an add-member form from the modal", async () => {
   useQueryMock.mockReturnValue({ isLoading: false, error: null, data: { members: [] } });
   render(<MemoryRouter><AdminMembersPage /></MemoryRouter>);
-  await userEvent.type(screen.getByLabelText(/email/i), "new@x.io");
+  // The form lives in a modal opened by the header trigger.
   await userEvent.click(screen.getByRole("button", { name: /add member/i }));
+  await userEvent.type(screen.getByLabelText(/email/i), "new@x.io");
+  const buttons = screen.getAllByRole("button", { name: /add member/i });
+  await userEvent.click(buttons[buttons.length - 1]);
   expect(addMutate).toHaveBeenCalled();
 });

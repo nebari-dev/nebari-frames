@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Link } from "react-router";
 import { useQuery } from "@connectrpc/connect-query";
 import { FrameService } from "@gen/frames/v1/frame_service_pb";
-import { Search } from "lucide-react";
+import { Plus, Search } from "lucide-react";
 import { filterFrames } from "@/lib/filter";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -47,7 +47,10 @@ export function CatalogPage() {
           />
         </div>
         {data?.canCreate && (
-          <Button render={<Link to="/frames/new" />}>Create new Frame</Button>
+          <Button render={<Link to="/frames/new" />}>
+            <Plus />
+            Create new Frame
+          </Button>
         )}
       </div>
       {frames.length === 0 ? (
