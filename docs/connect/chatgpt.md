@@ -7,8 +7,9 @@ tools in the conversation.
 
 ## Prerequisites
 
-- **ChatGPT plan with Developer Mode:** custom connectors run through Developer
-  Mode, available on **Pro, Team, Enterprise, and Edu** plans.
+- **ChatGPT with Developer mode:** custom MCP apps run through Developer mode.
+  ChatGPT Apps are available on **all plans** (as of 2025-11-13); your workspace
+  admin must permit developer mode.
 - **A Keycloak account in the cluster's realm** (e.g. `nebari` at
   `https://keycloak.<domain>`).
 - **The realm must allow DCR from ChatGPT's host.** ChatGPT registers from
@@ -21,19 +22,20 @@ tools in the conversation.
 
 ## Steps
 
-1. In ChatGPT, open **Settings → Connectors → Advanced settings** and enable
-   **Developer Mode**.
-2. Back on **Connectors**, click **Create**.
+1. In ChatGPT, open **Settings → Apps → Advanced settings** and turn on
+   **Developer mode**.
+2. Back on **Apps**, click **Create** to open the **New App** dialog.
 3. Fill in:
    - **Name:** `Nebari Frames`
-   - **MCP server URL:** `https://<frames-host>/mcp`
+   - **Connection:** leave on **Server URL** (not **Tunnel**), and paste
+     `https://<frames-host>/mcp`
      (e.g. `https://frames.dcmcand-llm.openteams.dev/mcp`)
    - **Authentication:** `OAuth`
-4. Click **Create**. ChatGPT reads the protected-resource metadata, registers a
-   client via DCR, and opens the OAuth login. **Sign in with your Nebari
-   (Keycloak) account** and approve.
-5. The connector shows **connected** with two tools: `list_frames` and
-   `get_frame`.
+4. Tick **"I understand and want to continue"**, then click **Create**. ChatGPT
+   reads the protected-resource metadata and registers a client via **DCR**
+   (CIMD is skipped because the server doesn't advertise it), then opens the
+   OAuth login. **Sign in with your Nebari (Keycloak) account** and approve.
+5. The app shows **connected** with two tools: `list_frames` and `get_frame`.
 
 ## Using it
 
@@ -49,6 +51,10 @@ load the content, and writes grounded in that Frame (respecting its rules).
 - **"Couldn't register" / registration error:** the realm's Trusted Hosts policy
   is rejecting ChatGPT's host. Allow `chatgpt.com` (or all hosts) for anonymous
   DCR.
+- **Registration fails on scopes:** ChatGPT requests `openid email profile` by
+  default. Keycloak's DCR "Allowed Client Scopes" policy must permit each of
+  them; if only `openid` is allowed, add `email` and `profile` (see
+  keycloak-setup.md).
 - **Connects but tool calls 401:** the token lacks the `/mcp` audience. Confirm
   the audience mapper is on a scope every client gets (see keycloak-setup.md).
 - **No tools shown:** confirm the server is the tool-bearing build (it exposes
