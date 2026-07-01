@@ -1,6 +1,9 @@
 import { env } from "@/lib/env";
 
 export interface AuthConfig {
+  // False when the backend runs with auth disabled (FRAMES_DEV_MODE): no OIDC
+  // provider exists and issuer/clientId are empty. See server.go authConfigResponse.
+  enabled: boolean;
   issuer: string;
   clientId: string;
 }
@@ -11,7 +14,16 @@ export async function fetchAuthConfig(): Promise<AuthConfig> {
   if (!res.ok) {
     throw new Error(`auth config request failed: ${res.status}`);
   }
-  // Backend emits snake_case issuer_url / client_id (server.go authConfigResponse).
-  const body = (await res.json()) as { issuer_url: string; client_id: string };
-  return { issuer: body.issuer_url, clientId: body.client_id };
+  // Backend emits snake_case enabled / issuer_url / client_id (server.go
+  // authConfigResponse). In dev mode enabled is false and the URLs are omitted.
+  const body = (await res.json()) as {
+    enabled: boolean;
+    issuer_url?: string;
+    client_id?: string;
+  };
+  return {
+    enabled: body.enabled,
+    issuer: body.issuer_url ?? "",
+    clientId: body.client_id ?? "",
+  };
 }
