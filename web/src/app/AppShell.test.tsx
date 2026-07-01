@@ -5,19 +5,35 @@ import { expect, it, vi } from "vitest";
 const useQueryMock = vi.fn();
 vi.mock("@connectrpc/connect-query", () => ({ useQuery: () => useQueryMock() }));
 vi.mock("@/lib/auth/useAuth", () => ({
-  useAuth: () => ({ logout: vi.fn(), user: { profile: { email: "a@x.io" } } }),
+  useAuth: () => ({
+    status: "authenticated",
+    logout: vi.fn(),
+    login: vi.fn(),
+    user: { profile: { email: "a@x.io" } },
+  }),
 }));
 
+import { ThemeProvider } from "@/lib/theme/ThemeContext";
 import { AppShell } from "./AppShell";
+
+function renderShell() {
+  return render(
+    <ThemeProvider>
+      <MemoryRouter>
+        <AppShell />
+      </MemoryRouter>
+    </ThemeProvider>,
+  );
+}
 
 it("shows the Admin link for an admin", () => {
   useQueryMock.mockReturnValue({ isLoading: false, error: null, data: { role: "admin" } });
-  render(<MemoryRouter><AppShell /></MemoryRouter>);
+  renderShell();
   expect(screen.getByRole("link", { name: /admin/i })).toBeInTheDocument();
 });
 
 it("hides the Admin link for a non-admin", () => {
   useQueryMock.mockReturnValue({ isLoading: false, error: null, data: { role: "viewer" } });
-  render(<MemoryRouter><AppShell /></MemoryRouter>);
+  renderShell();
   expect(screen.queryByRole("link", { name: /admin/i })).not.toBeInTheDocument();
 });

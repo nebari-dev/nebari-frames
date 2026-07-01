@@ -14,6 +14,7 @@ vi.mock("@connectrpc/connect-query", () => ({
 import { render, screen } from "@testing-library/react";
 import { MemoryRouter } from "react-router";
 import { expect, it, beforeEach } from "vitest";
+import { ThemeProvider } from "@/lib/theme/ThemeContext";
 import { AppShell } from "./AppShell";
 import { AppRoutes } from "./routes";
 
@@ -24,9 +25,11 @@ beforeEach(() => {
 
 it("renders a Connect link in the header", () => {
   render(
-    <MemoryRouter>
-      <AppShell />
-    </MemoryRouter>,
+    <ThemeProvider>
+      <MemoryRouter>
+        <AppShell />
+      </MemoryRouter>
+    </ThemeProvider>,
   );
   const link = screen.getByRole("link", { name: /^connect$/i });
   expect(link).toHaveAttribute("href", "/connect");
@@ -35,9 +38,11 @@ it("renders a Connect link in the header", () => {
 it("renders AdminHomePage at /admin for an admin user", () => {
   useQueryMock.mockReturnValue({ data: { role: "admin" }, isLoading: false, error: null });
   render(
-    <MemoryRouter initialEntries={["/admin"]}>
-      <AppRoutes />
-    </MemoryRouter>,
+    <ThemeProvider>
+      <MemoryRouter initialEntries={["/admin"]}>
+        <AppRoutes />
+      </MemoryRouter>
+    </ThemeProvider>,
   );
   expect(screen.getByRole("heading", { name: /^admin$/i })).toBeInTheDocument();
 });
@@ -45,9 +50,11 @@ it("renders AdminHomePage at /admin for an admin user", () => {
 it("redirects /admin to catalog for a non-admin user", () => {
   useQueryMock.mockReturnValue({ data: { role: "viewer" }, isLoading: false, error: null });
   render(
-    <MemoryRouter initialEntries={["/admin"]}>
-      <AppRoutes />
-    </MemoryRouter>,
+    <ThemeProvider>
+      <MemoryRouter initialEntries={["/admin"]}>
+        <AppRoutes />
+      </MemoryRouter>
+    </ThemeProvider>,
   );
   // RequireAdmin redirects to "/" which renders CatalogPage
   // CatalogPage fetches frames - just verify we are NOT on the admin page
