@@ -7,7 +7,6 @@ import { LoginPage } from "@/pages/LoginPage";
 import { CallbackPage } from "@/pages/CallbackPage";
 import { NoAccessPage } from "@/pages/NoAccessPage";
 import { CatalogPage } from "@/pages/CatalogPage";
-import { FrameHierarchyPage } from "@/pages/FrameHierarchyPage";
 import { FrameDetailPage } from "@/pages/FrameDetailPage";
 import { FrameAuthoringPage } from "@/pages/FrameAuthoringPage";
 import { ConnectHubPage } from "@/pages/ConnectHubPage";
@@ -26,7 +25,6 @@ export function AppRoutes() {
         <Route element={<RequireMembership />}>
           <Route element={<AppShell />}>
             <Route path="/" element={<CatalogPage />} />
-            <Route path="/hierarchy" element={<FrameHierarchyPage />} />
             <Route path="/frames/new" element={<FrameAuthoringPage mode="create" />} />
             <Route path="/frames/:org/:name" element={<FrameDetailPage />} />
             <Route path="/frames/:org/:name/edit" element={<FrameAuthoringPage mode="edit" />} />

@@ -127,7 +127,7 @@ export function FrameDetailPage() {
       <aside className="space-y-4">
         <UseThisFrame org={org} name={name} />
         <Link
-          to={`/hierarchy?focus=${org}/${name}`}
+          to={`/?view=hierarchy&focus=${org}/${name}`}
           className="flex items-center gap-2 text-sm text-primary hover:underline"
         >
           <GitFork className="size-4" />
