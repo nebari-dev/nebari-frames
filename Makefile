@@ -1,4 +1,4 @@
-.PHONY: proto lint test build build-web run-dev clean image
+.PHONY: proto lint test build build-web run-dev dev dev-auth dev-clean clean image
 
 # Local dev runner: builds the SPA into the binary, then starts the server in
 # dev mode (no OIDC). The auth interceptor injects a fixed dev-user identity;
@@ -35,6 +35,11 @@ run-dev: build-web
 	SEED_ORG_DISPLAY_NAME="$(DEV_ORG_NAME)" \
 	SEED_ADMIN_SUB=$(DEV_ADMIN_SUB) \
 	./nebari-frames-server
+
+# Fast UI-iteration loop: backend + Vite dev server with HMR, seeded with
+# representative fixture data. Open http://localhost:5173. Ctrl-C stops both.
+dev:
+	./dev/dev.sh
 
 clean:
 	rm -f nebari-frames-server coverage.out *.db
