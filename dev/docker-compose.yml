@@ -1,0 +1,15 @@
+# Local Keycloak for `make dev-auth`. The backend runs on the host (see
+# dev/dev-auth.sh) so the token issuer (http://localhost:8081) matches on both
+# sides. `make dev-clean` runs `down -v` to force a fresh realm import.
+services:
+  keycloak:
+    image: quay.io/keycloak/keycloak:26.6.4
+    command: ["start-dev", "--import-realm"]
+    environment:
+      KC_BOOTSTRAP_ADMIN_USERNAME: admin
+      KC_BOOTSTRAP_ADMIN_PASSWORD: admin
+      KC_HOSTNAME: http://localhost:8081
+    ports:
+      - "8081:8080"
+    volumes:
+      - ./keycloak/frames-realm.json:/opt/keycloak/data/import/frames-realm.json:ro
