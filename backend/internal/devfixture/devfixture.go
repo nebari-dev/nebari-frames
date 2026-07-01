@@ -13,6 +13,7 @@ import (
 
 	"google.golang.org/protobuf/types/known/timestamppb"
 
+	"github.com/nebari-dev/nebari-frames/backend/internal/frames"
 	"github.com/nebari-dev/nebari-frames/backend/internal/store"
 	framesv1 "github.com/nebari-dev/nebari-frames/gen/go/frames/v1"
 )
@@ -53,40 +54,87 @@ var members = []pendingMember{
 	{email: "admin@dev", role: "admin"},
 }
 
-// Ordered parents-first so inheritance edges resolve.
-var frames = []fixtureFrame{
-	{
-		id: idBaseMLEnv, name: "base-ml-env", description: "Base machine-learning environment",
-		versions: []frameVersion{
-			{version: "1.0.0", changelog: "Initial base environment",
-				content: "name: base-ml-env\nversion: 1.0.0\ndescription: Base machine-learning environment\n"},
-			{version: "2.0.0", changelog: "Bump pinned tooling",
-				content: "name: base-ml-env\nversion: 2.0.0\ndescription: Base machine-learning environment\n"},
+// mustMarshalDoc builds a Frame document and marshals it to YAML via the
+// canonical frames.Marshal, so fixture content is always shaped exactly like
+// what frames.Parse/frames.Validate accept. It panics on error: the doc
+// fields below are static/derived from orgSlug and controlled entirely by
+// this package, so a marshal failure would indicate a programming error, not
+// bad input.
+func mustMarshalDoc(doc *frames.Doc) string {
+	b, err := frames.Marshal(doc)
+	if err != nil {
+		panic(fmt.Sprintf("devfixture: marshal frame %q: %v", doc.Name, err))
+	}
+	return string(b)
+}
+
+// buildFrames constructs the fixture frame set for the given org slug. The
+// two inheriting frames (pytorch-gpu, team-notebook) reference their parent
+// via an org-qualified extends ref (<orgSlug>/<parent-name>), matching the
+// canonical schema's requirement that extends.ref be "org_slug/frame_name".
+// Content is built from frames.Doc + frames.Marshal rather than hand-written
+// YAML so it can never drift from what frames.Parse/frames.Validate accept.
+func buildFrames(orgSlug string) []fixtureFrame {
+	return []fixtureFrame{
+		{
+			id: idBaseMLEnv, name: "base-ml-env", description: "Base machine-learning environment",
+			versions: []frameVersion{
+				{version: "1.0.0", changelog: "Initial base environment",
+					content: mustMarshalDoc(&frames.Doc{
+						Name:        "base-ml-env",
+						Description: "Base machine-learning environment",
+						Version:     "1.0.0",
+					})},
+				{version: "2.0.0", changelog: "Bump pinned tooling",
+					content: mustMarshalDoc(&frames.Doc{
+						Name:        "base-ml-env",
+						Description: "Base machine-learning environment",
+						Version:     "2.0.0",
+					})},
+			},
 		},
-	},
-	{
-		id: idPyTorchGPU, name: "pytorch-gpu", description: "PyTorch GPU environment",
-		versions: []frameVersion{
-			{version: "1.0.0", changelog: "PyTorch on top of base",
-				content: "name: pytorch-gpu\nversion: 1.0.0\ndescription: PyTorch GPU environment\nextends:\n  - base-ml-env@2.0.0\n",
-				extends: []store.ParentEdge{{ParentFrameID: idBaseMLEnv, ParentVersion: "2.0.0", OrderIndex: 0}}},
+		{
+			id: idPyTorchGPU, name: "pytorch-gpu", description: "PyTorch GPU environment",
+			versions: []frameVersion{
+				{version: "1.0.0", changelog: "PyTorch on top of base",
+					content: mustMarshalDoc(&frames.Doc{
+						Name:        "pytorch-gpu",
+						Description: "PyTorch GPU environment",
+						Version:     "1.0.0",
+						Extends: []frames.ExtendRef{
+							{Ref: orgSlug + "/base-ml-env", Version: "2.0.0"},
+						},
+					}),
+					extends: []store.ParentEdge{{ParentFrameID: idBaseMLEnv, ParentVersion: "2.0.0", OrderIndex: 0}}},
+			},
 		},
-	},
-	{
-		id: idTeamNotebook, name: "team-notebook", description: "Team notebook profile",
-		versions: []frameVersion{
-			{version: "1.0.0", changelog: "Team notebook on PyTorch",
-				content: "name: team-notebook\nversion: 1.0.0\ndescription: Team notebook profile\nextends:\n  - pytorch-gpu@1.0.0\n",
-				extends: []store.ParentEdge{{ParentFrameID: idPyTorchGPU, ParentVersion: "1.0.0", OrderIndex: 0}}},
+		{
+			id: idTeamNotebook, name: "team-notebook", description: "Team notebook profile",
+			versions: []frameVersion{
+				{version: "1.0.0", changelog: "Team notebook on PyTorch",
+					content: mustMarshalDoc(&frames.Doc{
+						Name:        "team-notebook",
+						Description: "Team notebook profile",
+						Version:     "1.0.0",
+						Extends: []frames.ExtendRef{
+							{Ref: orgSlug + "/pytorch-gpu", Version: "1.0.0"},
+						},
+					}),
+					extends: []store.ParentEdge{{ParentFrameID: idPyTorchGPU, ParentVersion: "1.0.0", OrderIndex: 0}}},
+			},
 		},
-	},
-	{
-		id: idStandalone, name: "standalone-frame", description: "Standalone frame with no parents",
-		versions: []frameVersion{
-			{version: "1.0.0", changelog: "Initial standalone frame",
-				content: "name: standalone-frame\nversion: 1.0.0\ndescription: Standalone frame with no parents\n"},
+		{
+			id: idStandalone, name: "standalone-frame", description: "Standalone frame with no parents",
+			versions: []frameVersion{
+				{version: "1.0.0", changelog: "Initial standalone frame",
+					content: mustMarshalDoc(&frames.Doc{
+						Name:        "standalone-frame",
+						Description: "Standalone frame with no parents",
+						Version:     "1.0.0",
+					})},
+			},
 		},
-	},
+	}
 }
 
 // Load seeds the members and frames for the given org slug. The org must already
@@ -109,7 +157,7 @@ func Load(ctx context.Context, repo store.Repository, orgSlug string) error {
 		}
 	}
 
-	for _, f := range frames {
+	for _, f := range buildFrames(orgSlug) {
 		if err := loadFrame(ctx, repo, org, f); err != nil {
 			return err
 		}

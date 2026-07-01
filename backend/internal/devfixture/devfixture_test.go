@@ -7,6 +7,7 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"github.com/nebari-dev/nebari-frames/backend/internal/devfixture"
+	"github.com/nebari-dev/nebari-frames/backend/internal/frames"
 	"github.com/nebari-dev/nebari-frames/backend/internal/store"
 	framesv1 "github.com/nebari-dev/nebari-frames/gen/go/frames/v1"
 )
@@ -90,5 +91,47 @@ func TestLoad_RequiresSeededOrg(t *testing.T) {
 	repo := store.NewMemory()
 	if err := devfixture.Load(context.Background(), repo, "missing-org"); err == nil {
 		t.Fatal("expected error when org is not seeded, got nil")
+	}
+}
+
+// TestLoad_SeededContentIsSchemaValid guards against fixture content that
+// parses/validates differently from the store.ParentEdge rows that
+// accompany it. Every seeded frame's stored content must be a well-formed
+// Frame document per the canonical schema (frames.Parse + frames.Validate),
+// since frames.Parse/Validate (and therefore the web detail page and
+// ResolveFrame) operate on that content, not on the ParentEdge rows.
+func TestLoad_SeededContentIsSchemaValid(t *testing.T) {
+	ctx := context.Background()
+	repo, org := newRepoWithOrg(t)
+	if err := devfixture.Load(ctx, repo, org.Slug); err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+
+	seededFrames, err := repo.ListFramesByOrg(ctx, org.Id)
+	if err != nil {
+		t.Fatalf("ListFramesByOrg: %v", err)
+	}
+	if len(seededFrames) == 0 {
+		t.Fatal("expected at least one seeded frame")
+	}
+
+	for _, f := range seededFrames {
+		fr, err := repo.GetFrameBySlugName(ctx, org.Slug, f.Name)
+		if err != nil {
+			t.Fatalf("GetFrameBySlugName(%q): %v", f.Name, err)
+		}
+		version, _, _, err := repo.GetFrameVersion(ctx, fr.Id, fr.LatestVersion)
+		if err != nil {
+			t.Fatalf("GetFrameVersion(%q@%q): %v", fr.Name, fr.LatestVersion, err)
+		}
+
+		doc, err := frames.Parse(version.Content)
+		if err != nil {
+			t.Errorf("frames.Parse(%q@%s) failed: %v\ncontent:\n%s", fr.Name, fr.LatestVersion, err, version.Content)
+			continue
+		}
+		if err := frames.Validate(doc); err != nil {
+			t.Errorf("frames.Validate(%q@%s) failed: %v\ncontent:\n%s", fr.Name, fr.LatestVersion, err, version.Content)
+		}
 	}
 }
