@@ -41,6 +41,16 @@ run-dev: build-web
 dev:
 	./dev/dev.sh
 
+# Prod-like loop: real Keycloak login. Builds the SPA into the binary, brings up
+# Keycloak, and runs the backend on the host in OIDC mode.
+dev-auth: build-web
+	./dev/dev-auth.sh
+
+# Tear down local dev state: remove the dev DB and stop/remove Keycloak + volume.
+dev-clean:
+	-docker compose -f dev/docker-compose.yml down -v
+	rm -f $(DEV_DB)
+
 clean:
 	rm -f nebari-frames-server coverage.out *.db
 
