@@ -32,7 +32,7 @@ In dev mode you are automatically `dev-user`, an org admin - so you never hit th
 make dev-auth
 ```
 
-Starts Keycloak in Docker (`:8081`) with an auto-imported realm and runs the backend in OIDC mode on `:8080`. Open **http://localhost:8080**, log in as **`dev@localhost`** / **`dev`**. That user is seeded as an org admin. Run `make dev-clean` to tear everything down.
+Starts Keycloak in Docker (`:8081`) with an auto-imported realm and runs the backend in OIDC mode on `:8080`. Open **http://localhost:8080**, log in as **`dev@localhost`** / **`dev`**. That user is seeded as an org admin. Keycloak admin console: http://localhost:8081 (admin / admin). Run `make dev-clean` to tear everything down.
 
 ### Troubleshooting
 
