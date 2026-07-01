@@ -14,6 +14,7 @@ import { UseThisFrame } from "@/components/frame/UseThisFrame";
 import { DeleteFrameDialog } from "@/components/frame/DeleteFrameDialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 
 function fmtDateTime(ts?: Timestamp): string {
@@ -77,24 +78,24 @@ export function FrameDetailPage() {
   const isLatest = !frame.latestVersion || frame.latestVersion === version.version;
 
   return (
-    <div className="grid gap-6 lg:grid-cols-[1fr_18rem]">
-      <div className="space-y-4">
-        <header className="flex items-start justify-between gap-4">
-          <div className="space-y-2">
-            <div className="flex flex-wrap items-center gap-2">
-              <h1 className="text-2xl font-semibold">{frame.name}</h1>
-              <Badge variant="secondary" className="font-mono">v{version.version}</Badge>
-              {isLatest ? (
-                <Badge variant="outline">Latest</Badge>
-              ) : (
-                <Badge variant="outline" title={`Latest is v${frame.latestVersion}`}>
-                  latest: v{frame.latestVersion}
-                </Badge>
-              )}
-            </div>
-            <p className="text-muted-foreground">{frame.description}</p>
+    <div className="max-w-6xl space-y-6">
+      <header className="flex items-start justify-between gap-4">
+        <div className="space-y-2">
+          <div className="flex flex-wrap items-center gap-2">
+            <h1 className="text-2xl font-semibold">{frame.name}</h1>
+            <Badge variant="secondary" className="font-mono">v{version.version}</Badge>
+            {isLatest ? (
+              <Badge variant="outline">Latest</Badge>
+            ) : (
+              <Badge variant="outline" title={`Latest is v${frame.latestVersion}`}>
+                latest: v{frame.latestVersion}
+              </Badge>
+            )}
           </div>
-          <div className="flex gap-2">
+          <p className="text-muted-foreground">{frame.description}</p>
+        </div>
+        {(resp.permissions?.canEdit || resp.permissions?.canDelete) && (
+          <div className="flex shrink-0 gap-2">
             {resp.permissions?.canEdit && (
               <Button variant="outline" render={<Link to={`/frames/${org}/${name}/edit`} />}>Edit</Button>
             )}
@@ -102,49 +103,69 @@ export function FrameDetailPage() {
               <Button variant="outline" onClick={() => setDeleteOpen(true)}>Delete</Button>
             )}
           </div>
-        </header>
-
-        <dl className="grid grid-cols-2 gap-x-4 gap-y-3 rounded-md border p-4 sm:grid-cols-3">
-          <Meta label="Owner" value={frame.ownerSub} />
-          <Meta label="Published by" value={version.publishedBy} />
-          <Meta label="Published" value={fmtDateTime(version.publishedAt)} />
-          <Meta label="Created" value={fmtDateTime(frame.createdAt)} />
-          <Meta label="Updated" value={fmtDateTime(frame.updatedAt)} />
-          <Meta label="Size" value={fmtBytes(version.sizeBytes)} />
-          <Meta label="Digest" value={version.digest} mono />
-        </dl>
-
-        {version.changelog && (
-          <div className="rounded-md border p-3 text-sm">
-            <div className="mb-1 font-medium">Changelog</div>
-            <p className="text-muted-foreground">{version.changelog}</p>
-          </div>
         )}
+      </header>
 
-        <FrameSlots doc={doc} />
-        <VersionHistory versions={versionsQ.data?.versions ?? []} />
+      <div className="grid gap-10 lg:grid-cols-[minmax(0,1fr)_30rem] lg:items-start">
+        <div className="min-w-0 space-y-4">
+          <Card className="p-4">
+            <dl className="grid grid-cols-2 gap-x-4 gap-y-3 sm:grid-cols-3">
+              <Meta label="Owner" value={frame.ownerSub} />
+              <Meta label="Published by" value={version.publishedBy} />
+              <Meta label="Published" value={fmtDateTime(version.publishedAt)} />
+              <Meta label="Created" value={fmtDateTime(frame.createdAt)} />
+              <Meta label="Updated" value={fmtDateTime(frame.updatedAt)} />
+              <Meta label="Size" value={fmtBytes(version.sizeBytes)} />
+              <Meta label="Digest" value={version.digest} mono />
+            </dl>
+          </Card>
+
+          {version.changelog && (
+            <Card className="p-3 text-sm">
+              <div className="mb-1 font-medium">Changelog</div>
+              <p className="text-muted-foreground">{version.changelog}</p>
+            </Card>
+          )}
+
+          <FrameSlots doc={doc} />
+          <VersionHistory versions={versionsQ.data?.versions ?? []} />
+        </div>
+
+        <aside className="space-y-6">
+          {(resp.extends?.length || resp.excludes?.length) ? (
+            <Card className="space-y-4 p-4">
+              <InheritanceTrail parents={resp.extends} />
+              {(resp.excludes?.length ?? 0) > 0 && (
+                <div className="text-sm">
+                  <div className="mb-1 font-medium">Excludes</div>
+                  <ul className="space-y-1 text-muted-foreground">
+                    {resp.excludes.map((ex) => (
+                      <li key={ex} className="font-mono text-xs">{ex}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+              <Link
+                to={`/?view=hierarchy&focus=${org}/${name}`}
+                className="flex items-center gap-2 text-sm text-primary hover:underline"
+              >
+                <GitFork className="size-4" />
+                View in hierarchy
+              </Link>
+            </Card>
+          ) : (
+            <Link
+              to={`/?view=hierarchy&focus=${org}/${name}`}
+              className="flex items-center gap-2 text-sm text-primary hover:underline"
+            >
+              <GitFork className="size-4" />
+              View in hierarchy
+            </Link>
+          )}
+
+          <UseThisFrame org={org} name={name} />
+        </aside>
       </div>
-      <aside className="space-y-4">
-        <UseThisFrame org={org} name={name} />
-        <Link
-          to={`/?view=hierarchy&focus=${org}/${name}`}
-          className="flex items-center gap-2 text-sm text-primary hover:underline"
-        >
-          <GitFork className="size-4" />
-          View in hierarchy
-        </Link>
-        <InheritanceTrail parents={resp.extends} />
-        {(resp.excludes?.length ?? 0) > 0 && (
-          <div className="text-sm">
-            <div className="mb-1 font-medium">Excludes</div>
-            <ul className="space-y-1 text-muted-foreground">
-              {resp.excludes.map((ex) => (
-                <li key={ex} className="font-mono text-xs">{ex}</li>
-              ))}
-            </ul>
-          </div>
-        )}
-      </aside>
       <DeleteFrameDialog org={org} name={name} open={deleteOpen} onOpenChange={setDeleteOpen} />
     </div>
   );

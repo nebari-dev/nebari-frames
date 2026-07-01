@@ -20,7 +20,7 @@ export function ListEditor({ name, label }: { name: `slots.${"rules" | "skills" 
           </Button>
         </div>
       ))}
-      <Button type="button" variant="outline" size="sm" onClick={() => append("" as never)}>
+      <Button type="button" variant="outline" onClick={() => append("" as never)}>
         + Add {singular(label)}
       </Button>
     </div>

@@ -17,6 +17,7 @@ import { ListEditor } from "@/components/form/ListEditor";
 import { MarkdownField } from "@/components/form/MarkdownField";
 import { ChangelogField } from "@/components/form/ChangelogField";
 import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
 import { Alert } from "@/components/ui/alert";
 import { ResolvedPreview } from "@/components/form/ResolvedPreview";
 
@@ -110,7 +111,7 @@ export function FrameAuthoringPage({ mode }: { mode: "create" | "edit" }) {
 
   return (
     <FormProvider {...methods}>
-      <form onSubmit={methods.handleSubmit(onSubmit)} className="mx-auto max-w-3xl space-y-6">
+      <form onSubmit={methods.handleSubmit(onSubmit)} className="max-w-6xl space-y-6">
         <div className="flex items-center justify-between">
           <h1 className="text-2xl font-semibold">{mode === "create" ? "New Frame" : "Edit Frame"}</h1>
           <div className="flex gap-2">
@@ -122,15 +123,30 @@ export function FrameAuthoringPage({ mode }: { mode: "create" | "edit" }) {
         </div>
         {formError && <Alert variant="destructive">{formError}</Alert>}
 
-        <section className="space-y-2"><h2 className="text-sm font-semibold uppercase text-muted-foreground">Metadata</h2><MetadataFields nameReadOnly={mode === "edit"} /></section>
-        <section className="space-y-2"><h2 className="text-sm font-semibold uppercase text-muted-foreground">Inherits from</h2><ExtendsEditor /></section>
-        <section className="space-y-2"><h2 className="text-sm font-semibold uppercase text-muted-foreground">Excludes</h2><ExcludesEditor /></section>
-        <section className="space-y-2"><h2 className="text-sm font-semibold uppercase text-muted-foreground">Terminology</h2><TerminologyEditor /></section>
-        <section className="space-y-2"><h2 className="text-sm font-semibold uppercase text-muted-foreground">Rules</h2><ListEditor name="slots.rules" label="Rules" /></section>
-        <section className="space-y-2"><h2 className="text-sm font-semibold uppercase text-muted-foreground">Skills</h2><ListEditor name="slots.skills" label="Skills" /></section>
-        <section className="space-y-2"><h2 className="text-sm font-semibold uppercase text-muted-foreground">Prompts</h2><ListEditor name="slots.prompts" label="Prompts" /></section>
-        {PROSE.map((p) => <section key={p.name}><MarkdownField name={p.name} label={p.label} /></section>)}
-        <section><ChangelogField /></section>
+        <div className="grid gap-10 lg:grid-cols-[minmax(0,1fr)_30rem] lg:items-start">
+          {/* Left: descriptive content — metadata, prose slots, changelog */}
+          <Card className="min-w-0 space-y-6 p-5">
+            <section className="space-y-2"><h2 className="text-sm font-semibold uppercase text-muted-foreground">Metadata</h2><MetadataFields nameReadOnly={mode === "edit"} /></section>
+            {PROSE.map((p) => <section key={p.name}><MarkdownField name={p.name} label={p.label} /></section>)}
+            <section><ChangelogField /></section>
+          </Card>
+
+          {/* Right: repeatable list editors (the "+ add" sections) */}
+          <aside className="space-y-6">
+            <Card className="space-y-6 p-5">
+              <h2 className="text-sm font-semibold uppercase text-muted-foreground">Composition</h2>
+              <section className="space-y-2"><h3 className="text-xs font-medium text-muted-foreground">Inherits from</h3><ExtendsEditor /></section>
+              <section className="space-y-2"><h3 className="text-xs font-medium text-muted-foreground">Excludes</h3><ExcludesEditor /></section>
+            </Card>
+            <Card className="space-y-6 p-5">
+              <h2 className="text-sm font-semibold uppercase text-muted-foreground">Slots</h2>
+              <section className="space-y-2"><h3 className="text-xs font-medium text-muted-foreground">Terminology</h3><TerminologyEditor /></section>
+              <section className="space-y-2"><h3 className="text-xs font-medium text-muted-foreground">Rules</h3><ListEditor name="slots.rules" label="Rules" /></section>
+              <section className="space-y-2"><h3 className="text-xs font-medium text-muted-foreground">Skills</h3><ListEditor name="slots.skills" label="Skills" /></section>
+              <section className="space-y-2"><h3 className="text-xs font-medium text-muted-foreground">Prompts</h3><ListEditor name="slots.prompts" label="Prompts" /></section>
+            </Card>
+          </aside>
+        </div>
 
         <div className="flex justify-end gap-2">
           <Button type="button" variant="outline" onClick={() => navigate(-1)}>Cancel</Button>

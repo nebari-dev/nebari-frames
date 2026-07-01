@@ -59,7 +59,7 @@ export function CatalogPage() {
 
       <div className="flex flex-wrap items-center justify-between gap-4">
         {showSearch && (
-          <div className="relative w-full max-w-sm">
+          <div className="relative w-full max-w-[41rem]">
             <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
             <Input
               type="search"
@@ -73,7 +73,7 @@ export function CatalogPage() {
         <div className="ml-auto flex items-center gap-3">
           <ViewToggle view={view} onChange={setView} />
           {data?.canCreate && (
-            <Button className="h-10" render={<Link to="/frames/new" />}>
+            <Button render={<Link to="/frames/new" />}>
               <Plus />
               Create new Frame
             </Button>
@@ -124,7 +124,7 @@ function ViewToggle({ view, onChange }: { view: View; onChange: (v: View) => voi
           aria-pressed={view === value}
           onClick={() => onChange(value)}
           className={cn(
-            "flex items-center justify-center rounded-[6px] p-2 outline-none",
+            "flex items-center justify-center rounded-[6px] p-1.5 outline-none",
             "motion-safe:transition-colors focus-visible:ring-2 focus-visible:ring-ring",
             view === value
               ? "bg-background text-foreground shadow-sm"

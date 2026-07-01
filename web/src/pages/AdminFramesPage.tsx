@@ -50,7 +50,7 @@ export function AdminFramesPage() {
                   <td className="px-4 py-3">
                     <Link
                       to={`/frames/${f.orgSlug}/${f.name}`}
-                      className="font-medium text-foreground hover:text-primary hover:underline"
+                      className="font-medium text-foreground hover:underline"
                     >
                       {f.name}
                     </Link>
@@ -62,7 +62,7 @@ export function AdminFramesPage() {
                   </td>
                   <td className="px-4 py-3 text-muted-foreground">{f.orgSlug}</td>
                   <td className="px-4 py-3">
-                    <Badge variant="secondary">v{f.latestVersion}</Badge>
+                    <Badge variant="secondary" className="font-mono">v{f.latestVersion}</Badge>
                   </td>
                   <td className="px-4 py-3 text-right">
                     <Button
