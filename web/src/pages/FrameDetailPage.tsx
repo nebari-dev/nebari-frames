@@ -107,7 +107,7 @@ export function FrameDetailPage() {
       </header>
 
       <div className="grid gap-10 lg:grid-cols-[minmax(0,1fr)_30rem] lg:items-start">
-        <div className="min-w-0 space-y-4">
+        <div className="min-w-0">
           <Card className="p-4">
             <dl className="grid grid-cols-2 gap-x-4 gap-y-3 sm:grid-cols-3">
               <Meta label="Owner" value={frame.ownerSub} />
@@ -118,17 +118,10 @@ export function FrameDetailPage() {
               <Meta label="Size" value={fmtBytes(version.sizeBytes)} />
               <Meta label="Digest" value={version.digest} mono />
             </dl>
+            <div className="mt-4 border-t pt-1">
+              <FrameSlots doc={doc} />
+            </div>
           </Card>
-
-          {version.changelog && (
-            <Card className="p-3 text-sm">
-              <div className="mb-1 font-medium">Changelog</div>
-              <p className="text-muted-foreground">{version.changelog}</p>
-            </Card>
-          )}
-
-          <FrameSlots doc={doc} />
-          <VersionHistory versions={versionsQ.data?.versions ?? []} />
         </div>
 
         <aside className="space-y-6">
@@ -162,6 +155,15 @@ export function FrameDetailPage() {
               View in hierarchy
             </Link>
           )}
+
+          {version.changelog && (
+            <Card className="p-3 text-sm">
+              <div className="mb-1 font-medium">Changelog</div>
+              <p className="text-muted-foreground">{version.changelog}</p>
+            </Card>
+          )}
+
+          <VersionHistory versions={versionsQ.data?.versions ?? []} />
 
           <UseThisFrame org={org} name={name} />
         </aside>
