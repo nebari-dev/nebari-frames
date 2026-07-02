@@ -125,28 +125,18 @@ export function FrameDetailPage() {
         </div>
 
         <aside className="space-y-6">
-          {(resp.extends?.length || resp.excludes?.length) ? (
-            <Card className="space-y-4 p-4">
-              <InheritanceTrail parents={resp.extends} />
-              {(resp.excludes?.length ?? 0) > 0 && (
-                <div className="text-sm">
-                  <div className="mb-1 font-medium">Excludes</div>
-                  <ul className="space-y-1 text-muted-foreground">
-                    {resp.excludes.map((ex) => (
-                      <li key={ex} className="font-mono text-xs">{ex}</li>
-                    ))}
-                  </ul>
-                </div>
-              )}
-              <Link
-                to={`/?view=hierarchy&focus=${org}/${name}`}
-                className="flex items-center gap-2 text-sm text-primary hover:underline"
-              >
-                <GitFork className="size-4" />
-                View in hierarchy
-              </Link>
-            </Card>
-          ) : (
+          <Card className="space-y-4 p-4">
+            <InheritanceTrail parents={resp.extends} />
+            {(resp.excludes?.length ?? 0) > 0 && (
+              <div className="text-sm">
+                <div className="mb-1 font-medium">Excludes</div>
+                <ul className="space-y-1 text-muted-foreground">
+                  {resp.excludes.map((ex) => (
+                    <li key={ex} className="font-mono text-xs">{ex}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
             <Link
               to={`/?view=hierarchy&focus=${org}/${name}`}
               className="flex items-center gap-2 text-sm text-primary hover:underline"
@@ -154,7 +144,7 @@ export function FrameDetailPage() {
               <GitFork className="size-4" />
               View in hierarchy
             </Link>
-          )}
+          </Card>
 
           {version.changelog && (
             <Card className="p-3 text-sm">
