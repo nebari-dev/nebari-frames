@@ -74,63 +74,177 @@ func mustMarshalDoc(doc *frames.Doc) string {
 // canonical schema's requirement that extends.ref be "org_slug/frame_name".
 // Content is built from frames.Doc + frames.Marshal rather than hand-written
 // YAML so it can never drift from what frames.Parse/frames.Validate accept.
+//
+// The set forms a three-level inheritance chain plus one standalone frame:
+//
+//	base-ml-env (v1.0.0, v2.0.0)
+//	  └── pytorch-gpu (v1.0.0)        extends base-ml-env@2.0.0
+//	        └── team-notebook (v1.0.0) extends pytorch-gpu@1.0.0
+//	standalone-frame (v1.0.0)          no parents
+//
+// Every frame fills real content slots (terminology, rules, skills, prompts,
+// and the free-text goals/style/norms/architecture/business_process) so the
+// detail view and the inheritance resolver have representative data to render.
 func buildFrames(orgSlug string) []fixtureFrame {
 	return []fixtureFrame{
 		{
-			id: idBaseMLEnv, name: "base-ml-env", description: "Base machine-learning environment",
+			id: idBaseMLEnv, name: "base-ml-env", description: "Base machine-learning environment: shared conventions every ML frame inherits.",
 			versions: []frameVersion{
 				{version: "1.0.0", changelog: "Initial base environment",
 					content: mustMarshalDoc(&frames.Doc{
 						Name:        "base-ml-env",
-						Description: "Base machine-learning environment",
+						Description: "Base machine-learning environment: shared conventions every ML frame inherits.",
 						Version:     "1.0.0",
+						Slots: frames.Slots{
+							Terminology: []frames.Term{
+								{Term: "Frame", Definition: "A versioned, composable unit of environment and agent context that other frames can extend."},
+								{Term: "Environment", Definition: "The reproducible set of pinned dependencies (conda/pip) a workload runs against."},
+							},
+							Rules: []string{
+								"Pin every dependency to an exact version; never use unbounded ranges.",
+								"Reproducibility is non-negotiable: the same frame must resolve identically on every machine.",
+								"Prefer conda-forge as the primary channel for scientific packages.",
+							},
+							Skills: []string{
+								"Resolving and locking conda environments.",
+								"Reading and writing reproducible dependency manifests.",
+							},
+							Goals: "Provide a stable, reproducible foundation so downstream frames can focus on their specialization rather than base setup.",
+							Style: "Terse, explicit, and reproducible. Favor declarative configuration over imperative setup scripts.",
+							Norms: "Changes to pinned tooling require a version bump and a changelog entry.",
+						},
 					})},
-				{version: "2.0.0", changelog: "Bump pinned tooling",
+				{version: "2.0.0", changelog: "Bump pinned tooling (Python 3.12) and add packaging skill",
 					content: mustMarshalDoc(&frames.Doc{
 						Name:        "base-ml-env",
-						Description: "Base machine-learning environment",
+						Description: "Base machine-learning environment: shared conventions every ML frame inherits.",
 						Version:     "2.0.0",
+						Slots: frames.Slots{
+							Terminology: []frames.Term{
+								{Term: "Frame", Definition: "A versioned, composable unit of environment and agent context that other frames can extend."},
+								{Term: "Environment", Definition: "The reproducible set of pinned dependencies (conda/pip) a workload runs against."},
+								{Term: "Lockfile", Definition: "A fully-resolved, hash-pinned snapshot of an environment used for byte-identical rebuilds."},
+							},
+							Rules: []string{
+								"Pin every dependency to an exact version; never use unbounded ranges.",
+								"Reproducibility is non-negotiable: the same frame must resolve identically on every machine.",
+								"Prefer conda-forge as the primary channel for scientific packages.",
+								"Target Python 3.12 unless a downstream frame pins otherwise.",
+							},
+							Skills: []string{
+								"Resolving and locking conda environments.",
+								"Reading and writing reproducible dependency manifests.",
+								"Building and publishing conda packages to a private channel.",
+							},
+							Goals: "Provide a stable, reproducible foundation so downstream frames can focus on their specialization rather than base setup.",
+							Style: "Terse, explicit, and reproducible. Favor declarative configuration over imperative setup scripts.",
+							Norms: "Changes to pinned tooling require a version bump and a changelog entry.",
+						},
 					})},
 			},
 		},
 		{
-			id: idPyTorchGPU, name: "pytorch-gpu", description: "PyTorch GPU environment",
+			id: idPyTorchGPU, name: "pytorch-gpu", description: "PyTorch GPU environment layered on the base ML env, tuned for CUDA training.",
 			versions: []frameVersion{
 				{version: "1.0.0", changelog: "PyTorch on top of base",
 					content: mustMarshalDoc(&frames.Doc{
 						Name:        "pytorch-gpu",
-						Description: "PyTorch GPU environment",
+						Description: "PyTorch GPU environment layered on the base ML env, tuned for CUDA training.",
 						Version:     "1.0.0",
 						Extends: []frames.ExtendRef{
 							{Ref: orgSlug + "/base-ml-env", Version: "2.0.0"},
+						},
+						Slots: frames.Slots{
+							Terminology: []frames.Term{
+								{Term: "CUDA", Definition: "NVIDIA's parallel computing platform used to run PyTorch tensor ops on the GPU."},
+								{Term: "Mixed precision", Definition: "Training with a mix of float16 and float32 to cut memory use and speed up compute."},
+							},
+							Rules: []string{
+								"Pin the CUDA toolkit version to match the target driver; mismatches fail silently at runtime.",
+								"Always guard GPU code with a CPU fallback so tests run in CI without a GPU.",
+								"Enable mixed precision for training runs unless numerical stability requires float32.",
+							},
+							Skills: []string{
+								"Configuring PyTorch for a specific CUDA/cuDNN version.",
+								"Diagnosing out-of-memory errors and tuning batch size and gradient accumulation.",
+								"Profiling GPU utilization to find data-loading bottlenecks.",
+							},
+							Prompts: []string{
+								"Given a training script, suggest the largest batch size that fits in the available GPU memory.",
+								"Review this model code and flag any operations that will silently fall back to CPU.",
+							},
+							ToolSpecs:    "torch>=2.2, torchvision, cuda-toolkit 12.1, cudnn. Expose `nvidia-smi` for GPU introspection.",
+							Goals:        "Give ML engineers a ready-to-train GPU environment with sane defaults for CUDA, so they iterate on models rather than plumbing.",
+							Architecture: "Single-node, single-or-multi-GPU. Data loaders run on CPU workers feeding the GPU; checkpoints written to the shared volume.",
 						},
 					}),
 					extends: []store.ParentEdge{{ParentFrameID: idBaseMLEnv, ParentVersion: "2.0.0", OrderIndex: 0}}},
 			},
 		},
 		{
-			id: idTeamNotebook, name: "team-notebook", description: "Team notebook profile",
+			id: idTeamNotebook, name: "team-notebook", description: "Team notebook profile: PyTorch GPU env plus the data-science team's shared conventions.",
 			versions: []frameVersion{
 				{version: "1.0.0", changelog: "Team notebook on PyTorch",
 					content: mustMarshalDoc(&frames.Doc{
 						Name:        "team-notebook",
-						Description: "Team notebook profile",
+						Description: "Team notebook profile: PyTorch GPU env plus the data-science team's shared conventions.",
 						Version:     "1.0.0",
 						Extends: []frames.ExtendRef{
 							{Ref: orgSlug + "/pytorch-gpu", Version: "1.0.0"},
+						},
+						Slots: frames.Slots{
+							Terminology: []frames.Term{
+								{Term: "Notebook profile", Definition: "A JupyterLab configuration bundle (kernels, extensions, resource limits) applied to a team's servers."},
+							},
+							Rules: []string{
+								"Commit notebooks with cleared outputs; large embedded outputs bloat the repo.",
+								"Shared datasets live under /shared/data (read-only); never copy them into a home directory.",
+								"Long-running jobs belong in the batch queue, not in an interactive notebook kernel.",
+							},
+							Skills: []string{
+								"Using the team's shared JupyterLab extensions and kernels.",
+								"Moving an exploratory notebook into a reproducible pipeline.",
+							},
+							Prompts: []string{
+								"Convert this exploratory notebook cell into a parameterized, testable function.",
+								"Suggest where in this notebook to checkpoint intermediate results to the shared volume.",
+							},
+							Goals:           "Let the data-science team share one reproducible, GPU-ready notebook environment with agreed-upon conventions.",
+							Style:           "Collaborative and review-friendly: notebooks should read like documented experiments, not scratch pads.",
+							Norms:           "New shared extensions are proposed in the team channel and added here via a version bump.",
+							BusinessProcess: "Exploration happens in notebooks; promising results are promoted to a tracked pipeline before any production use.",
 						},
 					}),
 					extends: []store.ParentEdge{{ParentFrameID: idPyTorchGPU, ParentVersion: "1.0.0", OrderIndex: 0}}},
 			},
 		},
 		{
-			id: idStandalone, name: "standalone-frame", description: "Standalone frame with no parents",
+			id: idStandalone, name: "standalone-frame", description: "Standalone data-cleaning frame with no parents, for exercising the non-inheriting case.",
 			versions: []frameVersion{
 				{version: "1.0.0", changelog: "Initial standalone frame",
 					content: mustMarshalDoc(&frames.Doc{
 						Name:        "standalone-frame",
-						Description: "Standalone frame with no parents",
+						Description: "Standalone data-cleaning frame with no parents, for exercising the non-inheriting case.",
 						Version:     "1.0.0",
+						Slots: frames.Slots{
+							Terminology: []frames.Term{
+								{Term: "Tidy data", Definition: "A table where each variable is a column, each observation a row, and each cell a single value."},
+							},
+							Rules: []string{
+								"Never mutate the raw input in place; write cleaned output to a new location.",
+								"Record every transformation so the cleaning run is fully auditable.",
+							},
+							Skills: []string{
+								"Profiling a dataset for missing values, outliers, and type inconsistencies.",
+								"Writing idempotent, re-runnable data-cleaning transforms.",
+							},
+							Prompts: []string{
+								"Given this dataframe schema, propose a set of validation checks to run before cleaning.",
+							},
+							Goals:           "Provide a self-contained frame for tabular data cleaning that depends on nothing else.",
+							Style:           "Defensive and explicit: validate assumptions loudly and fail fast on malformed input.",
+							BusinessProcess: "Raw data lands, is validated, is cleaned into a tidy table, and only then is handed to downstream analysis.",
+						},
 					})},
 			},
 		},
