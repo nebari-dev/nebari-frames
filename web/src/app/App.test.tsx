@@ -36,5 +36,6 @@ it("renders the app title", async () => {
       </Providers>
     </MemoryRouter>,
   );
-  await waitFor(() => expect(screen.getByText("Nebari Frames")).toBeInTheDocument());
+  await waitFor(() => expect(screen.getByRole("img", { name: "Nebari" })).toBeInTheDocument());
+  expect(screen.getByRole("link", { name: /nebari frames home/i })).toBeInTheDocument();
 });

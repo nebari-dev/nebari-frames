@@ -1,6 +1,7 @@
-import { useAuth } from "@/lib/auth/useAuth";
-import { Button } from "@/components/ui/button";
 import { Navigate } from "react-router";
+import { AuthLayout } from "@/components/layout/AuthLayout";
+import { Button } from "@/components/ui/button";
+import { useAuth } from "@/lib/auth/useAuth";
 
 export function LoginPage() {
   const { status, login } = useAuth();
@@ -8,13 +9,18 @@ export function LoginPage() {
     return <Navigate to="/" replace />;
   }
   return (
-    <div className="min-h-screen grid place-items-center">
-      <div className="text-center space-y-4">
-        <h1 className="text-2xl font-semibold">Nebari Frames</h1>
-        <Button onClick={() => void login()} disabled={status === "loading"}>
-          Log in
-        </Button>
-      </div>
-    </div>
+    <AuthLayout
+      title="Sign in to Frames"
+      description="Browse, author, and connect your organization's Frames."
+    >
+      <Button
+        className="w-full"
+        onClick={() => void login()}
+        loading={status === "loading"}
+        loadingText="Signing in…"
+      >
+        Log in
+      </Button>
+    </AuthLayout>
   );
 }

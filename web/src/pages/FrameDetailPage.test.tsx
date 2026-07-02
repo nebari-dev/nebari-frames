@@ -99,9 +99,9 @@ it("renders header, slots, and version history", () => {
       return {
         isLoading: false, error: null,
         data: {
-          frame: { name: "brand-voice", description: "voice", ownerSub: "u1" },
-          version: { version: "1.0.0", content: yamlContent },
-          extends: [],
+          frame: { name: "brand-voice", description: "voice", ownerSub: "u1", latestVersion: "1.0.0" },
+          version: { version: "1.0.0", content: yamlContent, publishedBy: "pub-user", changelog: "initial release", digest: "sha256:abc123", sizeBytes: 2048n },
+          extends: [], excludes: ["openteams/legacy"],
         },
       };
     }
@@ -118,4 +118,34 @@ it("renders header, slots, and version history", () => {
   expect(screen.getByText("Rules")).toBeInTheDocument();
   expect(screen.getByText("no hype")).toBeInTheDocument();
   expect(screen.getByText(/Version history/)).toBeInTheDocument();
+});
+
+it("renders version metadata, changelog, and excludes", () => {
+  useQueryMock.mockImplementation((method: unknown) => {
+    if (method === FrameService.method.getFrame) {
+      return {
+        isLoading: false, error: null,
+        data: {
+          frame: { name: "brand-voice", description: "voice", ownerSub: "u1", latestVersion: "2.0.0" },
+          version: { version: "1.0.0", content: yamlContent, publishedBy: "pub-user", changelog: "initial release", digest: "sha256:abc123", sizeBytes: 2048n },
+          extends: [], excludes: ["openteams/legacy"],
+        },
+      };
+    }
+    return { isLoading: false, error: null, data: { versions: [] } };
+  });
+
+  render(
+    <MemoryRouter initialEntries={["/frames/openteams/brand-voice"]}>
+      <Routes><Route path="/frames/:org/:name" element={<FrameDetailPage />} /></Routes>
+    </MemoryRouter>,
+  );
+
+  expect(screen.getByText("pub-user")).toBeInTheDocument();
+  expect(screen.getByText("sha256:abc123")).toBeInTheDocument();
+  expect(screen.getByText("2.0 KB")).toBeInTheDocument();
+  expect(screen.getByText("initial release")).toBeInTheDocument();
+  expect(screen.getByText("openteams/legacy")).toBeInTheDocument();
+  // viewing v1.0.0 while latest is v2.0.0 -> shows the latest hint, not "Latest"
+  expect(screen.getByText("latest: v2.0.0")).toBeInTheDocument();
 });

@@ -8,7 +8,7 @@ export function ExcludesEditor() {
   return (
     <div className="space-y-2">
       {fields.map((field, i) => (
-        <div key={field.id} className="flex items-start gap-2">
+        <div key={field.id} className="flex items-center gap-2">
           <Controller
             control={control}
             name={`excludes.${i}`}
@@ -24,7 +24,7 @@ export function ExcludesEditor() {
           </Button>
         </div>
       ))}
-      <Button type="button" variant="outline" size="sm" onClick={() => append("" as never)}>
+      <Button type="button" variant="outline" onClick={() => append("" as never)}>
         + Add exclusion
       </Button>
     </div>

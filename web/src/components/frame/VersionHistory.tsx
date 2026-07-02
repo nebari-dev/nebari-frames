@@ -11,7 +11,7 @@ function fmt(ts?: Timestamp): string {
 export function VersionHistory({ versions }: { versions: FrameVersionSummary[] }) {
   if (versions.length === 0) return null;
   return (
-    <Collapsible className="border rounded-md p-3">
+    <Collapsible defaultOpen className="rounded-lg border border-border bg-card text-card-foreground shadow-xs p-3">
       <CollapsibleTrigger className="font-medium">Version history ({versions.length})</CollapsibleTrigger>
       <CollapsibleContent className="pt-2 space-y-2">
         {versions.map((v) => (

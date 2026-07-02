@@ -3,8 +3,10 @@ import { afterEach, expect, it, vi } from "vitest";
 import { AuthProvider } from "./AuthProvider";
 import { useAuth } from "./useAuth";
 
+import { fetchAuthConfig } from "./authConfig";
+
 vi.mock("./authConfig", () => ({
-  fetchAuthConfig: vi.fn(async () => ({ issuer: "https://idp", clientId: "web" })),
+  fetchAuthConfig: vi.fn(async () => ({ enabled: true, issuer: "https://idp", clientId: "web" })),
 }));
 
 const getUser = vi.fn();
@@ -29,4 +31,12 @@ it("is authenticated when a valid user is stored", async () => {
   getUser.mockResolvedValue({ expired: false, access_token: "tok" });
   render(<AuthProvider><Probe /></AuthProvider>);
   await waitFor(() => expect(screen.getByText("status:authenticated")).toBeInTheDocument());
+});
+
+it("is authenticated without OIDC when auth is disabled (dev mode)", async () => {
+  vi.mocked(fetchAuthConfig).mockResolvedValueOnce({ enabled: false, issuer: "", clientId: "" });
+  render(<AuthProvider><Probe /></AuthProvider>);
+  await waitFor(() => expect(screen.getByText("status:authenticated")).toBeInTheDocument());
+  // No UserManager is built, so getUser is never consulted.
+  expect(getUser).not.toHaveBeenCalled();
 });

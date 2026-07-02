@@ -3,6 +3,10 @@
 @custom-variant dark (&:is(.dark *));
 
 @theme inline {
+    --font-sans: "Geist Variable", ui-sans-serif, system-ui, -apple-system,
+        "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    --font-mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, "SF Mono",
+        Menlo, Consolas, "Liberation Mono", monospace;
     --radius: 0.625rem;
     --duration-fast: 100ms;
     --duration-base: 200ms;
@@ -38,6 +42,7 @@
     --color-destructive: var(--destructive);
     --color-accent-foreground: var(--accent-foreground);
     --color-accent: var(--accent);
+    --color-muted-foreground-strong: var(--muted-foreground-strong);
     --color-muted-foreground: var(--muted-foreground);
     --color-muted: var(--muted);
     --color-secondary-foreground: var(--secondary-foreground);
@@ -96,6 +101,13 @@
     }
 }
 
+@layer base {
+    body {
+        background-color: var(--background);
+        color: var(--foreground);
+    }
+}
+
 :root {
     --background: oklch(97.91% 0 0);
     --foreground: oklch(26.94% 0.0037 286.15);
@@ -110,6 +122,7 @@
     --secondary-foreground: oklch(32.95% 0.0209 254.12);
     --muted: oklch(94.94% 0.0013 286.37);
     --muted-foreground: oklch(54.86% 0.0154 285.88);
+    --muted-foreground-strong: oklch(47.01% 0.0112 285.96);
     --accent: oklch(95.04% 0.0042 236.50);
     --accent-foreground: oklch(32.95% 0.0209 254.12);
     --destructive: oklch(95.06% 0.0247 29.93);
@@ -151,6 +164,7 @@
     --secondary-foreground: oklch(95.04% 0.0042 236.50);
     --muted: oklch(33.01% 0.0052 286.11);
     --muted-foreground: oklch(69.88% 0.0130 286.06);
+    --muted-foreground-strong: oklch(78.06% 0.0056 286.27);
     --accent: oklch(40% 0.0269 250.57);
     --accent-foreground: oklch(95.04% 0.0042 236.50);
     --destructive: oklch(33.1% 0.1332 27.42);

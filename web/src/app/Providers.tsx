@@ -3,6 +3,7 @@ import { QueryClientProvider } from "@tanstack/react-query";
 import { TransportProvider } from "@connectrpc/connect-query";
 import { AuthProvider } from "@/lib/auth/AuthProvider";
 import { useAuth } from "@/lib/auth/useAuth";
+import { ThemeProvider } from "@/lib/theme/ThemeContext";
 import { createTransport } from "@/lib/transport";
 import { queryClient } from "@/lib/query";
 
@@ -27,8 +28,10 @@ function TransportLayer({ children }: { children: React.ReactNode }) {
 
 export function Providers({ children }: { children: React.ReactNode }) {
   return (
-    <AuthProvider>
-      <TransportLayer>{children}</TransportLayer>
-    </AuthProvider>
+    <ThemeProvider>
+      <AuthProvider>
+        <TransportLayer>{children}</TransportLayer>
+      </AuthProvider>
+    </ThemeProvider>
   );
 }

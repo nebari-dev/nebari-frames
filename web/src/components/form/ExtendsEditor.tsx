@@ -8,7 +8,7 @@ export function ExtendsEditor() {
   return (
     <div className="space-y-2">
       {fields.map((field, i) => (
-        <div key={field.id} className="flex items-start gap-2">
+        <div key={field.id} className="flex items-center gap-2">
           <Controller
             control={control}
             name={`extends.${i}`}
@@ -21,7 +21,7 @@ export function ExtendsEditor() {
           </Button>
         </div>
       ))}
-      <Button type="button" variant="outline" size="sm" onClick={() => append({ ref: "", version: "" })}>
+      <Button type="button" variant="outline" onClick={() => append({ ref: "", version: "" })}>
         + Add parent Frame
       </Button>
     </div>

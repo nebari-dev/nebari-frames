@@ -1,5 +1,7 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router";
+import { AuthLayout } from "@/components/layout/AuthLayout";
+import { Spinner } from "@/components/ui/spinner";
 import { useAuth } from "@/lib/auth/useAuth";
 
 export function CallbackPage() {
@@ -12,8 +14,19 @@ export function CallbackPage() {
       .catch(() => setFailed(true));
   }, [completeLogin, navigate]);
   return (
-    <div className="min-h-screen grid place-items-center text-muted-foreground">
-      {failed ? <p className="text-destructive">Sign-in failed. Please try again.</p> : <p>Signing you in...</p>}
-    </div>
+    <AuthLayout
+      title={failed ? "Sign-in failed" : "Signing you in…"}
+      description={
+        failed ? "Something went wrong completing sign-in. Please try again." : undefined
+      }
+    >
+      {failed ? (
+        <p className="text-sm text-destructive-foreground">Please return to the login page.</p>
+      ) : (
+        <div className="flex justify-center text-muted-foreground">
+          <Spinner className="size-6" />
+        </div>
+      )}
+    </AuthLayout>
   );
 }
