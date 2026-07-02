@@ -22,9 +22,9 @@ See [Background §1.1 in the migration design doc](docs/design/2026-05-21-nebari
 make dev
 ```
 
-Runs the backend (dev mode, no OIDC) on `:8080` and the Vite dev server on `:5173`, seeded with representative sample data (an org, members across roles, and frames with inheritance and versions). Open **http://localhost:5173**; UI edits hot-reload. Ctrl-C stops both.
+Runs the backend (dev mode, no OIDC) on `:8080` and the Vite dev server on `:5173`, seeded with representative sample data (an org, members across roles, and frames with full slot content, multi-level inheritance, and versions). Open **http://localhost:5173**; UI edits hot-reload. Ctrl-C stops both.
 
-In dev mode you are automatically `dev-user`, an org admin - so you never hit the "No organization access" screen (see [Troubleshooting](#troubleshooting)).
+There is no login step in this loop: dev mode disables OIDC and injects a fixed identity, so you land straight in the app as `dev-user`, an org admin - and never hit the "No organization access" screen (see [Troubleshooting](#troubleshooting)).
 
 ### Real login loop - `make dev-auth`
 
