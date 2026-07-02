@@ -17,7 +17,7 @@ const PROSE: { key: keyof FrameDoc["slots"]; label: string }[] = [
 export function FrameSlots({ doc }: { doc: FrameDoc }) {
   const s = doc.slots;
   return (
-    <div>
+    <div className="divide-y">
       {s.terminology && s.terminology.length > 0 && (
         <SlotSection title="Terminology"><TerminologyList terms={s.terminology} /></SlotSection>
       )}

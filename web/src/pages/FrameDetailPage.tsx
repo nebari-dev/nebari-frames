@@ -107,7 +107,7 @@ export function FrameDetailPage() {
       </header>
 
       <div className="grid gap-10 lg:grid-cols-[minmax(0,1fr)_30rem] lg:items-start">
-        <div className="min-w-0 space-y-4">
+        <div className="min-w-0">
           <Card className="p-4">
             <dl className="grid grid-cols-2 gap-x-4 gap-y-3 sm:grid-cols-3">
               <Meta label="Owner" value={frame.ownerSub} />
@@ -118,6 +118,32 @@ export function FrameDetailPage() {
               <Meta label="Size" value={fmtBytes(version.sizeBytes)} />
               <Meta label="Digest" value={version.digest} mono />
             </dl>
+            <div className="mt-4 border-t pt-1">
+              <FrameSlots doc={doc} />
+            </div>
+          </Card>
+        </div>
+
+        <aside className="space-y-6">
+          <Card className="space-y-4 p-4">
+            <InheritanceTrail parents={resp.extends} />
+            {(resp.excludes?.length ?? 0) > 0 && (
+              <div className="text-sm">
+                <div className="mb-1 font-medium">Excludes</div>
+                <ul className="space-y-1 text-muted-foreground">
+                  {resp.excludes.map((ex) => (
+                    <li key={ex} className="font-mono text-xs">{ex}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
+            <Link
+              to={`/?view=hierarchy&focus=${org}/${name}`}
+              className="flex items-center gap-2 text-sm text-primary hover:underline"
+            >
+              <GitFork className="size-4" />
+              View in hierarchy
+            </Link>
           </Card>
 
           {version.changelog && (
@@ -127,41 +153,7 @@ export function FrameDetailPage() {
             </Card>
           )}
 
-          <FrameSlots doc={doc} />
           <VersionHistory versions={versionsQ.data?.versions ?? []} />
-        </div>
-
-        <aside className="space-y-6">
-          {(resp.extends?.length || resp.excludes?.length) ? (
-            <Card className="space-y-4 p-4">
-              <InheritanceTrail parents={resp.extends} />
-              {(resp.excludes?.length ?? 0) > 0 && (
-                <div className="text-sm">
-                  <div className="mb-1 font-medium">Excludes</div>
-                  <ul className="space-y-1 text-muted-foreground">
-                    {resp.excludes.map((ex) => (
-                      <li key={ex} className="font-mono text-xs">{ex}</li>
-                    ))}
-                  </ul>
-                </div>
-              )}
-              <Link
-                to={`/?view=hierarchy&focus=${org}/${name}`}
-                className="flex items-center gap-2 text-sm text-primary hover:underline"
-              >
-                <GitFork className="size-4" />
-                View in hierarchy
-              </Link>
-            </Card>
-          ) : (
-            <Link
-              to={`/?view=hierarchy&focus=${org}/${name}`}
-              className="flex items-center gap-2 text-sm text-primary hover:underline"
-            >
-              <GitFork className="size-4" />
-              View in hierarchy
-            </Link>
-          )}
 
           <UseThisFrame org={org} name={name} />
         </aside>
