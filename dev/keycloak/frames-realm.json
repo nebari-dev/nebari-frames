@@ -1,0 +1,46 @@
+{
+  "realm": "frames",
+  "enabled": true,
+  "sslRequired": "none",
+  "clients": [
+    {
+      "clientId": "frames-web",
+      "enabled": true,
+      "publicClient": true,
+      "standardFlowEnabled": true,
+      "directAccessGrantsEnabled": false,
+      "redirectUris": ["http://localhost:5173/*", "http://localhost:8080/*"],
+      "webOrigins": ["http://localhost:5173", "http://localhost:8080"],
+      "defaultClientScopes": ["email", "profile", "roles", "web-origins"],
+      "attributes": {
+        "pkce.code.challenge.method": "S256",
+        "post.logout.redirect.uris": "http://localhost:5173/*##http://localhost:8080/*"
+      },
+      "protocolMappers": [
+        {
+          "name": "frames-web-audience",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-audience-mapper",
+          "config": {
+            "included.client.audience": "frames-web",
+            "id.token.claim": "false",
+            "access.token.claim": "true"
+          }
+        }
+      ]
+    }
+  ],
+  "users": [
+    {
+      "username": "dev",
+      "email": "dev@localhost",
+      "emailVerified": true,
+      "enabled": true,
+      "firstName": "Dev",
+      "lastName": "User",
+      "credentials": [
+        { "type": "password", "value": "dev", "temporary": false }
+      ]
+    }
+  ]
+}

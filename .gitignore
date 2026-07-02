@@ -40,3 +40,4 @@ web/vitest.config.d.ts
 # Config (local)
 CLAUDE.md
 .superpowers/
+.claude/
