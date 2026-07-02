@@ -46,10 +46,19 @@ dev:
 dev-auth: build-web
 	./dev/dev-auth.sh
 
-# Tear down local dev state: remove the dev DB and stop/remove Keycloak + volume.
+# Tear down local dev state: stop any leftover dev backend still holding the
+# SQLite lock (e.g. an orphan from a suspended/killed `make dev`), remove the
+# dev DB and its WAL/SHM sidecars, and stop/remove Keycloak + volume. We kill by
+# TCP port owner (both dev loops now serve the app on :5173; `make dev` also runs
+# its internal backend on :8080) rather than by process name: the binary's comm
+# is truncated to 15 chars and `pkill -f` would over-match any command line that
+# merely mentions the path. The `-`/`|| true` guards keep a clean tree passing.
+DEV_APP_PORT ?= 5173
+DEV_BACKEND_PORT ?= 8080
 dev-clean:
+	-fuser -k $(DEV_APP_PORT)/tcp $(DEV_BACKEND_PORT)/tcp 2>/dev/null || true
 	-docker compose -f dev/docker-compose.yml down -v
-	rm -f $(DEV_DB)
+	rm -f $(DEV_DB) $(DEV_DB)-wal $(DEV_DB)-shm
 
 clean:
 	rm -f nebari-frames-server coverage.out *.db

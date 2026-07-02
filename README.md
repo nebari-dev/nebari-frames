@@ -32,11 +32,13 @@ In dev mode you are automatically `dev-user`, an org admin - so you never hit th
 make dev-auth
 ```
 
-Starts Keycloak in Docker (`:8081`) with an auto-imported realm and runs the backend in OIDC mode on `:8080`. Open **http://localhost:8080**, log in as **`dev@localhost`** / **`dev`**. That user is seeded as an org admin. Keycloak admin console: http://localhost:8081 (admin / admin). Run `make dev-clean` to tear everything down.
+Starts Keycloak in Docker (`:8081`) with an auto-imported realm and runs the backend in OIDC mode on `:5173`, serving the built SPA. Open **http://localhost:5173** (the same URL as `make dev`), log in as **`dev@localhost`** / **`dev`**. That user is seeded as an org admin. Keycloak admin console: http://localhost:8081 (admin / admin). Run `make dev-clean` to tear everything down.
 
 ### Troubleshooting
 
 **"No organization access" after login.** This is intentional fail-closed behavior: a signed-in user who is not a member of any org is denied. Locally, `make dev` seeds you (`dev-user`) as an admin, and `make dev-auth` seeds `dev@localhost` as a pending admin that activates on first login - so neither should show this page. If you see it against a real deployment, ask an org admin to add your email.
+
+**`disk I/O error` / `database is locked` on startup.** A previous dev backend was left running (e.g. `make dev` was suspended with Ctrl-Z or killed with `kill -9` instead of stopped with a single Ctrl-C) and still holds the SQLite lock. Run `make dev-clean` to stop the orphan (it frees ports `:5173`/`:8080`), clear the dev DB and its `-wal`/`-shm` files, and reset Keycloak, then start again. Always stop a dev loop with a single **Ctrl-C** so both processes shut down cleanly.
 
 ## Design Documents
 
