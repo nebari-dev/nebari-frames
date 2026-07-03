@@ -121,9 +121,19 @@ jobs:
                   image:
                     repository: nebari-frames
                     tag: e2e
+                  # Auth runs in dev mode: the app's OIDC readiness check needs
+                  # to reach the issuer (https://keycloak.nebari.local) from
+                  # inside the pod, but the sandbox has no in-cluster DNS for
+                  # *.nebari.local and its CA is self-signed, so /readyz stays
+                  # 503 forever with real auth. Routing, TLS, and the gateway
+                  # path are still fully exercised via the NebariApp.
                   nebariapp:
                     enabled: true
                     hostname: frames.nebari.local
+                    auth:
+                      enabled: false
+                  auth:
+                    devMode: true
                   seed:
                     orgSlug: e2e-org
                     orgDisplayName: E2E Org
@@ -193,6 +203,8 @@ jobs:
           kubectl -n nebari-frames get nebariapps.nebari.dev -o yaml || true
           echo "=== Secrets in nebari-frames namespace ==="
           kubectl -n nebari-frames get secrets || true
+          echo "=== frames pod logs (tail) ==="
+          kubectl -n nebari-frames logs --tail=100 deploy/nebari-frames-nebari-frames 2>/dev/null || true
           echo "=== Operator pods ==="
           kubectl get pods -A | grep -i operator || true
           echo "=== Operator Keycloak wiring (env) ==="
