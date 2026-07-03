@@ -1,4 +1,5 @@
 apiVersion: apps/v1
+# {{ .Values.doesNotExist.field }}
 kind: Deployment
 metadata:
   name: {{ include "nebari-frames.fullname" . }}
