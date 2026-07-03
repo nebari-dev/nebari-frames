@@ -37,6 +37,12 @@ web/vite.config.d.ts
 web/vitest.config.js
 web/vitest.config.d.ts
 
+# Docs site (Astro/Starlight) build output and generated types.
+# node_modules/ above already covers docs/site/node_modules; /dist/ above is
+# anchored to the repo root, so it needs its own entry here.
+docs/site/dist/
+docs/site/.astro/
+
 # Config (local)
 CLAUDE.md
 .superpowers/
