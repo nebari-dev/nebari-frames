@@ -37,7 +37,11 @@ jobs:
           tags: |
             type=ref,event=branch
             type=sha,prefix=sha-
-            type=semver,pattern=v{{version}}
+            # Literal git tag (v-prefixed), not type=semver: metadata-action
+            # ignores custom semver patterns for prerelease versions and would
+            # emit 0.1.0-alpha.N without the v, breaking the chart's appVersion
+            # to image.tag contract.
+            type=ref,event=tag
             type=raw,value=latest,enable={{is_default_branch}}
 
       # Build once and load locally so the image can be smoke-tested before
