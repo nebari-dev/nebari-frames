@@ -226,7 +226,7 @@ jobs:
           kubectl -n nebari-frames get pods -o wide || true
           kubectl -n nebari-frames describe pods || true
           echo "=== NebariApp CR (operator's view of auth provisioning) ==="
-          kubectl -n nebari-frames get nebariapps.nebari.dev -o yaml || true
+          kubectl -n nebari-frames get nebariapps.reconcilers.nebari.dev -o yaml || true
           echo "=== Secrets in nebari-frames namespace ==="
           kubectl -n nebari-frames get secrets || true
           echo "=== frames pod logs (tail) ==="
