@@ -40,7 +40,8 @@ jobs:
       - name: CLI reference is up to date
         run: |
           go run ./tools/docs-gen
-          if ! git diff --exit-code -- docs/site/src/content/docs/reference/cli/; then
+          git add -A docs/site/src/content/docs/reference/cli/
+          if ! git diff --cached --exit-code -- docs/site/src/content/docs/reference/cli/; then
             echo "::error::Generated CLI reference is stale. Run 'go run ./tools/docs-gen' and commit the result."
             exit 1
           fi
