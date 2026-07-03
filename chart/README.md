@@ -58,14 +58,12 @@ This runs in dev mode with authentication disabled and is meant for local use on
 
 ## Telemetry
 
-The server writes structured JSON logs to stdout/stderr, ready for collection by the platform's log stack (e.g. the LGTM stack on Nebari). There is no `ServiceMonitor` in this chart because the server does not expose a metrics endpoint yet. When metrics land, the chart will grow a `ServiceMonitor` gated behind a `metrics.enabled` value so clusters without the Prometheus operator are unaffected.
+The server writes structured JSON logs to stdout, ready for collection by the platform's log stack (e.g. the LGTM stack on Nebari). There is no `ServiceMonitor` in this chart because the server does not expose a metrics endpoint yet. When metrics land, the chart will grow a `ServiceMonitor` gated behind a `metrics.enabled` value so clusters without the Prometheus operator are unaffected.
 
 ## Known Limitations (Alpha)
 
 - MCP/Claude requires manual Keycloak realm config (DCR + default-scope audience mapper); operator-native support is pending.
 - Wrong-audience rejection and RBAC-negative read isolation are verified in automated/local tests but are not gated in the live Alpha demo.
-- No CI yet; the container image is built and pushed manually.
-- The chart is not yet published to the Nebari helm-repository; ArgoCD syncs it from the git repository.
 - SQLite is single-writer: `replicaCount` must stay 1.
 
 ## Values reference
