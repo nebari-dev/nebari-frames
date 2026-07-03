@@ -79,10 +79,28 @@ jobs:
           BASE: ${{ steps.base.outputs.base }}
         run: npm run build
 
-      # Fork PRs cannot read secrets; skip deploy there (the build above still gates).
+      # PR previews need the Cloudflare secrets; fork PRs cannot read them and
+      # same-repo PRs may predate their provisioning, so previews skip when the
+      # secrets are absent. Pushes to main always attempt the deploy so a
+      # missing secret fails loudly instead of silently shipping nothing.
+      - name: Determine deployability
+        id: candeploy
+        env:
+          CF_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CF_ACCOUNT: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          OK=true
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            if [ -z "${CF_TOKEN}" ] || [ -z "${CF_ACCOUNT}" ]; then
+              OK=false
+              echo "::notice::Cloudflare secrets unavailable; skipping preview deploy (build still gates)."
+            fi
+          fi
+          echo "ok=${OK}" >> "$GITHUB_OUTPUT"
+
       - name: Deploy to Cloudflare Pages
         id: deploy
-        if: ${{ github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository }}
+        if: ${{ steps.candeploy.outputs.ok == 'true' }}
         uses: cloudflare/wrangler-action@v3
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
