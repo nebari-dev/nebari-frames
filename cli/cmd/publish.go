@@ -33,7 +33,7 @@ func addPublishCmd(root *cobra.Command) {
 				}
 				return authAware(err)
 			}
-			fmt.Fprintf(cmd.OutOrStdout(), "Published %s@%s\n", frame.Name, version.Version)
+			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Published %s@%s\n", frame.Name, version.Version)
 			return nil
 		},
 	}

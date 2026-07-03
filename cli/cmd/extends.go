@@ -24,11 +24,11 @@ func addExtendsCmd(root *cobra.Command) {
 			}
 			out := cmd.OutOrStdout()
 			if len(resp.Extends) == 0 {
-				fmt.Fprintln(out, "(no parents)")
+				_, _ = fmt.Fprintln(out, "(no parents)")
 				return nil
 			}
 			for _, p := range resp.Extends {
-				fmt.Fprintf(out, "%s@%s\n", p.Ref, p.Version)
+				_, _ = fmt.Fprintf(out, "%s@%s\n", p.Ref, p.Version)
 			}
 			return nil
 		},

@@ -17,7 +17,7 @@ func addConfigCmd(root *cobra.Command) {
 		Short: "Print a config value",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			fmt.Fprintln(cmd.OutOrStdout(), viper.GetString(args[0]))
+			_, _ = fmt.Fprintln(cmd.OutOrStdout(), viper.GetString(args[0]))
 			return nil
 		},
 	}
@@ -40,7 +40,7 @@ func addConfigCmd(root *cobra.Command) {
 			if err := viper.WriteConfigAs(path); err != nil {
 				return err
 			}
-			fmt.Fprintf(cmd.OutOrStdout(), "%s = %s\n", args[0], args[1])
+			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "%s = %s\n", args[0], args[1])
 			return nil
 		},
 	}

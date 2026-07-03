@@ -22,9 +22,9 @@ func addAuthCmd(root *cobra.Command) {
 			}
 			out := cmd.OutOrStdout()
 			if pending.VerificationURIComplete != "" {
-				fmt.Fprintf(out, "Open %s to log in.\n", pending.VerificationURIComplete)
+				_, _ = fmt.Fprintf(out, "Open %s to log in.\n", pending.VerificationURIComplete)
 			} else {
-				fmt.Fprintf(out, "Open %s and enter code %s.\n", pending.VerificationURI, pending.UserCode)
+				_, _ = fmt.Fprintf(out, "Open %s and enter code %s.\n", pending.VerificationURI, pending.UserCode)
 			}
 			res, err := auth.PollForToken(ctx, pending, 0)
 			if err != nil {
@@ -37,7 +37,7 @@ func addAuthCmd(root *cobra.Command) {
 			if err := auth.SaveToken(resolveCredentialsPath(), tok); err != nil {
 				return err
 			}
-			fmt.Fprintf(out, "Logged in as %s.\n", res.Email)
+			_, _ = fmt.Fprintf(out, "Logged in as %s.\n", res.Email)
 			return nil
 		},
 	}
@@ -54,7 +54,7 @@ func addAuthCmd(root *cobra.Command) {
 			if me.Org != nil {
 				org = me.Org.Slug
 			}
-			fmt.Fprintf(cmd.OutOrStdout(), "%s (org: %s, role: %s)\n", me.Subject, org, me.Role)
+			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "%s (org: %s, role: %s)\n", me.Subject, org, me.Role)
 			return nil
 		},
 	}
@@ -64,7 +64,7 @@ func addAuthCmd(root *cobra.Command) {
 		Short: "Clear stored credentials",
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			auth.DeleteToken(resolveCredentialsPath())
-			fmt.Fprintln(cmd.OutOrStdout(), "Logged out.")
+			_, _ = fmt.Fprintln(cmd.OutOrStdout(), "Logged out.")
 			return nil
 		},
 	}

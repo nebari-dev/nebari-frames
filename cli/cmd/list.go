@@ -17,13 +17,13 @@ func addListCmd(root *cobra.Command) {
 				return authAware(err)
 			}
 			if len(frames) == 0 {
-				fmt.Fprintln(cmd.OutOrStdout(), "No frames found.")
+				_, _ = fmt.Fprintln(cmd.OutOrStdout(), "No frames found.")
 				return nil
 			}
 			w := tabwriter.NewWriter(cmd.OutOrStdout(), 0, 2, 2, ' ', 0)
-			fmt.Fprintln(w, "NAME\tVERSION\tOWNER\tDESCRIPTION")
+			_, _ = fmt.Fprintln(w, "NAME\tVERSION\tOWNER\tDESCRIPTION")
 			for _, f := range frames {
-				fmt.Fprintf(w, "%s\t%s\t%s\t%s\n", f.Name, f.LatestVersion, f.OwnerSub, f.Description)
+				_, _ = fmt.Fprintf(w, "%s\t%s\t%s\t%s\n", f.Name, f.LatestVersion, f.OwnerSub, f.Description)
 			}
 			return w.Flush()
 		},
