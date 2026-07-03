@@ -1,6 +1,6 @@
 # Nebari Frames
 
-> **Status:** backend, CLI, web app, and MCP endpoint are implemented. See [Run locally](#run-locally) to try it. Design docs in [`docs/design/`](docs/design/).
+> **Status:** beta ([software pack maturity](https://github.com/nebari-dev/software-pack-template/blob/main/docs/release-readiness-checklist.md)). Backend, CLI, web app, and MCP endpoint are implemented. See [Run locally](#run-locally) to try it. Design docs in [`docs/design/`](docs/design/).
 
 Nebari Frames is the registry and exchange for **Frames**: scoped, text-based artifacts that carry organizational context (terminology, style, goals, rules, business processes, and more) into AI conversations. A Frame composes through inheritance, is governed through role-based access control, and is consumable by any MCP-capable AI client (Claude, ChatGPT, Gemini, and others) or by Claude Code through file install.
 

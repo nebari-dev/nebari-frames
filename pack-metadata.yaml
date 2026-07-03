@@ -1,10 +1,11 @@
 name: nebari-frames
 display_name: Nebari Frames
 description: Server for organization Frames with a web UI and a remote MCP endpoint for AI clients.
-level: alpha
+level: beta
 owner: dcmcand
-product_owner: null
+product_owner: dcmcand
 deprecated: false
+last_promoted_at: "2026-07-03"
 nebariapp_integration: full
 scope:
   standalone-supported: true
