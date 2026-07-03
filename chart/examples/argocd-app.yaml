@@ -6,9 +6,12 @@ metadata:
 spec:
   project: default
   source:
-    repoURL: https://github.com/nebari-dev/nebari-frames.git
-    targetRevision: main
-    path: chart
+    # Released chart from the Nebari Helm registry. image.tag defaults to the
+    # chart's appVersion, so chart and image versions move together; bump
+    # targetRevision to upgrade.
+    chart: nebari-frames
+    repoURL: quay.io/nebari/charts
+    targetRevision: 0.1.5
     helm:
       values: |
         nebariapp:
@@ -23,8 +26,6 @@ spec:
           adminEmail: REPLACE_ME@example.com
         mcp:
           enabled: true
-        image:
-          tag: REPLACE_ME   # the pushed <IMG_TAG> from Task 6
   destination:
     server: https://kubernetes.default.svc
     namespace: nebari-frames
