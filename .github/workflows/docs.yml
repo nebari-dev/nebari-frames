@@ -105,6 +105,9 @@ jobs:
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          # pages deploy does not auto-create the project (API error 8000007 on
+          # first deploy); create-if-missing keeps the workflow self-sufficient.
+          preCommands: npx wrangler pages project create ${{ env.PACK_SLUG }} --production-branch=main || true
           command: pages deploy docs/site/dist --project-name=${{ env.PACK_SLUG }} --branch=${{ steps.base.outputs.branch }}
 
       - name: Comment preview URL
