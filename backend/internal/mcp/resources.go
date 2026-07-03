@@ -3,7 +3,7 @@ package mcp
 import (
 	"context"
 	"fmt"
-	"log"
+	"log/slog"
 	"net/http"
 	"strings"
 	"time"
@@ -57,7 +57,7 @@ func (rs *resourceServer) getServer(req *http.Request) *gomcp.Server {
 	if err != nil {
 		// The SDK turns a nil server into HTTP 400 (client error), which would
 		// misrepresent a backend fault. Log it and serve an empty resource set.
-		log.Printf("mcp: getServer: ListReadable failed, serving no resources: %v", err)
+		slog.Error("mcp: getServer: ListReadable failed, serving no resources", "error", err)
 		readable = nil
 	}
 	srv := gomcp.NewServer(&gomcp.Implementation{Name: "nebari-frames", Version: "v1"}, nil)

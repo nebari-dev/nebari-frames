@@ -3,7 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
-	"log"
+	"log/slog"
 	"net/http"
 	"os"
 	"strings"
@@ -22,17 +22,21 @@ import (
 )
 
 func main() {
+	slog.SetDefault(slog.New(slog.NewJSONHandler(os.Stdout, nil)))
+
 	port := envOr("PORT", "8080")
 	dbPath := envOr("DB_PATH", "nebari-frames.db")
 
 	db, err := sqlitestore.Open(dbPath)
 	if err != nil {
-		log.Fatalf("open database: %v", err)
+		slog.Error("open database", "error", err)
+		os.Exit(1)
 	}
 	defer func() { _ = db.Close() }()
 
 	if err := migrations.Run(context.Background(), db); err != nil {
-		log.Fatalf("run migrations: %v", err)
+		slog.Error("run migrations", "error", err)
+		os.Exit(1)
 	}
 
 	repo := sqlitestore.New(db)
@@ -43,14 +47,16 @@ func main() {
 		AdminSub:       os.Getenv("SEED_ADMIN_SUB"),
 		AdminEmail:     os.Getenv("SEED_ADMIN_EMAIL"),
 	}); err != nil {
-		log.Fatalf("seed: %v", err)
+		slog.Error("seed", "error", err)
+		os.Exit(1)
 	}
 
 	if os.Getenv("SEED_DEV_FIXTURE") == "true" {
 		if err := devfixture.Load(context.Background(), repo, os.Getenv("SEED_ORG_SLUG")); err != nil {
-			log.Fatalf("dev fixture: %v", err)
+			slog.Error("dev fixture", "error", err)
+			os.Exit(1)
 		}
-		log.Println("SEED_DEV_FIXTURE=true - seeded representative local-dev fixture data")
+		slog.Info("SEED_DEV_FIXTURE=true - seeded representative local-dev fixture data")
 	}
 
 	authCfg := auth.Config{
@@ -61,14 +67,15 @@ func main() {
 	}
 	devMode, err := selectAuthMode(os.Getenv("FRAMES_DEV_MODE"), authCfg.IssuerURL, authCfg.ClientID)
 	if err != nil {
-		log.Fatalf("%v", err)
+		slog.Error("invalid auth configuration", "error", err)
+		os.Exit(1)
 	}
 	var validator auth.TokenValidator
 	if devMode {
-		log.Println("WARNING: FRAMES_DEV_MODE=true - authentication DISABLED; injecting fixed dev-user identity")
+		slog.Warn("FRAMES_DEV_MODE=true - authentication DISABLED; injecting fixed dev-user identity")
 	} else {
 		validator = auth.NewLazyValidator(context.Background(), authCfg)
-		log.Printf("auth enabled (issuer: %s); validating OIDC readiness in background", authCfg.IssuerURL)
+		slog.Info("auth enabled; validating OIDC readiness in background", "issuer", authCfg.IssuerURL)
 	}
 
 	mcpCfg := mcppkg.Config{
@@ -82,7 +89,7 @@ func main() {
 		mcpAuthCfg := authCfg
 		mcpAuthCfg.ClientID = mcpCfg.ResolvedAudience()
 		mcpValidator = auth.NewLazyValidator(context.Background(), mcpAuthCfg)
-		log.Printf("MCP endpoint enabled (resource: %s)", mcpCfg.ResolvedAudience())
+		slog.Info("MCP endpoint enabled", "resource", mcpCfg.ResolvedAudience())
 	}
 	// Kept as a server.Mounter (interface) so a disabled endpoint is a nil
 	// interface, not a typed-nil *Component that would satisfy a != nil check.
@@ -100,9 +107,10 @@ func main() {
 		WriteTimeout:      60 * time.Second,
 		IdleTimeout:       120 * time.Second,
 	}
-	log.Printf("starting server on :%s (db: %s)", port, dbPath)
+	slog.Info("starting server", "port", port, "db", dbPath)
 	if err := srv.ListenAndServe(); err != nil {
-		log.Fatalf("server failed: %v", err)
+		slog.Error("server failed", "error", err)
+		os.Exit(1)
 	}
 }
 
