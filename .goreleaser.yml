@@ -1,0 +1,70 @@
+version: 2
+
+before:
+  hooks:
+    - go mod tidy
+
+builds:
+  - id: frames
+    main: ./cli
+    binary: frames
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - darwin
+      - windows
+    goarch:
+      - amd64
+      - arm64
+    ignore:
+      - goos: windows
+        goarch: arm64
+    ldflags:
+      - -s -w
+      - -X github.com/nebari-dev/nebari-frames/cli/cmd.version={{.Version}}
+
+archives:
+  - id: frames
+    ids:
+      - frames
+    formats:
+      - tar.gz
+    format_overrides:
+      - goos: windows
+        formats:
+          - zip
+    name_template: "frames_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+
+checksum:
+  name_template: "checksums.txt"
+  algorithm: sha256
+
+changelog:
+  sort: asc
+  filters:
+    exclude:
+      # Bracketed char class so scoped conventional commits match too,
+      # e.g. docs(readme): and chore(deps):
+      - "^docs[(:]"
+      - "^test[(:]"
+      - "^chore[(:]"
+
+release:
+  prerelease: auto
+
+brews:
+  - name: frames
+    ids:
+      - frames
+    repository:
+      owner: nebari-dev
+      name: homebrew-tap
+      token: "{{ .Env.HOMEBREW_TAP_TOKEN }}"
+    homepage: https://github.com/nebari-dev/nebari-frames
+    description: CLI for publishing, browsing, and resolving Nebari Frames
+    license: Apache-2.0
+    install: |
+      bin.install "frames"
+    test: |
+      system "#{bin}/frames", "--version"
