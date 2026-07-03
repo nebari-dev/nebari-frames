@@ -1,0 +1,95 @@
+name: Build Images
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+
+permissions:
+  contents: read
+  packages: write
+
+env:
+  GHCR_IMAGE: ghcr.io/nebari-dev/nebari-frames
+  QUAY_IMAGE: quay.io/nebari/nebari-frames
+
+jobs:
+  build-push:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: docker/setup-buildx-action@v3
+
+      # latest is applied only on the default branch (is_default_branch); tag
+      # pushes get only the semver tag plus sha-. Do not "simplify" this.
+      - uses: docker/metadata-action@v5
+        id: meta
+        with:
+          images: |
+            ${{ env.GHCR_IMAGE }}
+            ${{ env.QUAY_IMAGE }}
+          tags: |
+            type=ref,event=branch
+            type=sha,prefix=sha-
+            type=semver,pattern=v{{version}}
+            type=raw,value=latest,enable={{is_default_branch}}
+
+      # Build once and load locally so the image can be smoke-tested before
+      # any tag is pushed. The push step below is a cache hit of this build.
+      - name: Build for smoke test
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          platforms: linux/amd64
+          load: true
+          tags: nebari-frames:smoke
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Smoke test
+        run: |
+          # DB_PATH override: the image default is the working directory, which
+          # is not writable in the distroless image; /data is created and chowned
+          # in the Dockerfile.
+          docker run -d --name smoke -p 8080:8080 \
+            -e FRAMES_DEV_MODE=true \
+            -e DB_PATH=/data/frames.db \
+            nebari-frames:smoke
+          for i in $(seq 1 12); do
+            sleep 5
+            if curl -sf http://localhost:8080/ >/dev/null; then
+              echo "smoke OK"
+              docker rm -f smoke || true
+              exit 0
+            fi
+            echo "[${i}/12] not answering yet"
+          done
+          echo "::error::container never answered on :8080"
+          docker logs smoke || true
+          docker rm -f smoke || true
+          exit 1
+
+      # Logins happen after the build and smoke test so a missing registry
+      # secret fails here, adjacent to the push, with build signal already green.
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: docker/login-action@v3
+        with:
+          registry: quay.io
+          username: ${{ secrets.QUAY_USERNAME }}
+          password: ${{ secrets.QUAY_TOKEN }}
+
+      - name: Push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          platforms: linux/amd64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
