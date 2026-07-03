@@ -79,7 +79,16 @@ Beyond the auth block above, the values most people end up touching are:
 - `persistence.size`, `persistence.storageClass` - PVC size and storage class for the SQLite database.
 - `mcp.enabled`, `mcp.publicUrl` - whether the `/mcp` endpoint is mounted, and an override for its public URL when it can't be derived from `nebariapp.hostname`.
 
-See [`chart/values.yaml`](chart/values.yaml) for the complete reference. Until the chart is published to a chart repository you can add with `helm repo add`, install it straight from this git repository, as shown in [`chart/README.md`](chart/README.md#install-on-nebari).
+See [`chart/values.yaml`](chart/values.yaml) for the complete reference. Releases publish the chart to the Nebari Helm registry, so the simplest install is straight from there:
+
+```bash
+helm install nebari-frames oci://quay.io/nebari/charts/nebari-frames --version 0.1.5 \
+  --namespace nebari-frames --create-namespace \
+  --set nebariapp.hostname=frames.example.com \
+  --set seed.orgSlug=my-org --set seed.adminEmail=admin@example.com
+```
+
+Installing from a git checkout also works, as shown in [`chart/README.md`](chart/README.md#install-on-nebari).
 
 ## Known Limitations
 
