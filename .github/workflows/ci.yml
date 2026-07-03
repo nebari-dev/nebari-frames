@@ -80,3 +80,126 @@ jobs:
             >/dev/null
       - name: Template renders (dev mode)
         run: helm template frames chart/ --set auth.devMode=true >/dev/null
+
+  e2e-sandbox:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Build frames image
+        run: docker build --platform=linux/amd64 -t nebari-frames:e2e .
+
+      - uses: nebari-dev/action-nebari-sandbox@v2
+        id: sandbox
+        with:
+          profile: platform
+
+      - name: Import image into the sandbox cluster
+        run: k3d image import nebari-frames:e2e -c ${{ steps.sandbox.outputs.cluster-name }}
+
+      - name: Deploy frames via GitOps
+        env:
+          GITOPS_DIR: ${{ steps.sandbox.outputs.gitops-dir }}
+        run: |
+          cp -r chart "${GITOPS_DIR}/nebari-frames-chart"
+          cat > "${GITOPS_DIR}/apps/nebari-frames.yaml" <<EOF
+          apiVersion: argoproj.io/v1alpha1
+          kind: Application
+          metadata:
+            name: nebari-frames
+            namespace: argocd
+          spec:
+            project: default
+            source:
+              repoURL: "file://${GITOPS_DIR}"
+              targetRevision: HEAD
+              path: nebari-frames-chart
+              helm:
+                releaseName: nebari-frames
+                values: |
+                  image:
+                    repository: nebari-frames
+                    tag: e2e
+                  nebariapp:
+                    enabled: true
+                    hostname: frames.nebari.local
+                  seed:
+                    orgSlug: e2e-org
+                    orgDisplayName: E2E Org
+                    adminEmail: e2e@example.com
+            destination:
+              server: https://kubernetes.default.svc
+              namespace: nebari-frames
+            syncPolicy:
+              automated:
+                prune: true
+                selfHeal: true
+              syncOptions:
+                - CreateNamespace=true
+                - ServerSideApply=true
+                - SkipDryRunOnMissingResource=true
+          EOF
+          git -C "${GITOPS_DIR}" add -A
+          git -C "${GITOPS_DIR}" \
+            -c user.email=ci@nebari-frames \
+            -c user.name=frames-e2e \
+            commit -m "test: deploy nebari-frames e2e"
+          chmod -R a+rX "${GITOPS_DIR}"
+
+      - name: Wait for Application Synced and Healthy
+        env:
+          KUBECONFIG: ${{ steps.sandbox.outputs.kubeconfig }}
+        run: |
+          SUCCESS=0
+          DEGRADED=0
+          for i in $(seq 1 90); do
+            SYNC=$(kubectl get application/nebari-frames -n argocd \
+              -o jsonpath='{.status.sync.status}' 2>/dev/null || echo "NotFound")
+            HEALTH=$(kubectl get application/nebari-frames -n argocd \
+              -o jsonpath='{.status.health.status}' 2>/dev/null || echo "-")
+            echo "[${i}/90] sync=${SYNC} health=${HEALTH}"
+            if [ "${SYNC}" = "Synced" ] && [ "${HEALTH}" = "Healthy" ]; then
+              SUCCESS=1
+              break
+            fi
+            # Fail fast only on SUSTAINED Degraded: apps pass through Degraded
+            # transiently while pods start, so a single sample is not a verdict.
+            if [ "${HEALTH}" = "Degraded" ]; then
+              DEGRADED=$((DEGRADED + 1))
+            else
+              DEGRADED=0
+            fi
+            if [ "${DEGRADED}" -ge 12 ]; then
+              echo "::error::Application stuck Degraded for 2 minutes, failing fast"
+              break
+            fi
+            sleep 10
+          done
+          if [ "${SUCCESS}" = "1" ]; then
+            exit 0
+          fi
+          echo "::error::Application never reached Synced/Healthy"
+          kubectl get application/nebari-frames -n argocd -o yaml || true
+          kubectl -n nebari-frames get pods -o wide || true
+          kubectl -n nebari-frames describe pods || true
+          exit 1
+
+      - name: Endpoint answers through the gateway
+        env:
+          GATEWAY_IP: ${{ steps.sandbox.outputs.gateway-ip }}
+        run: |
+          CODE=$(curl -sk -o /tmp/resp -w '%{http_code}' \
+            --max-time 30 \
+            --resolve "frames.nebari.local:443:${GATEWAY_IP}" \
+            https://frames.nebari.local/)
+          echo "HTTP ${CODE}"
+          head -c 500 /tmp/resp; echo
+          case "${CODE}" in
+            200|302|303|307) echo "endpoint OK" ;;
+            *) echo "::error::unexpected HTTP ${CODE}"; exit 1 ;;
+          esac
+
+      - name: Cleanup
+        if: always()
+        run: k3d cluster delete ${{ steps.sandbox.outputs.cluster-name }} || true
