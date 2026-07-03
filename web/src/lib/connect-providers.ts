@@ -98,5 +98,3 @@ export const connectProviders: ConnectProvider[] = [
 export function getConnectProvider(id: string): ConnectProvider | undefined {
   return connectProviders.find((p) => p.id === id);
 }
-
-export const ciGateProbe: number = "intentional type error for CI gate verification";
