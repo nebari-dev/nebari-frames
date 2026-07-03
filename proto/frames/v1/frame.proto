@@ -10,7 +10,6 @@ message Org {
   string slug = 2;
   string display_name = 3;
   google.protobuf.Timestamp created_at = 4;
-  string ci_gate_probe = 9999;
 }
 
 message Membership {
