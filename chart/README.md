@@ -56,6 +56,10 @@ helm install frames . -n nebari-frames -f examples/standalone-values.yaml
 
 This runs in dev mode with authentication disabled and is meant for local use only. In dev mode the identity is fixed to `dev-user` / `dev@localhost`, so `seed.adminEmail` has no effect here. It only takes effect once real OIDC is configured (either through NebariApp or a self-managed `auth.oidc.*` block).
 
+## Telemetry
+
+The server writes structured JSON logs to stdout/stderr, ready for collection by the platform's log stack (e.g. the LGTM stack on Nebari). There is no `ServiceMonitor` in this chart because the server does not expose a metrics endpoint yet. When metrics land, the chart will grow a `ServiceMonitor` gated behind a `metrics.enabled` value so clusters without the Prometheus operator are unaffected.
+
 ## Known Limitations (Alpha)
 
 - MCP/Claude requires manual Keycloak realm config (DCR + default-scope audience mapper); operator-native support is pending.

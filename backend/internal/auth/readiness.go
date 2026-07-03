@@ -3,7 +3,7 @@ package auth
 import (
 	"context"
 	"errors"
-	"log"
+	"log/slog"
 	"sync"
 	"time"
 )
@@ -52,10 +52,10 @@ func (l *LazyValidator) run(ctx context.Context, initial, max time.Duration) {
 			l.mu.Lock()
 			l.v = v
 			l.mu.Unlock()
-			log.Printf("auth: OIDC discovery succeeded (issuer: %s); validator ready", l.cfg.IssuerURL)
+			slog.Info("auth: OIDC discovery succeeded; validator ready", "issuer", l.cfg.IssuerURL)
 			return
 		}
-		log.Printf("auth: OIDC discovery not ready (issuer: %s): %v; retrying in %s", l.cfg.IssuerURL, err, backoff)
+		slog.Info("auth: OIDC discovery not ready; retrying", "issuer", l.cfg.IssuerURL, "error", err, "retry_in", backoff.String())
 		select {
 		case <-ctx.Done():
 			return
