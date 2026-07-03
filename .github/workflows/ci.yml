@@ -42,7 +42,9 @@ jobs:
           cache: true
       - uses: golangci/golangci-lint-action@v9
         with:
-          version: latest
+          # Pinned to a minor series: a new golangci-lint release can add
+          # default linters and redden every PR overnight. Bump deliberately.
+          version: v2.12
       - name: Test
         run: go test ./... -race -coverprofile=coverage.out
 
