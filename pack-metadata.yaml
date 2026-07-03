@@ -9,5 +9,6 @@ nebariapp_integration: full
 scope:
   standalone-supported: true
 demo_notes: "MCP/Claude requires manual realm config (enable DCR + default-scope audience mapper); see docs/connect/keycloak-setup.md."
+docs_site: true
 links:
-  docs: https://github.com/nebari-dev/nebari-frames/blob/main/README.md
+  docs: https://packs.nebari.dev/nebari-frames/
