@@ -70,6 +70,10 @@ jobs:
     steps:
       - uses: actions/checkout@v6
       - uses: azure/setup-helm@v4
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+          cache: true
       - name: Lint chart
         run: helm lint chart/
       - name: Template renders (NebariApp mode)
@@ -79,9 +83,29 @@ jobs:
             --set nebariapp.hostname=frames.example.com \
             --set seed.orgSlug=test-org \
             --set seed.adminEmail=admin@example.com \
-            >/dev/null
+            > /tmp/render-nebariapp.yaml
       - name: Template renders (dev mode)
-        run: helm template frames chart/ --set auth.devMode=true >/dev/null
+        run: |
+          helm template frames chart/ --set auth.devMode=true \
+            > /tmp/render-devmode.yaml
+      - name: Validate rendered manifests (kubeconform)
+        run: |
+          # -ignore-missing-schemas is required because the NebariApp CRD has
+          # no published JSON schema anywhere; do not remove this flag without
+          # publishing one first.
+          for f in /tmp/render-nebariapp.yaml /tmp/render-devmode.yaml; do
+            echo "::group::kubeconform ${f}"
+            # Pinned for the same reason golangci-lint is: a new release must
+            # not change gate behavior without a deliberate bump. v0.8+ needs
+            # go >= 1.26, which setup-go's GOTOOLCHAIN=local forbids on this
+            # repo's go 1.25 toolchain; bump both together.
+            go run github.com/yannh/kubeconform/cmd/kubeconform@v0.7.0 \
+              -strict -summary -ignore-missing-schemas \
+              -schema-location default \
+              -schema-location 'https://raw.githubusercontent.com/datreeio/CRDs-catalog/main/{{.Group}}/{{.ResourceKind}}_{{.ResourceAPIVersion}}.json' \
+              "${f}"
+            echo "::endgroup::"
+          done
 
   e2e-sandbox:
     runs-on: ubuntu-latest
