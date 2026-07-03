@@ -192,7 +192,7 @@ jobs:
           CODE=$(curl -sk -o /tmp/resp -w '%{http_code}' \
             --max-time 30 \
             --resolve "frames.nebari.local:443:${GATEWAY_IP}" \
-            https://frames.nebari.local/)
+            https://frames.nebari.local/ || echo 000)
           echo "HTTP ${CODE}"
           head -c 500 /tmp/resp; echo
           case "${CODE}" in

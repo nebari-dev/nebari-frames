@@ -9,6 +9,11 @@ permissions:
   contents: read
   packages: write
 
+# Queue runs instead of racing: two closely spaced main merges must not
+# finish out of order and leave latest pointing at the older commit.
+concurrency:
+  group: build-images-${{ github.ref }}
+
 env:
   GHCR_IMAGE: ghcr.io/nebari-dev/nebari-frames
   QUAY_IMAGE: quay.io/nebari/nebari-frames
