@@ -1,0 +1,17 @@
+{
+  "name": "nebari-frames-docs-site",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "astro dev",
+    "build": "astro build",
+    "preview": "astro preview",
+    "docs-gen": "cd ../.. && go run ./tools/docs-gen"
+  },
+  "dependencies": {
+    "@astrojs/starlight": "^0.33.0",
+    "@nebari/starlight": "^0.1.5",
+    "astro": "^5.0.0",
+    "unist-util-visit": "^5.1.0"
+  }
+}
