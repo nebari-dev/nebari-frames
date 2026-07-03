@@ -10,9 +10,9 @@ name: Docs
 on:
   push:
     branches: [main]
-    paths: ['docs/**', 'tools/docs-gen/**', '.github/workflows/docs.yml']
+    paths: ['docs/**', 'tools/docs-gen/**', 'cli/cmd/**', '.github/workflows/docs.yml']
   pull_request:
-    paths: ['docs/**', 'tools/docs-gen/**', '.github/workflows/docs.yml']
+    paths: ['docs/**', 'tools/docs-gen/**', 'cli/cmd/**', '.github/workflows/docs.yml']
   workflow_dispatch:
 
 permissions:
@@ -32,6 +32,19 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with: { fetch-depth: 0 }
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: CLI reference is up to date
+        run: |
+          go run ./tools/docs-gen
+          if ! git diff --exit-code -- docs/site/src/content/docs/reference/cli/; then
+            echo "::error::Generated CLI reference is stale. Run 'go run ./tools/docs-gen' and commit the result."
+            exit 1
+          fi
+
       - uses: actions/setup-node@v4
         with:
           node-version: '22'

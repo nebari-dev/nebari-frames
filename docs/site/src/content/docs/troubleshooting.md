@@ -28,7 +28,7 @@ The operator picks up the labeled namespace on its next reconcile and creates th
 
 ```bash
 # The operator's view of what it has (and has not) provisioned for this app.
-kubectl -n <namespace> get nebariapps.nebari.dev -o yaml
+kubectl -n <namespace> get nebariapps.reconcilers.nebari.dev -o yaml
 # Check conditions (routing/TLS/auth) and the issuer/client fields it recorded.
 
 # The operator's own logs, for reconcile errors against Keycloak.

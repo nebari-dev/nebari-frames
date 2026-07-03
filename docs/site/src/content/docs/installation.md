@@ -14,7 +14,7 @@ Nebari Frames ships as a single Helm chart that deploys one pod (Go backend + em
 Install from the published chart:
 
 :::note
-The chart publishes to `oci://quay.io/nebari/charts/nebari-frames` on the first tagged release (see [CI/CD and Releasing](/ci-cd-releasing/)). Until then, install from a checkout of this repository instead: `helm install frames chart/ -n nebari-frames -f chart/examples/nebari-values.yaml`, replacing values as needed.
+Every tagged release publishes the chart to `oci://quay.io/nebari/charts/nebari-frames` (see [CI/CD and Releasing](/ci-cd-releasing/)). Installing from a checkout also works: `helm install frames chart/ -n nebari-frames -f chart/examples/nebari-values.yaml`, replacing values as needed.
 :::
 
 ```bash

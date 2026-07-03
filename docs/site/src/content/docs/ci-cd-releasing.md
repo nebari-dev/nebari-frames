@@ -22,7 +22,7 @@ Triggered by pushing a `v*` tag. Three jobs:
 
 - **test** - `go test ./... -race` as a release-time gate, independent of CI having already passed.
 - **release-cli** - runs GoReleaser to build and publish the `frames` CLI for linux/darwin (amd64 and arm64) and windows/amd64 as GitHub release archives, and updates the `nebari-dev/homebrew-tap` formula.
-- **release-chart** - copies `chart/` into the `nebari-dev/helm-repository` repo, stamps `Chart.yaml`'s `version` and `appVersion` from the tag, and commits and pushes - this is what publishes the chart consumed as `oci://quay.io/nebari/charts/nebari-frames` (see [Installation](/installation/)).
+- **release-chart** - copies `chart/` into the `nebari-dev/helm-repository` repo, stamps `Chart.yaml`'s `version` and `appVersion` from the tag, and commits and pushes. The helm-repository repo's own publish workflow then pushes the packaged chart to `oci://quay.io/nebari/charts/nebari-frames` (see [Installation](/installation/)).
 
 Release images are produced by `build-images.yaml`, which also triggers on `v*` tags - there is no duplicate image-building job in `release.yml`.
 
