@@ -1,13 +1,12 @@
 name: nebari-frames
 display_name: Nebari Frames
-description: Server for organization Frames with a web UI and a remote MCP endpoint for AI clients.
+description: Registry for reusable AI context Frames with publishing, inheritance-aware resolution, a web UI, a CLI, and a remote MCP endpoint.
 level: alpha
 owner: dcmcand
-product_owner: null
 deprecated: false
+product_owner: null
 nebariapp_integration: full
 scope:
-  standalone-supported: true
-demo_notes: "MCP/Claude requires manual realm config (enable DCR + default-scope audience mapper); see docs/connect/keycloak-setup.md."
+  standalone-supported: yes
 links:
   docs: https://github.com/nebari-dev/nebari-frames/blob/main/README.md
