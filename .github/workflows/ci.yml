@@ -95,7 +95,11 @@ jobs:
           # publishing one first.
           for f in /tmp/render-nebariapp.yaml /tmp/render-devmode.yaml; do
             echo "::group::kubeconform ${f}"
-            go run github.com/yannh/kubeconform/cmd/kubeconform@latest \
+            # Pinned for the same reason golangci-lint is: a new release must
+            # not change gate behavior without a deliberate bump. v0.8+ needs
+            # go >= 1.26, which setup-go's GOTOOLCHAIN=local forbids on this
+            # repo's go 1.25 toolchain; bump both together.
+            go run github.com/yannh/kubeconform/cmd/kubeconform@v0.7.0 \
               -strict -summary -ignore-missing-schemas \
               -schema-location default \
               -schema-location 'https://raw.githubusercontent.com/datreeio/CRDs-catalog/main/{{.Group}}/{{.ResourceKind}}_{{.ResourceAPIVersion}}.json' \
