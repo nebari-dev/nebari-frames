@@ -6,6 +6,7 @@ owner: dcmcand
 product_owner: dcmcand
 deprecated: false
 last_promoted_at: "2026-07-03"
+last_promoted_pr: 45
 nebariapp_integration: full
 scope:
   standalone-supported: true
