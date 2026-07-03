@@ -1,0 +1,78 @@
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+          cache: true
+      - run: go test ./... -race
+
+  release-cli:
+    needs: test
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+          cache: true
+      - uses: goreleaser/goreleaser-action@v6
+        with:
+          distribution: goreleaser
+          # Pinned to v2: the brews section is deprecated and scheduled for
+          # removal in GoReleaser v3, so "latest" would silently break releases.
+          version: "~> v2"
+          args: release --clean
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          HOMEBREW_TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+
+  # Release images are produced by build-images.yaml, which also triggers on
+  # v* tags. No duplicate image job here.
+
+  release-chart:
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: Clone helm-repository
+        uses: actions/checkout@v6
+        with:
+          repository: nebari-dev/helm-repository
+          token: ${{ secrets.NEBARI_HELM_REPO_TOKEN }}
+          path: helm-repo
+      - name: Copy chart and stamp the version
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          rm -rf helm-repo/charts/nebari-frames
+          cp -r chart helm-repo/charts/nebari-frames
+          sed -i "s/^version:.*/version: ${VERSION}/" helm-repo/charts/nebari-frames/Chart.yaml
+          sed -i "s/^appVersion:.*/appVersion: \"${GITHUB_REF_NAME}\"/" helm-repo/charts/nebari-frames/Chart.yaml
+          grep -E "^(version|appVersion):" helm-repo/charts/nebari-frames/Chart.yaml
+      - name: Commit and push
+        working-directory: helm-repo
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add charts/nebari-frames/
+          if git diff --cached --quiet; then
+            echo "No chart changes"
+            exit 0
+          fi
+          git commit -m "chore: update nebari-frames chart to ${GITHUB_REF_NAME}"
+          git push
