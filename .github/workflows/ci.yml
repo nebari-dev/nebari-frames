@@ -1,0 +1,82 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  proto:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: bufbuild/buf-action@v1
+        with:
+          setup_only: true
+      - name: Lint proto
+        working-directory: proto
+        run: buf lint
+      - name: Generated code is up to date
+        run: |
+          (cd proto && buf generate)
+          git add -A gen/
+          if ! git diff --cached --exit-code -- gen/; then
+            echo "::error::Generated code is stale. Run 'make proto' and commit the result."
+            exit 1
+          fi
+
+  go:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+          cache: true
+      - uses: golangci/golangci-lint-action@v9
+        with:
+          version: latest
+      - name: Test
+        run: go test ./... -race -coverprofile=coverage.out
+
+  web:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run typecheck
+      - run: npm test
+
+  chart:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: azure/setup-helm@v4
+      - name: Lint chart
+        run: helm lint chart/
+      - name: Template renders (NebariApp mode)
+        run: |
+          helm template frames chart/ \
+            --set nebariapp.enabled=true \
+            --set nebariapp.hostname=frames.example.com \
+            --set seed.orgSlug=test-org \
+            --set seed.adminEmail=admin@example.com \
+            >/dev/null
+      - name: Template renders (dev mode)
+        run: helm template frames chart/ --set auth.devMode=true >/dev/null
