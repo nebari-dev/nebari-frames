@@ -22,7 +22,7 @@ func addResolveCmd(root *cobra.Command) {
 			if err != nil {
 				return authAware(notFoundAware(err))
 			}
-			fmt.Fprint(cmd.OutOrStdout(), string(content))
+			_, _ = fmt.Fprint(cmd.OutOrStdout(), string(content))
 			return nil
 		},
 	}

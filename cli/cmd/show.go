@@ -24,16 +24,16 @@ func addShowCmd(root *cobra.Command) {
 				return authAware(notFoundAware(err))
 			}
 			out := cmd.OutOrStdout()
-			fmt.Fprintf(out, "%s/%s@%s\n", org, resp.Frame.Name, resp.Version.Version)
-			fmt.Fprintf(out, "Description: %s\n", resp.Frame.Description)
-			fmt.Fprintf(out, "Owner: %s\n", resp.Frame.OwnerSub)
+			_, _ = fmt.Fprintf(out, "%s/%s@%s\n", org, resp.Frame.Name, resp.Version.Version)
+			_, _ = fmt.Fprintf(out, "Description: %s\n", resp.Frame.Description)
+			_, _ = fmt.Fprintf(out, "Owner: %s\n", resp.Frame.OwnerSub)
 			if len(resp.Extends) > 0 {
-				fmt.Fprintln(out, "Extends:")
+				_, _ = fmt.Fprintln(out, "Extends:")
 				for _, p := range resp.Extends {
-					fmt.Fprintf(out, "  - %s@%s\n", p.Ref, p.Version)
+					_, _ = fmt.Fprintf(out, "  - %s@%s\n", p.Ref, p.Version)
 				}
 			}
-			fmt.Fprintf(out, "\n%s\n", string(resp.Version.Content))
+			_, _ = fmt.Fprintf(out, "\n%s\n", string(resp.Version.Content))
 			return nil
 		},
 	}

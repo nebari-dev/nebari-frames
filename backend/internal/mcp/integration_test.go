@@ -97,7 +97,7 @@ func TestUnauthenticatedMCPReturns401Challenge(t *testing.T) {
 	if err != nil {
 		t.Fatalf("POST /mcp: %v", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusUnauthorized {
 		t.Fatalf("status = %d, want 401", resp.StatusCode)
@@ -119,7 +119,7 @@ func TestProtectedResourceMetadata(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GET metadata: %v", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("status = %d, want 200", resp.StatusCode)
@@ -168,7 +168,7 @@ func TestDevModeListAndRead(t *testing.T) {
 func listResourcesViaSDK(t *testing.T, ctx context.Context, endpoint string) []*gomcp.Resource {
 	t.Helper()
 	session := connectSDK(t, ctx, endpoint)
-	defer session.Close()
+	defer func() { _ = session.Close() }()
 
 	res, err := session.ListResources(ctx, nil)
 	if err != nil {
@@ -181,7 +181,7 @@ func listResourcesViaSDK(t *testing.T, ctx context.Context, endpoint string) []*
 func readResourceViaSDK(t *testing.T, ctx context.Context, endpoint, uri string) string {
 	t.Helper()
 	session := connectSDK(t, ctx, endpoint)
-	defer session.Close()
+	defer func() { _ = session.Close() }()
 
 	rr, err := session.ReadResource(ctx, &gomcp.ReadResourceParams{URI: uri})
 	if err != nil {
