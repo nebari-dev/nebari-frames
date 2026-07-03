@@ -82,8 +82,14 @@ Beyond the auth block above, the values most people end up touching are:
 See [`chart/values.yaml`](chart/values.yaml) for the complete reference. Releases publish the chart to the Nebari Helm registry, so the simplest install is straight from there:
 
 ```bash
+# The operator only manages namespaces that opt in, so create and label it
+# first (see Prerequisites above).
+kubectl create namespace nebari-frames
+kubectl label namespace nebari-frames nebari.dev/managed=true
+
 helm install nebari-frames oci://quay.io/nebari/charts/nebari-frames --version 0.1.5 \
-  --namespace nebari-frames --create-namespace \
+  --namespace nebari-frames \
+  --set nebariapp.enabled=true \
   --set nebariapp.hostname=frames.example.com \
   --set seed.orgSlug=my-org --set seed.adminEmail=admin@example.com
 ```
