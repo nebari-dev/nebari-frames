@@ -40,7 +40,7 @@ export default defineConfig({
           items: [
             { label: 'Configuration', slug: 'configuration' },
             { label: 'Architecture', slug: 'architecture' },
-            { label: 'CLI Reference', autogenerate: { directory: 'reference/cli' } },
+            { label: 'CLI Reference', items: [{ autogenerate: { directory: 'reference/cli' } }] },
             { label: 'CI/CD and Releasing', slug: 'ci-cd-releasing' },
           ],
         },
