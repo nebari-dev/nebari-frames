@@ -10,7 +10,7 @@
   },
   "dependencies": {
     "@astrojs/starlight": "^0.41.3",
-    "@nebari/starlight": "^0.2.0",
+    "@nebari/starlight": "^0.2.1",
     "astro": "^7.0.6",
     "unist-util-visit": "^5.1.0"
   }
