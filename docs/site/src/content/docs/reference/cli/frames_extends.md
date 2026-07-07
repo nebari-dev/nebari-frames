@@ -25,5 +25,5 @@ frames extends <org/name[@version]> [flags]
 
 ### SEE ALSO
 
-* [frames](frames.md)	 - Publish, browse, and resolve Nebari Frames
+* [frames](/reference/cli/frames/)	 - Publish, browse, and resolve Nebari Frames
 

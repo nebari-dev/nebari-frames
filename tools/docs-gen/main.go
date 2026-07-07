@@ -21,9 +21,30 @@ import (
 	"github.com/nebari-dev/nebari-frames/cli/cmd"
 )
 
-// outDir is relative to the repository root, matching how this tool is
-// documented to be invoked (`go run ./tools/docs-gen` from the repo root).
-const outDir = "docs/site/src/content/docs/reference/cli"
+// contentRoot is the Starlight docs content-collection root. A page's slug -
+// and therefore its URL - is its path relative to this directory.
+//
+// outDir is where this tool writes the generated CLI pages; it is relative to
+// the repository root, matching how this tool is documented to be invoked
+// (`go run ./tools/docs-gen` from the repo root).
+const (
+	contentRoot = "docs/site/src/content/docs"
+	outDir      = contentRoot + "/reference/cli"
+)
+
+// cliLinkHandler rewrites the intra-tree links cobra/doc emits in each
+// command's "SEE ALSO" section. Cobra hands the link target as a bare
+// "<command>.md" filename (e.g. "frames_auth_login.md"), but Starlight serves
+// each page at an extensionless, trailing-slash route derived from its slug
+// (e.g. /reference/cli/frames_auth_login/). Left unchanged, the ".md" links
+// resolve relative to the current page and 404. Emitting a root-absolute path
+// lets the site's remark-base-links plugin prepend the deployment base path,
+// matching every other content link on the site.
+func cliLinkHandler(name string) string {
+	slug := strings.TrimSuffix(name, ".md")
+	route := strings.TrimPrefix(outDir, contentRoot) // "/reference/cli"
+	return route + "/" + slug + "/"
+}
 
 func main() {
 	if err := run(); err != nil {
@@ -49,8 +70,7 @@ func run() error {
 		return fmt.Errorf("create output dir: %w", err)
 	}
 
-	identity := func(s string) string { return s }
-	if err := doc.GenMarkdownTreeCustom(root, outDir, frontmatter, identity); err != nil {
+	if err := doc.GenMarkdownTreeCustom(root, outDir, frontmatter, cliLinkHandler); err != nil {
 		return fmt.Errorf("generate cli docs: %w", err)
 	}
 	return nil

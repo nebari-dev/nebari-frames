@@ -25,5 +25,5 @@ frames config set <key> <value> [flags]
 
 ### SEE ALSO
 
-* [frames config](frames_config.md)	 - Manage CLI configuration
+* [frames config](/reference/cli/frames_config/)	 - Manage CLI configuration
 

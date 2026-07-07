@@ -25,5 +25,5 @@ frames auth status [flags]
 
 ### SEE ALSO
 
-* [frames auth](frames_auth.md)	 - Authenticate with the registry
+* [frames auth](/reference/cli/frames_auth/)	 - Authenticate with the registry
 

@@ -21,7 +21,7 @@ Manage CLI configuration
 
 ### SEE ALSO
 
-* [frames](frames.md)	 - Publish, browse, and resolve Nebari Frames
-* [frames config get](frames_config_get.md)	 - Print a config value
-* [frames config set](frames_config_set.md)	 - Set a config value
+* [frames](/reference/cli/frames/)	 - Publish, browse, and resolve Nebari Frames
+* [frames config get](/reference/cli/frames_config_get/)	 - Print a config value
+* [frames config set](/reference/cli/frames_config_set/)	 - Set a config value
 

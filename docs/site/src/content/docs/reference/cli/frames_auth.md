@@ -21,8 +21,8 @@ Authenticate with the registry
 
 ### SEE ALSO
 
-* [frames](frames.md)	 - Publish, browse, and resolve Nebari Frames
-* [frames auth login](frames_auth_login.md)	 - Log in via OIDC device flow
-* [frames auth logout](frames_auth_logout.md)	 - Clear stored credentials
-* [frames auth status](frames_auth_status.md)	 - Show the current identity
+* [frames](/reference/cli/frames/)	 - Publish, browse, and resolve Nebari Frames
+* [frames auth login](/reference/cli/frames_auth_login/)	 - Log in via OIDC device flow
+* [frames auth logout](/reference/cli/frames_auth_logout/)	 - Clear stored credentials
+* [frames auth status](/reference/cli/frames_auth_status/)	 - Show the current identity
 
