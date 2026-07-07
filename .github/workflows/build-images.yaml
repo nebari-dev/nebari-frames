@@ -24,11 +24,11 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
-      - uses: docker/setup-buildx-action@v3
+      - uses: docker/setup-buildx-action@v4
 
       # latest is applied only on the default branch (is_default_branch); tag
       # pushes get only the semver tag plus sha-. Do not "simplify" this.
-      - uses: docker/metadata-action@v5
+      - uses: docker/metadata-action@v6
         id: meta
         with:
           images: |
@@ -47,7 +47,7 @@ jobs:
       # Build once and load locally so the image can be smoke-tested before
       # any tag is pushed. The push step below is a cache hit of this build.
       - name: Build for smoke test
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           context: .
           platforms: linux/amd64
@@ -81,20 +81,20 @@ jobs:
 
       # Logins happen after the build and smoke test so a missing registry
       # secret fails here, adjacent to the push, with build signal already green.
-      - uses: docker/login-action@v3
+      - uses: docker/login-action@v4
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - uses: docker/login-action@v3
+      - uses: docker/login-action@v4
         with:
           registry: quay.io
           username: ${{ secrets.QUAY_USERNAME }}
           password: ${{ secrets.QUAY_TOKEN }}
 
       - name: Push
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           context: .
           platforms: linux/amd64

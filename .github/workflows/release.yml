@@ -31,7 +31,7 @@ jobs:
         with:
           go-version-file: go.mod
           cache: true
-      - uses: goreleaser/goreleaser-action@v6
+      - uses: goreleaser/goreleaser-action@v7
         with:
           distribution: goreleaser
           # Pinned to v2: the brews section is deprecated and scheduled for
