@@ -23,11 +23,11 @@ and print the inheritance-resolved form of a Frame.
 
 ### SEE ALSO
 
-* [frames auth](frames_auth.md)	 - Authenticate with the registry
-* [frames config](frames_config.md)	 - Manage CLI configuration
-* [frames extends](frames_extends.md)	 - Print a Frame's inheritance references
-* [frames list](frames_list.md)	 - List Frames you can read
-* [frames publish](frames_publish.md)	 - Publish a Frame from a directory containing frame.yaml
-* [frames resolve](frames_resolve.md)	 - Print the inheritance-resolved form of a Frame
-* [frames show](frames_show.md)	 - Show a Frame's metadata and contents
+* [frames auth](/reference/cli/frames_auth/)	 - Authenticate with the registry
+* [frames config](/reference/cli/frames_config/)	 - Manage CLI configuration
+* [frames extends](/reference/cli/frames_extends/)	 - Print a Frame's inheritance references
+* [frames list](/reference/cli/frames_list/)	 - List Frames you can read
+* [frames publish](/reference/cli/frames_publish/)	 - Publish a Frame from a directory containing frame.yaml
+* [frames resolve](/reference/cli/frames_resolve/)	 - Print the inheritance-resolved form of a Frame
+* [frames show](/reference/cli/frames_show/)	 - Show a Frame's metadata and contents
 
