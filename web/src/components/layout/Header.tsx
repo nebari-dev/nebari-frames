@@ -1,4 +1,4 @@
-import { Menu } from "@base-ui-components/react/menu";
+import { Menu } from "@base-ui/react/menu";
 import { useQuery } from "@connectrpc/connect-query";
 import { FrameService } from "@gen/frames/v1/frame_service_pb";
 import { ChevronDown, LogIn, LogOut, Monitor, Moon, Sun, User } from "lucide-react";

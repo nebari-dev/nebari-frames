@@ -12,7 +12,7 @@
     "lint": "eslint ."
   },
   "dependencies": {
-    "@base-ui-components/react": "^1.0.0-rc.0",
+    "@base-ui/react": "^1.6.0",
     "@bufbuild/protobuf": "^2.2.0",
     "@connectrpc/connect": "^2.0.0",
     "@connectrpc/connect-query": "^2.0.0",
