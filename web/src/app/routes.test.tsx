@@ -14,7 +14,7 @@ vi.mock("@connectrpc/connect-query", () => ({
 import { render, screen } from "@testing-library/react";
 import { MemoryRouter } from "react-router";
 import { expect, it, beforeEach } from "vitest";
-import { ThemeProvider } from "@/lib/theme/ThemeContext";
+import { ThemeProvider } from "@/hooks/theme-provider";
 import { AppShell } from "./AppShell";
 import { AppRoutes } from "./routes";
 

@@ -13,7 +13,7 @@ vi.mock("@/lib/auth/useAuth", () => ({
   }),
 }));
 
-import { ThemeProvider } from "@/lib/theme/ThemeContext";
+import { ThemeProvider } from "@/hooks/theme-provider";
 import { AppShell } from "./AppShell";
 
 function renderShell() {

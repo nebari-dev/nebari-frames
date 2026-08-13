@@ -2,7 +2,7 @@ import type { ReactNode } from "react";
 import logoDark from "@/assets/nebari-logo_dark.svg";
 import logoLight from "@/assets/nebari-logo_light.svg";
 import { Card } from "@/components/ui/card";
-import { useTheme } from "@/lib/theme/ThemeContext";
+import { useTheme } from "@/hooks/theme-provider";
 import { cn } from "@/lib/utils";
 
 type AuthLayoutProps = {
