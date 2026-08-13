@@ -13,7 +13,8 @@
     "components": "@/components",
     "ui": "@/components/ui",
     "lib": "@/lib",
-    "utils": "@/lib/utils"
+    "utils": "@/lib/utils",
+    "hooks": "@/hooks"
   },
   "registries": {
     "@nebari": "https://nebari-dev.github.io/nebari-design/r/{name}.json"

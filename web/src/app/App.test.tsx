@@ -37,5 +37,5 @@ it("renders the app title", async () => {
     </MemoryRouter>,
   );
   await waitFor(() => expect(screen.getByRole("img", { name: "Nebari" })).toBeInTheDocument());
-  expect(screen.getByRole("link", { name: /nebari frames home/i })).toBeInTheDocument();
+  expect(screen.getByRole("link", { name: /go to homepage/i })).toBeInTheDocument();
 });

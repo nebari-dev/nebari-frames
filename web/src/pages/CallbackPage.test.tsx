@@ -10,7 +10,7 @@ vi.mock("react-router", async (orig) => ({
   useNavigate: () => navigate,
 }));
 
-import { ThemeProvider } from "@/lib/theme/ThemeContext";
+import { ThemeProvider } from "@/hooks/theme-provider";
 import { CallbackPage } from "./CallbackPage";
 
 function renderCallback() {
