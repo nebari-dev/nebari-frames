@@ -1,5 +1,5 @@
-// Package branding resolves the runtime branding document the SPA fetches from
-// /branding.json at startup: browser-tab title, header logo, favicon, and theme
+// Package branding resolves the branding fields of the runtime configuration
+// document the SPA fetches from /config.json at startup: browser-tab title, header logo, favicon, and theme
 // token overrides. Branding is delivered at runtime rather than baked into the
 // image, so an operator can rebrand a deployment without rebuilding it.
 //
@@ -32,7 +32,7 @@ type ThemeTokens map[string]string
 // other key is passed through to the SPA, which ignores it.
 type Theme map[string]ThemeTokens
 
-// Config is the branding document served at /branding.json. Empty fields are
+// Config is the branding portion of the document served at /config.json. Empty fields are
 // omitted so an unbranded deployment serves "{}".
 type Config struct {
 	Title       string `json:"title,omitempty"`

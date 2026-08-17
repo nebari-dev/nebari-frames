@@ -12,7 +12,7 @@ import "@/styles.css";
 // Apply runtime branding (title, favicon, theme tokens) from the backend before
 // the app mounts, so there is no flash of the default brand and the header reads
 // the branded logo on its first render. Best-effort: an unreachable or invalid
-// /branding.json leaves the app on its built-in Nebari defaults rather than
+// /config.json leaves the app on its built-in Nebari defaults rather than
 // blocking startup. Wrapped in a function rather than awaited at module scope
 // because the build target (es2020) has no top-level await.
 async function bootstrap() {

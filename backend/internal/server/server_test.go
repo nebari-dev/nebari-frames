@@ -182,9 +182,9 @@ func TestServer_Branding(t *testing.T) {
 			ts := httptest.NewServer(srv.Handler())
 			t.Cleanup(ts.Close)
 
-			resp, err := http.Get(ts.URL + "/branding.json")
+			resp, err := http.Get(ts.URL + "/config.json")
 			if err != nil {
-				t.Fatalf("get /branding.json: %v", err)
+				t.Fatalf("get /config.json: %v", err)
 			}
 			t.Cleanup(func() { _ = resp.Body.Close() })
 			if resp.StatusCode != http.StatusOK {
@@ -211,7 +211,7 @@ func TestServer_Branding_MethodNotAllowed(t *testing.T) {
 	ts := httptest.NewServer(srv.Handler())
 	t.Cleanup(ts.Close)
 
-	req, err := http.NewRequest(http.MethodPost, ts.URL+"/branding.json", nil)
+	req, err := http.NewRequest(http.MethodPost, ts.URL+"/config.json", nil)
 	if err != nil {
 		t.Fatalf("new request: %v", err)
 	}

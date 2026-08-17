@@ -33,7 +33,7 @@ Full reference for `chart/values.yaml`, grouped by area. See [Installation](/ins
 
 The app ships with built-in Nebari branding (title, logos, favicon, theme colors)
 and needs no configuration. Operators can rebrand it **without rebuilding the
-image**: the backend serves the branding document at `/branding.json`, and the
+image**: the backend serves a runtime configuration document at `/config.json`, and the
 SPA applies it before it mounts (title, favicon, theme CSS variables) and in the
 header and sign-in screens (logo).
 
@@ -68,8 +68,9 @@ defines can technically be set. Only the tokens listed above are supported.
 
 ### Kubernetes / Helm
 
-Set `branding` in values. The chart renders the document into a ConfigMap and
-mounts it into the pod:
+Set `branding` in values. The chart renders the document into the
+`<release>-nebari-frames-config` ConfigMap and mounts it into the pod at
+`/etc/nebari-frames/config/config.json`:
 
 ```yaml
 branding:

@@ -211,7 +211,7 @@ func TestImageOrigins(t *testing.T) {
 // writeConfig writes body to a temp file and returns its path.
 func writeConfig(t *testing.T, body string) string {
 	t.Helper()
-	path := filepath.Join(t.TempDir(), "branding.json")
+	path := filepath.Join(t.TempDir(), "config.json")
 	if err := os.WriteFile(path, []byte(body), 0o600); err != nil {
 		t.Fatalf("write config: %v", err)
 	}

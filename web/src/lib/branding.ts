@@ -1,4 +1,4 @@
-// Runtime branding, fetched from the backend at /branding.json before the app
+// Runtime branding, fetched from the backend at /config.json before the app
 // mounts: browser-tab title, header logo, favicon, and theme token overrides.
 //
 // The backend builds that document from BRANDING_* environment variables and the
@@ -146,7 +146,7 @@ export function setBranding(branding: Branding | null): void {
 // budget, give up and let the app render its built-in defaults.
 export const FETCH_TIMEOUT_MS = 3000;
 
-/** Fetches and caches /branding.json. The network request happens at most once. */
+/** Fetches and caches /config.json. The network request happens at most once. */
 export async function loadBranding(): Promise<Branding> {
   if (cached) {
     return cached;
@@ -154,7 +154,7 @@ export async function loadBranding(): Promise<Branding> {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
   try {
-    const res = await fetch(`${env.backendBaseUrl}/branding.json`, { signal: controller.signal });
+    const res = await fetch(`${env.backendBaseUrl}/config.json`, { signal: controller.signal });
     if (!res.ok) {
       throw new Error(`branding request failed: ${res.status}`);
     }

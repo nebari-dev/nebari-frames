@@ -22,8 +22,8 @@ persistence:
 
 resources: {}
 
-# Branding. Rendered into a ConfigMap the app reads at startup and serves at
-# /branding.json; the SPA applies it before it mounts. Leave everything empty for
+# Branding. Rendered into a ConfigMap the app reads at startup and serves as its
+# runtime configuration at /config.json; the SPA applies it before it mounts. Leave everything empty for
 # the built-in Nebari branding - an unbranded install renders exactly as it does
 # without this block, and no ConfigMap is created. No image rebuild is needed:
 # `helm upgrade` with new values rolls the pod and the change is live.

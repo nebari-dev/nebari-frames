@@ -95,6 +95,8 @@ describe("loadBranding", () => {
     vi.stubGlobal("fetch", fetchMock);
 
     const branding = await loadBranding();
+    // The document is the app's generic runtime config, served at /config.json.
+    expect(fetchMock.mock.calls[0][0]).toBe("/config.json");
     expect(branding.title).toBe("Acme Frames");
     expect(branding.logoUrl).toBe("https://cdn.acme.example/logo.svg");
     // A malformed URL is dropped rather than passed to <link href>.

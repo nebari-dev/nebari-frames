@@ -32,7 +32,7 @@ export default defineConfig({
     proxy: {
       "/frames.v1.FrameService": { target: BACKEND, changeOrigin: true },
       "/auth/config": { target: BACKEND, changeOrigin: true },
-      "/branding.json": { target: BACKEND, changeOrigin: true },
+      "/config.json": { target: BACKEND, changeOrigin: true },
     },
   },
 });

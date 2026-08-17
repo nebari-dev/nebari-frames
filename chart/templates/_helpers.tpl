@@ -27,7 +27,7 @@ app.kubernetes.io/instance: {{ .Release.Name }}
 {{- end -}}
 
 {{/*
-"true" when any branding value is set, empty otherwise. Gates the branding
+"true" when any branding value is set, empty otherwise. Gates the runtime-config
 ConfigMap, its volume mount, and BRANDING_CONFIG_FILE, so an unbranded install
 renders exactly the manifests it did before branding existed.
 */}}
@@ -39,11 +39,13 @@ true
 {{- end -}}
 
 {{/*
-The branding document served at /branding.json, as JSON. Only non-empty values
-are emitted so the app (and the SPA) falls back to its built-in default per
-field; an all-empty branding block yields "{}".
+The runtime configuration document the app serves at /config.json, as JSON. It
+carries the branding fields today; the generic name leaves room for other
+runtime settings the SPA may need later. Only non-empty values are emitted so
+the app (and the SPA) falls back to its built-in default per field; an all-empty
+branding block yields "{}".
 */}}
-{{- define "nebari-frames.brandingJson" -}}
+{{- define "nebari-frames.configJson" -}}
 {{- $doc := dict -}}
 {{- with .Values.branding.title }}{{- $doc = set $doc "title" . -}}{{- end -}}
 {{- with .Values.branding.logoUrl }}{{- $doc = set $doc "logoUrl" . -}}{{- end -}}
@@ -56,17 +58,17 @@ field; an all-empty branding block yields "{}".
 {{- $doc | toPrettyJson -}}
 {{- end -}}
 
-{{- define "nebari-frames.brandingConfigMapName" -}}
-{{- printf "%s-branding" (include "nebari-frames.fullname" .) -}}
+{{- define "nebari-frames.configMapName" -}}
+{{- printf "%s-config" (include "nebari-frames.fullname" .) -}}
 {{- end -}}
 
-{{/* Directory the branding ConfigMap is mounted at, and the file inside it. */}}
-{{- define "nebari-frames.brandingMountPath" -}}
-/etc/nebari-frames/branding
+{{/* Directory the config ConfigMap is mounted at, and the file inside it. */}}
+{{- define "nebari-frames.configMountPath" -}}
+/etc/nebari-frames/config
 {{- end -}}
 
-{{- define "nebari-frames.brandingFilePath" -}}
-{{- printf "%s/branding.json" (include "nebari-frames.brandingMountPath" .) -}}
+{{- define "nebari-frames.configFilePath" -}}
+{{- printf "%s/config.json" (include "nebari-frames.configMountPath" .) -}}
 {{- end -}}
 
 {{/*

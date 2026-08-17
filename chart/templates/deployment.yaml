@@ -16,10 +16,10 @@ spec:
     metadata:
       {{- if include "nebari-frames.hasBranding" . }}
       annotations:
-        # Roll the pod when branding changes: the app reads the mounted document
-        # once at startup, so without this a branding-only upgrade would leave
-        # the old values being served.
-        checksum/branding: {{ include (print $.Template.BasePath "/branding-configmap.yaml") . | sha256sum }}
+        # Roll the pod when the runtime config changes: the app reads the mounted
+        # document once at startup, so without this a config-only upgrade would
+        # leave the old values being served.
+        checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
       {{- end }}
       labels:
         {{- include "nebari-frames.selectorLabels" . | nindent 8 }}
@@ -50,7 +50,7 @@ spec:
             {{- end }}
             {{- if include "nebari-frames.hasBranding" . }}
             - name: BRANDING_CONFIG_FILE
-              value: {{ include "nebari-frames.brandingFilePath" . | quote }}
+              value: {{ include "nebari-frames.configFilePath" . | quote }}
             {{- end }}
             {{- if .Values.seed.orgSlug }}
             - name: SEED_ORG_SLUG
@@ -115,8 +115,8 @@ spec:
               mountPath: {{ .Values.persistence.mountPath }}
             {{- end }}
             {{- if include "nebari-frames.hasBranding" . }}
-            - name: branding
-              mountPath: {{ include "nebari-frames.brandingMountPath" . | quote }}
+            - name: config
+              mountPath: {{ include "nebari-frames.configMountPath" . | quote }}
               readOnly: true
             {{- end }}
           {{- end }}
@@ -130,8 +130,8 @@ spec:
             claimName: {{ include "nebari-frames.fullname" . }}-data
         {{- end }}
         {{- if include "nebari-frames.hasBranding" . }}
-        - name: branding
+        - name: config
           configMap:
-            name: {{ include "nebari-frames.brandingConfigMapName" . }}
+            name: {{ include "nebari-frames.configMapName" . }}
         {{- end }}
       {{- end }}

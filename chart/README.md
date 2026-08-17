@@ -74,7 +74,7 @@ branding:
       primary: "oklch(62% 0.21 250)"
 ```
 
-The chart renders these into a ConfigMap, mounts it into the pod, and points the app at it with `BRANDING_CONFIG_FILE`. The app serves the document at `/branding.json` and the SPA applies it before it mounts. The pod template carries a checksum of the ConfigMap, so a branding-only `helm upgrade` rolls the pod.
+The chart renders these into the `<release>-nebari-frames-config` ConfigMap, mounts it at `/etc/nebari-frames/config/config.json`, and points the app at it with `BRANDING_CONFIG_FILE`. The app serves that document at `/config.json` and the SPA applies it before it mounts. The pod template carries a checksum of the ConfigMap, so a branding-only `helm upgrade` rolls the pod.
 
 Every field is optional and falls back to its built-in Nebari default, so an unbranded install renders exactly the manifests it did before - no ConfigMap, no volume, no env var. Overriding `theme.*.primary` also rebrands button hover states and focus rings, which are derived from it. See [Configuration → Branding](https://nebari-dev.github.io/nebari-frames/configuration/#branding) for the full token list, the `BRANDING_*` environment variables used outside Kubernetes, and the value validation rules.
 
