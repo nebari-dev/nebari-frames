@@ -78,6 +78,7 @@ Beyond the auth block above, the values most people end up touching are:
 - `seed.orgSlug`, `seed.orgDisplayName`, `seed.adminEmail` - the organization created on first boot, and the email that is reconciled to the first real admin on their first login.
 - `persistence.size`, `persistence.storageClass` - PVC size and storage class for the SQLite database.
 - `mcp.enabled`, `mcp.publicUrl` - whether the `/mcp` endpoint is mounted, and an override for its public URL when it can't be derived from `nebariapp.hostname`.
+- `branding.*` - white-label the app: title, logo (light and dark), favicon, and theme colors. Delivered at runtime, so no image rebuild is needed; leaving the block empty keeps the built-in Nebari branding. See [Branding](chart/README.md#branding).
 
 See [`chart/values.yaml`](chart/values.yaml) for the complete reference. Releases publish the chart to the Nebari Helm registry, so the simplest install is straight from there:
 

@@ -3,8 +3,8 @@ import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
 import path from "node:path";
 
-// RPC + auth config are proxied to the Go backend in dev so the browser
-// talks to a single origin (mirrors the embedded production deployment).
+// RPC, auth config, and branding are proxied to the Go backend in dev so the
+// browser talks to a single origin (mirrors the embedded production deployment).
 const BACKEND = process.env.VITE_BACKEND_URL ?? "http://localhost:8080";
 
 export default defineConfig({
@@ -32,6 +32,7 @@ export default defineConfig({
     proxy: {
       "/frames.v1.FrameService": { target: BACKEND, changeOrigin: true },
       "/auth/config": { target: BACKEND, changeOrigin: true },
+      "/config.json": { target: BACKEND, changeOrigin: true },
     },
   },
 });

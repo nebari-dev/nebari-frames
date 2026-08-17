@@ -80,6 +80,43 @@ func TestHandler_SecurityHeaders(t *testing.T) {
 	}
 }
 
+func TestHandler_ImgSrcOrigins(t *testing.T) {
+	tests := []struct {
+		name       string
+		cfg        webui.Config
+		wantImgSrc string
+	}{
+		{
+			name:       "unbranded keeps self and data URIs only",
+			cfg:        webui.Config{},
+			wantImgSrc: "img-src 'self' data:;",
+		},
+		{
+			name:       "branded logo origins are allowed",
+			cfg:        webui.Config{ImageOrigins: []string{"https://cdn.acme.example", "http://assets.acme.test:8080"}},
+			wantImgSrc: "img-src 'self' data: https://cdn.acme.example http://assets.acme.test:8080;",
+		},
+		{
+			name:       "empty origin is skipped",
+			cfg:        webui.Config{ImageOrigins: []string{"", "https://cdn.acme.example"}},
+			wantImgSrc: "img-src 'self' data: https://cdn.acme.example;",
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			h := webui.NewHandler(testFS(), tc.cfg)
+			req := httptest.NewRequest(http.MethodGet, "/", nil)
+			rr := httptest.NewRecorder()
+			h.ServeHTTP(rr, req)
+
+			csp := rr.Header().Get("Content-Security-Policy")
+			if !strings.Contains(csp, tc.wantImgSrc) {
+				t.Fatalf("CSP %q missing %q", csp, tc.wantImgSrc)
+			}
+		})
+	}
+}
+
 // TestHandler_SecurityHeaders_AllBranches proves that security headers are set
 // on every response branch: the 404 path (missing asset) and the 200 path
 // (client-route fallback to index.html).

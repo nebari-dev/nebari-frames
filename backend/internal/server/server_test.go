@@ -3,11 +3,14 @@ package server_test
 import (
 	"context"
 	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/nebari-dev/nebari-frames/backend/internal/auth"
+	"github.com/nebari-dev/nebari-frames/backend/internal/branding"
 	"github.com/nebari-dev/nebari-frames/backend/internal/server"
 	"github.com/nebari-dev/nebari-frames/backend/internal/store"
 )
@@ -35,7 +38,7 @@ func TestServer_Healthz(t *testing.T) {
 		},
 	}
 
-	srv := server.New(store.NewMemory(), nil, auth.Config{}, true, nil) // dev mode
+	srv := server.New(store.NewMemory(), nil, auth.Config{}, branding.Config{}, true, nil) // dev mode
 	ts := httptest.NewServer(srv.Handler())
 	t.Cleanup(ts.Close)
 
@@ -81,7 +84,7 @@ func TestServer_AuthConfig(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			srv := server.New(store.NewMemory(), nil, tt.cfg, true, nil)
+			srv := server.New(store.NewMemory(), nil, tt.cfg, branding.Config{}, true, nil)
 			ts := httptest.NewServer(srv.Handler())
 			t.Cleanup(ts.Close)
 			resp, err := http.Get(ts.URL + "/auth/config")
@@ -118,7 +121,7 @@ func TestServer_AuthConfig(t *testing.T) {
 }
 
 func TestServer_AuthConfig_MethodNotAllowed(t *testing.T) {
-	srv := server.New(store.NewMemory(), nil, auth.Config{IssuerURL: "https://oidc.example", ClientID: "web"}, true, nil)
+	srv := server.New(store.NewMemory(), nil, auth.Config{IssuerURL: "https://oidc.example", ClientID: "web"}, branding.Config{}, true, nil)
 	ts := httptest.NewServer(srv.Handler())
 	t.Cleanup(ts.Close)
 
@@ -145,6 +148,80 @@ func TestServer_AuthConfig_MethodNotAllowed(t *testing.T) {
 				t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusMethodNotAllowed)
 			}
 		})
+	}
+}
+
+func TestServer_Branding(t *testing.T) {
+	tests := []struct {
+		name     string
+		cfg      branding.Config
+		wantBody string
+	}{
+		{
+			name:     "unbranded serves an empty document",
+			cfg:      branding.Config{},
+			wantBody: `{}`,
+		},
+		{
+			name: "branded document is served as-is",
+			cfg: branding.Config{
+				Title:       "Acme Frames",
+				LogoURL:     "https://cdn.acme.example/logo.svg",
+				LogoURLDark: "https://cdn.acme.example/logo-dark.svg",
+				FaviconURL:  "/favicon.svg",
+				Theme:       branding.Theme{"light": {"primary": "#0066cc"}},
+			},
+			wantBody: `{"title":"Acme Frames","logoUrl":"https://cdn.acme.example/logo.svg",` +
+				`"logoUrlDark":"https://cdn.acme.example/logo-dark.svg","faviconUrl":"/favicon.svg",` +
+				`"theme":{"light":{"primary":"#0066cc"}}}`,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			srv := server.New(store.NewMemory(), nil, auth.Config{}, tt.cfg, true, nil)
+			ts := httptest.NewServer(srv.Handler())
+			t.Cleanup(ts.Close)
+
+			resp, err := http.Get(ts.URL + "/config.json")
+			if err != nil {
+				t.Fatalf("get /config.json: %v", err)
+			}
+			t.Cleanup(func() { _ = resp.Body.Close() })
+			if resp.StatusCode != http.StatusOK {
+				t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
+			}
+			// Branding must never be cached, or a rebrand would wait for the
+			// browser to drop a stale copy.
+			if got := resp.Header.Get("Cache-Control"); got != "no-store" {
+				t.Errorf("Cache-Control = %q, want no-store", got)
+			}
+			body, err := io.ReadAll(resp.Body)
+			if err != nil {
+				t.Fatalf("read body: %v", err)
+			}
+			if got := strings.TrimSpace(string(body)); got != tt.wantBody {
+				t.Fatalf("body = %s, want %s", got, tt.wantBody)
+			}
+		})
+	}
+}
+
+func TestServer_Branding_MethodNotAllowed(t *testing.T) {
+	srv := server.New(store.NewMemory(), nil, auth.Config{}, branding.Config{}, true, nil)
+	ts := httptest.NewServer(srv.Handler())
+	t.Cleanup(ts.Close)
+
+	req, err := http.NewRequest(http.MethodPost, ts.URL+"/config.json", nil)
+	if err != nil {
+		t.Fatalf("new request: %v", err)
+	}
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("do: %v", err)
+	}
+	t.Cleanup(func() { _ = resp.Body.Close() })
+	if resp.StatusCode != http.StatusMethodNotAllowed {
+		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusMethodNotAllowed)
 	}
 }
 
@@ -181,7 +258,7 @@ func TestServer_Readyz(t *testing.T) {
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			srv := server.New(store.NewMemory(), tc.validator, auth.Config{}, tc.devMode, nil)
+			srv := server.New(store.NewMemory(), tc.validator, auth.Config{}, branding.Config{}, tc.devMode, nil)
 			ts := httptest.NewServer(srv.Handler())
 			t.Cleanup(ts.Close)
 			resp, err := http.Get(ts.URL + "/readyz")

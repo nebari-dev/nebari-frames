@@ -22,6 +22,50 @@ persistence:
 
 resources: {}
 
+# Branding. Rendered into a ConfigMap the app reads at startup and serves as its
+# runtime configuration at /config.json; the SPA applies it before it mounts. Leave everything empty for
+# the built-in Nebari branding - an unbranded install renders exactly as it does
+# without this block, and no ConfigMap is created. No image rebuild is needed:
+# `helm upgrade` with new values rolls the pod and the change is live.
+# Outside Kubernetes the same fields come from BRANDING_* environment variables -
+# see docs/configuration.
+branding:
+  # Browser-tab title. Also used as the logo's alt text. Empty keeps
+  # "Nebari Frames".
+  title: ""
+  # Header and sign-in logo (light mode / default). Empty keeps the built-in
+  # Nebari wordmark. An absolute http(s) URL, a root-relative path, or a
+  # base64-encoded data: image URI; the app adds a cross-origin host to its CSP
+  # img-src automatically.
+  logoUrl: ""
+  # Dark-mode logo. Empty falls back to logoUrl, then the built-in dark wordmark.
+  logoUrlDark: ""
+  # Favicon URL. Empty keeps the built-in favicon.
+  faviconUrl: ""
+  # Theme CSS variable overrides, applied at runtime per mode. Values are
+  # validated in the browser and dropped if they contain CSS-injection
+  # characters (';', '{', '}', quotes, backslash, url(), javascript:, ...).
+  # Supported tokens: primary, primaryForeground, primaryHover, background,
+  # foreground, card, cardForeground, secondary, secondaryForeground, muted,
+  # mutedForeground, accent, accentForeground, border, ring, radius,
+  # headerBackground, headerBorder, headerForeground, headerActionHover.
+  # primaryHover (button hover/active) and ring (focus rings) are derived from
+  # primary when you don't set them, so overriding primary alone is enough to
+  # keep hover and focus states on-brand. Set them only to pin a specific shade.
+  # Keys are passed through to CSS as-is (no allow-list is enforced at deploy or
+  # at runtime), so any other token the SPA defines can be set here - but only
+  # the tokens above are supported.
+  # Example:
+  #   theme:
+  #     light:
+  #       primary: "oklch(55% 0.19 250)"
+  #       primaryForeground: "#ffffff"
+  #     dark:
+  #       primary: "oklch(62% 0.21 250)"
+  theme:
+    light: {}
+    dark: {}
+
 seed:
   orgSlug: ""
   orgDisplayName: ""

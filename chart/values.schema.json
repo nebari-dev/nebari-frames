@@ -28,6 +28,24 @@
         "accessMode": { "type": "string", "enum": ["ReadWriteOnce", "ReadWriteOncePod"] }
       }
     },
+    "branding": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "title": { "type": "string" },
+        "logoUrl": { "type": "string" },
+        "logoUrlDark": { "type": "string" },
+        "faviconUrl": { "type": "string" },
+        "theme": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "light": { "type": "object", "additionalProperties": { "type": "string" } },
+            "dark": { "type": "object", "additionalProperties": { "type": "string" } }
+          }
+        }
+      }
+    },
     "seed": {
       "type": "object",
       "additionalProperties": false,
