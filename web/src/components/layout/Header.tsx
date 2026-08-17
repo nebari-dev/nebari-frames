@@ -3,7 +3,7 @@ import { useQuery } from "@connectrpc/connect-query";
 import { FrameService } from "@gen/frames/v1/frame_service_pb";
 import { ChevronDown, LogOut, Monitor, Moon, Sun, User } from "lucide-react";
 import type { ReactNode } from "react";
-import { NavLink } from "react-router";
+import { Link, useMatch } from "react-router";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import {
@@ -14,20 +14,44 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { MenuBarActions, MenuBarBrand, MenuBarNav, NavigationMenu } from "@/components/ui/navigation-menu";
+import {
+  MenuBarActions,
+  MenuBarBrand,
+  MenuBarNav,
+  NavigationMenu,
+  NavLink,
+} from "@/components/ui/navigation-menu";
 import { isThemeMode, type ThemeMode } from "@/hooks/use-theme-preference";
 import { useTheme } from "@/hooks/theme-provider";
 import { useAuth } from "@/lib/auth/useAuth";
 import { brandLogo } from "@/lib/branding";
 import { cn } from "@/lib/utils";
 
-function navItemClass({ isActive }: { isActive: boolean }): string {
-  return cn(
-    "rounded-md px-3 py-1.5 text-sm font-medium outline-none motion-safe:transition-colors",
-    "focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-0",
-    isActive
-      ? "bg-header-action-hover text-header-foreground"
-      : "text-muted-foreground hover:bg-header-action-hover/60 hover:text-header-foreground",
+/**
+ * Registry NavLink driven by the router: `useMatch` supplies the active state
+ * the design system uses for the underline, and the anchor is swapped for a
+ * router `Link` through Base UI's `render` prop. Hover uses the header token so
+ * it reads the same as the account trigger sitting beside it.
+ */
+function HeaderNavLink({
+  to,
+  end = false,
+  children,
+}: {
+  to: string;
+  end?: boolean;
+  children: ReactNode;
+}): ReactNode {
+  const active = useMatch({ path: to, end }) !== null;
+
+  return (
+    <NavLink
+      active={active}
+      className="text-header-foreground hover:bg-header-action-hover"
+      render={<Link to={to} />}
+    >
+      {children}
+    </NavLink>
   );
 }
 
@@ -60,17 +84,11 @@ export function Header() {
         </MenuBarBrand>
 
         <MenuBarNav className="flex-none">
-          <NavLink to="/" end className={navItemClass}>
+          <HeaderNavLink to="/" end>
             Frames
-          </NavLink>
-          {me?.role === "admin" && (
-            <NavLink to="/admin" className={navItemClass}>
-              Admin
-            </NavLink>
-          )}
-          <NavLink to="/connect" className={navItemClass}>
-            Connect
-          </NavLink>
+          </HeaderNavLink>
+          {me?.role === "admin" && <HeaderNavLink to="/admin">Admin</HeaderNavLink>}
+          <HeaderNavLink to="/connect">Connect</HeaderNavLink>
         </MenuBarNav>
       </div>
 
@@ -80,7 +98,7 @@ export function Header() {
             <DropdownMenuTrigger
               variant="ghost"
               aria-label="Account menu"
-              className="h-auto px-2.5 py-1 hover:bg-header-action-hover hover:no-underline focus-visible:ring-offset-0 active:bg-header-action-hover data-[popup-open]:bg-header-action-hover data-[popup-open]:no-underline"
+              className="h-auto px-2.5 py-1 hover:bg-header-action-hover focus-visible:ring-offset-0 active:bg-header-action-hover data-[popup-open]:bg-header-action-hover"
             >
               <Avatar>
                 <AvatarFallback className="bg-primary font-semibold text-primary-foreground">

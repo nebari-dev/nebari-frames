@@ -21,10 +21,10 @@ function pointerClick(el: Element) {
   fireEvent.click(el);
 }
 
-function renderHeader() {
+function renderHeader(path = "/") {
   return render(
     <ThemeProvider storageKey={THEME_STORAGE_KEY}>
-      <MemoryRouter>
+      <MemoryRouter initialEntries={[path]}>
         <Header />
       </MemoryRouter>
     </ThemeProvider>,
@@ -79,6 +79,14 @@ it("offers a Sign in button when anonymous", () => {
 
   expect(screen.getByRole("button", { name: /sign in/i })).toBeInTheDocument();
   expect(screen.queryByRole("button", { name: /account menu/i })).not.toBeInTheDocument();
+});
+
+it("marks the nav link for the current section as the current page", () => {
+  mockAuthenticated();
+  renderHeader("/connect/github");
+
+  expect(screen.getByRole("link", { name: "Connect" })).toHaveAttribute("aria-current", "page");
+  expect(screen.getByRole("link", { name: "Frames" })).not.toHaveAttribute("aria-current");
 });
 
 it("links the logo to the homepage", () => {
