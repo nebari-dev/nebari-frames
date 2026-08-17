@@ -7,6 +7,7 @@ import (
 	"connectrpc.com/connect"
 
 	"github.com/nebari-dev/nebari-frames/backend/internal/auth"
+	"github.com/nebari-dev/nebari-frames/backend/internal/branding"
 	"github.com/nebari-dev/nebari-frames/backend/internal/frames"
 	"github.com/nebari-dev/nebari-frames/backend/internal/store"
 	"github.com/nebari-dev/nebari-frames/gen/go/frames/v1/framesv1connect"
@@ -23,12 +24,20 @@ type Mounter interface {
 	Mount(*http.ServeMux)
 }
 
-// New creates a Server mounting /healthz, /readyz, /auth/config (unauthenticated),
-// and the FrameService handler at its generated path. The auth interceptor is wired
-// in for the FrameService. When devMode is true, requests pass through with stub
-// claims and /readyz always returns 200. Pass a non-nil mcpMounter to also mount
-// the MCP endpoint routes.
-func New(repo store.Repository, validator auth.TokenValidator, authCfg auth.Config, devMode bool, mcpMounter Mounter) *Server {
+// New creates a Server mounting /healthz, /readyz, /auth/config, /branding.json
+// (all unauthenticated), and the FrameService handler at its generated path. The
+// auth interceptor is wired in for the FrameService. When devMode is true,
+// requests pass through with stub claims and /readyz always returns 200. Pass a
+// non-nil mcpMounter to also mount the MCP endpoint routes. A zero brandingCfg
+// serves an empty branding document, leaving the SPA on its built-in defaults.
+func New(
+	repo store.Repository,
+	validator auth.TokenValidator,
+	authCfg auth.Config,
+	brandingCfg branding.Config,
+	devMode bool,
+	mcpMounter Mounter,
+) *Server {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/healthz", func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
@@ -36,6 +45,7 @@ func New(repo store.Repository, validator auth.TokenValidator, authCfg auth.Conf
 	})
 	mux.HandleFunc("/readyz", handleReadyz(readinessFunc(validator, devMode)))
 	mux.HandleFunc("/auth/config", handleAuthConfig(authCfg))
+	mux.HandleFunc("/branding.json", handleBranding(brandingCfg))
 	interceptor := auth.NewInterceptor(validator, devMode)
 	path, handler := framesv1connect.NewFrameServiceHandler(
 		frames.NewService(repo),
@@ -45,7 +55,12 @@ func New(repo store.Repository, validator auth.TokenValidator, authCfg auth.Conf
 	if mcpMounter != nil {
 		mcpMounter.Mount(mux)
 	}
-	mux.Handle("/", webui.NewHandler(webui.Assets(), webui.Config{IssuerURL: authCfg.IssuerURL}))
+	mux.Handle("/", webui.NewHandler(webui.Assets(), webui.Config{
+		IssuerURL: authCfg.IssuerURL,
+		// Branded logos and favicons may live on another host; without their
+		// origins in img-src the CSP would block them.
+		ImageOrigins: brandingCfg.ImageOrigins(),
+	}))
 	return &Server{handler: mux}
 }
 
@@ -101,5 +116,23 @@ func handleAuthConfig(cfg auth.Config) http.HandlerFunc {
 		}
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(resp)
+	}
+}
+
+// handleBranding serves the runtime branding document the SPA applies before it
+// mounts (title, logo, favicon, theme tokens). Unbranded deployments serve "{}"
+// and the SPA keeps its built-in Nebari defaults. Responses are never cached, so
+// a branding change takes effect on the next page load instead of being pinned
+// by a stale copy.
+func handleBranding(cfg branding.Config) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.Header().Set("Cache-Control", "no-store")
+		w.Header().Set("X-Content-Type-Options", "nosniff")
+		_ = json.NewEncoder(w).Encode(cfg)
 	}
 }

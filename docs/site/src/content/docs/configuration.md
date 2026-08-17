@@ -29,6 +29,106 @@ Full reference for `chart/values.yaml`, grouped by area. See [Installation](/ins
 | `persistence.storageClass` | `""` | StorageClass for the PVC. Empty uses the cluster default; set explicitly in production. |
 | `persistence.accessMode` | `ReadWriteOnce` | PVC access mode. |
 
+## Branding
+
+The app ships with built-in Nebari branding (title, logos, favicon, theme colors)
+and needs no configuration. Operators can rebrand it **without rebuilding the
+image**: the backend serves the branding document at `/branding.json`, and the
+SPA applies it before it mounts (title, favicon, theme CSS variables) and in the
+header and sign-in screens (logo).
+
+| Key | Default | Description |
+| --- | --- | --- |
+| `branding.title` | `""` | Browser-tab title, also used as the logo's alt text. Empty keeps `Nebari Frames`. |
+| `branding.logoUrl` | `""` | Header and sign-in logo (light mode / default). Absolute `http(s)` URL, root-relative path, or base64 `data:` image URI. |
+| `branding.logoUrlDark` | `""` | Dark-mode logo. Falls back to `logoUrl`, then the built-in dark wordmark. |
+| `branding.faviconUrl` | `""` | Favicon URL. |
+| `branding.theme.light` | `{}` | Theme token overrides for light mode (see below). |
+| `branding.theme.dark` | `{}` | Theme token overrides for dark mode. |
+
+Every field is optional, and each one falls back to its built-in default
+independently, so an unbranded install renders exactly as it does without this
+block - the chart doesn't even create the ConfigMap.
+
+Supported theme tokens: `primary`, `primaryForeground`, `primaryHover`,
+`background`, `foreground`, `card`, `cardForeground`, `secondary`,
+`secondaryForeground`, `muted`, `mutedForeground`, `accent`, `accentForeground`,
+`border`, `ring`, `radius`, `headerBackground`, `headerBorder`,
+`headerForeground`, `headerActionHover`. Each is applied as the kebab-case CSS
+custom property (`primaryForeground` → `--primary-foreground`).
+
+`primaryHover` (button and badge hover/active) and `ring` (focus rings) are
+**derived from `primary`** when you don't set them, so overriding `primary` alone
+keeps hover and focus states on-brand instead of flashing Nebari magenta. Set
+them explicitly only to pin a specific shade.
+
+Token keys are written to CSS as-is - no allow-list is enforced when the chart
+renders the document or when the SPA applies it - so any other token the SPA
+defines can technically be set. Only the tokens listed above are supported.
+
+### Kubernetes / Helm
+
+Set `branding` in values. The chart renders the document into a ConfigMap and
+mounts it into the pod:
+
+```yaml
+branding:
+  title: "Acme Frames"
+  logoUrl: "https://cdn.acme.example/logo.svg"
+  logoUrlDark: "https://cdn.acme.example/logo-dark.svg"
+  faviconUrl: "https://cdn.acme.example/favicon.svg"
+  theme:
+    light:
+      primary: "oklch(55% 0.19 250)"
+      primaryForeground: "#ffffff"
+    dark:
+      primary: "oklch(62% 0.21 250)"
+```
+
+A branding-only `helm upgrade` rolls the pod automatically: the pod template
+carries a checksum of the rendered ConfigMap, and the app reads the document once
+at startup.
+
+### Outside Kubernetes
+
+Running the image (or the binary) directly, branding resolves per field, highest
+first:
+
+1. `BRANDING_*` environment variables:
+
+   | Env var | Field |
+   | --- | --- |
+   | `BRANDING_TITLE` | `title` |
+   | `BRANDING_LOGO_URL` | `logoUrl` |
+   | `BRANDING_LOGO_URL_DARK` | `logoUrlDark` |
+   | `BRANDING_FAVICON_URL` | `faviconUrl` |
+   | `BRANDING_THEME` | `theme` (raw JSON, e.g. `'{"light":{"primary":"#0066cc"},"dark":{}}'`) |
+
+2. The JSON document at `BRANDING_CONFIG_FILE` (what the chart mounts).
+3. Built-in Nebari defaults for anything still unset.
+
+```bash
+docker run -p 8080:8080 \
+  -e FRAMES_DEV_MODE=true \
+  -e BRANDING_TITLE="Acme Frames" \
+  -e BRANDING_LOGO_URL=https://cdn.acme.example/logo.svg \
+  ghcr.io/nebari-dev/nebari-frames
+```
+
+Branding never blocks startup: an unreadable config file or invalid
+`BRANDING_THEME` JSON is logged as a warning and skipped, and every other field
+still applies.
+
+### Security
+
+Theme values are validated in the browser before they are applied: any value
+containing CSS-injection characters (`;`, `{`, `}`, `<`, `>`, quotes, backslash,
+`url(`, `expression(`, `javascript:`) is dropped instead of injected into the
+stylesheet. Logo and favicon URLs are restricted to `http(s)` URLs,
+root-relative paths, and base64-encoded `data:` image URIs. A cross-origin logo
+or favicon host is added to the app's `Content-Security-Policy` `img-src`
+automatically - only the hosts that branding actually configures.
+
 ## Seed (first org and admin)
 
 | Key | Default | Description |

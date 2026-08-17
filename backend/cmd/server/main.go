@@ -12,6 +12,7 @@ import (
 	_ "modernc.org/sqlite"
 
 	"github.com/nebari-dev/nebari-frames/backend/internal/auth"
+	"github.com/nebari-dev/nebari-frames/backend/internal/branding"
 	"github.com/nebari-dev/nebari-frames/backend/internal/devfixture"
 	"github.com/nebari-dev/nebari-frames/backend/internal/frames"
 	mcppkg "github.com/nebari-dev/nebari-frames/backend/internal/mcp"
@@ -99,9 +100,16 @@ func main() {
 		mcpMounter = mcppkg.NewComponent(mcpCfg, framesService, mcpValidator)
 	}
 
+	// Branding is optional and never fatal: an invalid value is logged and
+	// skipped, and the SPA falls back to its built-in Nebari defaults.
+	brandingCfg, brandingErr := branding.Load(os.Getenv, os.ReadFile)
+	if brandingErr != nil {
+		slog.Warn("branding: ignoring invalid configuration", "error", brandingErr)
+	}
+
 	srv := &http.Server{
 		Addr:              ":" + port,
-		Handler:           server.New(repo, validator, authCfg, devMode, mcpMounter).Handler(),
+		Handler:           server.New(repo, validator, authCfg, brandingCfg, devMode, mcpMounter).Handler(),
 		ReadHeaderTimeout: 10 * time.Second,
 		ReadTimeout:       30 * time.Second,
 		WriteTimeout:      60 * time.Second,

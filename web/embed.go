@@ -30,6 +30,10 @@ type Config struct {
 	// IssuerURL is the OIDC issuer; its scheme://host origin is added to
 	// connect-src so the browser can perform OIDC token exchange.
 	IssuerURL string
+	// ImageOrigins are extra scheme://host origins added to img-src, for
+	// branded logos and favicons served from another host (see
+	// branding.Config.ImageOrigins). Empty for an unbranded deployment.
+	ImageOrigins []string
 }
 
 // NewHandler returns an http.Handler that serves the SPA from fsys. Existing
@@ -38,7 +42,7 @@ type Config struct {
 // fsys must return files whose Open result implements io.ReadSeeker; both
 // embed.FS and fstest.MapFS satisfy this contract.
 func NewHandler(fsys fs.FS, cfg Config) http.Handler {
-	csp := buildCSP(cfg.IssuerURL)
+	csp := buildCSP(cfg.IssuerURL, cfg.ImageOrigins)
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		setSecurityHeaders(w, csp)
 
@@ -88,13 +92,22 @@ func setSecurityHeaders(w http.ResponseWriter, csp string) {
 	w.Header().Set("Referrer-Policy", "same-origin")
 }
 
-func buildCSP(issuerURL string) string {
+func buildCSP(issuerURL string, imageOrigins []string) string {
 	connectSrc := "'self'"
 	if origin := originOf(issuerURL); origin != "" {
 		connectSrc += " " + origin
 	}
+	// Only origins the deployment itself configured are added, so branding can
+	// point at a CDN without loosening img-src for every host.
+	imgSrcParts := []string{"'self'", "data:"}
+	for _, origin := range imageOrigins {
+		if origin != "" {
+			imgSrcParts = append(imgSrcParts, origin)
+		}
+	}
+	imgSrc := strings.Join(imgSrcParts, " ")
 	return "default-src 'self'; connect-src " + connectSrc +
-		"; img-src 'self' data:; style-src 'self' 'unsafe-inline'; base-uri 'self'; frame-ancestors 'none'"
+		"; img-src " + imgSrc + "; style-src 'self' 'unsafe-inline'; base-uri 'self'; frame-ancestors 'none'"
 }
 
 // originOf returns the scheme://host of raw, or "" if raw is empty or unparseable.

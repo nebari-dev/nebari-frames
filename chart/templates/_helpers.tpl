@@ -27,6 +27,49 @@ app.kubernetes.io/instance: {{ .Release.Name }}
 {{- end -}}
 
 {{/*
+"true" when any branding value is set, empty otherwise. Gates the branding
+ConfigMap, its volume mount, and BRANDING_CONFIG_FILE, so an unbranded install
+renders exactly the manifests it did before branding existed.
+*/}}
+{{- define "nebari-frames.hasBranding" -}}
+{{- $b := .Values.branding -}}
+{{- if or $b.title $b.logoUrl $b.logoUrlDark $b.faviconUrl $b.theme.light $b.theme.dark -}}
+true
+{{- end -}}
+{{- end -}}
+
+{{/*
+The branding document served at /branding.json, as JSON. Only non-empty values
+are emitted so the app (and the SPA) falls back to its built-in default per
+field; an all-empty branding block yields "{}".
+*/}}
+{{- define "nebari-frames.brandingJson" -}}
+{{- $doc := dict -}}
+{{- with .Values.branding.title }}{{- $doc = set $doc "title" . -}}{{- end -}}
+{{- with .Values.branding.logoUrl }}{{- $doc = set $doc "logoUrl" . -}}{{- end -}}
+{{- with .Values.branding.logoUrlDark }}{{- $doc = set $doc "logoUrlDark" . -}}{{- end -}}
+{{- with .Values.branding.faviconUrl }}{{- $doc = set $doc "faviconUrl" . -}}{{- end -}}
+{{- $theme := dict -}}
+{{- with .Values.branding.theme.light }}{{- $theme = set $theme "light" . -}}{{- end -}}
+{{- with .Values.branding.theme.dark }}{{- $theme = set $theme "dark" . -}}{{- end -}}
+{{- if $theme }}{{- $doc = set $doc "theme" $theme -}}{{- end -}}
+{{- $doc | toPrettyJson -}}
+{{- end -}}
+
+{{- define "nebari-frames.brandingConfigMapName" -}}
+{{- printf "%s-branding" (include "nebari-frames.fullname" .) -}}
+{{- end -}}
+
+{{/* Directory the branding ConfigMap is mounted at, and the file inside it. */}}
+{{- define "nebari-frames.brandingMountPath" -}}
+/etc/nebari-frames/branding
+{{- end -}}
+
+{{- define "nebari-frames.brandingFilePath" -}}
+{{- printf "%s/branding.json" (include "nebari-frames.brandingMountPath" .) -}}
+{{- end -}}
+
+{{/*
 Public URL for the MCP endpoint: explicit mcp.publicUrl, else derived from the
 NebariApp hostname. Empty string when neither is available (endpoint stays off).
 */}}

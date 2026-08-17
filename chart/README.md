@@ -56,6 +56,28 @@ helm install frames . -n nebari-frames -f examples/standalone-values.yaml
 
 This runs in dev mode with authentication disabled and is meant for local use only. In dev mode the identity is fixed to `dev-user` / `dev@localhost`, so `seed.adminEmail` has no effect here. It only takes effect once real OIDC is configured (either through NebariApp or a self-managed `auth.oidc.*` block).
 
+## Branding
+
+The app ships with built-in Nebari branding and needs no configuration. To rebrand a deployment - without rebuilding the image - set `branding` in values:
+
+```yaml
+branding:
+  title: "Acme Frames"
+  logoUrl: "https://cdn.acme.example/logo.svg"
+  logoUrlDark: "https://cdn.acme.example/logo-dark.svg"
+  faviconUrl: "https://cdn.acme.example/favicon.svg"
+  theme:
+    light:
+      primary: "oklch(55% 0.19 250)"
+      primaryForeground: "#ffffff"
+    dark:
+      primary: "oklch(62% 0.21 250)"
+```
+
+The chart renders these into a ConfigMap, mounts it into the pod, and points the app at it with `BRANDING_CONFIG_FILE`. The app serves the document at `/branding.json` and the SPA applies it before it mounts. The pod template carries a checksum of the ConfigMap, so a branding-only `helm upgrade` rolls the pod.
+
+Every field is optional and falls back to its built-in Nebari default, so an unbranded install renders exactly the manifests it did before - no ConfigMap, no volume, no env var. Overriding `theme.*.primary` also rebrands button hover states and focus rings, which are derived from it. See [Configuration → Branding](https://nebari-dev.github.io/nebari-frames/configuration/#branding) for the full token list, the `BRANDING_*` environment variables used outside Kubernetes, and the value validation rules.
+
 ## Telemetry
 
 The server writes structured JSON logs to stdout, ready for collection by the platform's log stack (e.g. the LGTM stack on Nebari). There is no `ServiceMonitor` in this chart because the server does not expose a metrics endpoint yet. When metrics land, the chart will grow a `ServiceMonitor` gated behind a `metrics.enabled` value so clusters without the Prometheus operator are unaffected.
@@ -80,6 +102,11 @@ The server writes structured JSON logs to stdout, ready for collection by the pl
 | `persistence.size` | PVC size. Defaults to `1Gi`. |
 | `persistence.storageClass` | StorageClass for the PVC. Defaults to `""`, which uses the cluster default class. Set this explicitly in production so you control which class backs the volume. |
 | `persistence.accessMode` | PVC access mode. Defaults to `ReadWriteOnce`. |
+| `branding.title` | Browser-tab title (also the logo's alt text). Empty keeps `Nebari Frames`. |
+| `branding.logoUrl` | Header and sign-in logo (light mode / default). Empty keeps the built-in Nebari wordmark. |
+| `branding.logoUrlDark` | Dark-mode logo. Empty falls back to `branding.logoUrl`, then the built-in dark wordmark. |
+| `branding.faviconUrl` | Favicon URL. Empty keeps the built-in favicon. |
+| `branding.theme.light` / `branding.theme.dark` | Theme CSS variable overrides per mode, e.g. `primary`, `primaryForeground`, `background`, `ring`, `radius`. See [Branding](#branding). |
 | `seed.orgSlug` | Slug for the seeded organization. |
 | `seed.orgDisplayName` | Display name for the seeded organization. |
 | `seed.adminEmail` | Email of the first admin (reconciled to the OIDC subject on first login). |

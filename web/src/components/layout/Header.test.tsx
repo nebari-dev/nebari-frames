@@ -10,6 +10,7 @@ vi.mock("@connectrpc/connect-query", () => ({ useQuery: () => useQueryMock() }))
 
 import { THEME_STORAGE_KEY } from "@/app/Providers";
 import { ThemeProvider } from "@/hooks/theme-provider";
+import { setBranding } from "@/lib/branding";
 import { Header } from "./Header";
 
 // Base UI menus open/select on a real pointer sequence that userEvent.click
@@ -42,6 +43,7 @@ function mockAuthenticated() {
 
 afterEach(() => {
   cleanup();
+  setBranding(null);
   localStorage.removeItem(THEME_STORAGE_KEY);
   document.documentElement.classList.remove("dark");
 });
@@ -84,6 +86,25 @@ it("links the logo to the homepage", () => {
   renderHeader();
 
   expect(screen.getByRole("link", { name: /go to homepage/i })).toHaveAttribute("href", "/");
+});
+
+it("shows the bundled Nebari wordmark when the deployment is unbranded", () => {
+  mockAuthenticated();
+  renderHeader();
+
+  const logo = screen.getByRole("img", { name: "Nebari" });
+  expect(logo).toHaveAttribute("src", expect.stringContaining("nebari-logo_light"));
+});
+
+it("shows the branded logo and title when branding is configured", () => {
+  setBranding({ title: "Acme Frames", logoUrl: "https://cdn.acme.example/logo.svg" });
+  mockAuthenticated();
+  renderHeader();
+
+  expect(screen.getByRole("img", { name: "Acme Frames" })).toHaveAttribute(
+    "src",
+    "https://cdn.acme.example/logo.svg",
+  );
 });
 
 it("exposes the theme picker as menuitemradio items with aria-checked", async () => {

@@ -1,0 +1,16 @@
+{{- if include "nebari-frames.hasBranding" . }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "nebari-frames.brandingConfigMapName" . }}
+  labels:
+    {{- include "nebari-frames.labels" . | nindent 4 }}
+data:
+  # Mounted read-only into the app container, which reads it via
+  # BRANDING_CONFIG_FILE and serves it at /branding.json for the SPA to apply
+  # before it mounts. Only values set in `branding` appear here; every other
+  # field falls back to the built-in Nebari default. The pod template carries a
+  # checksum of this ConfigMap, so a branding-only `helm upgrade` rolls the pod.
+  branding.json: |
+    {{- include "nebari-frames.brandingJson" . | nindent 4 }}
+{{- end }}

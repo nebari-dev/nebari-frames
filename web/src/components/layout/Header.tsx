@@ -4,8 +4,6 @@ import { FrameService } from "@gen/frames/v1/frame_service_pb";
 import { ChevronDown, LogOut, Monitor, Moon, Sun, User } from "lucide-react";
 import type { ReactNode } from "react";
 import { NavLink } from "react-router";
-import logoDark from "@/assets/nebari-logo_dark.svg";
-import logoLight from "@/assets/nebari-logo_light.svg";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import {
@@ -20,6 +18,7 @@ import { MenuBarActions, MenuBarBrand, MenuBarNav, NavigationMenu } from "@/comp
 import { isThemeMode, type ThemeMode } from "@/hooks/use-theme-preference";
 import { useTheme } from "@/hooks/theme-provider";
 import { useAuth } from "@/lib/auth/useAuth";
+import { brandLogo } from "@/lib/branding";
 import { cn } from "@/lib/utils";
 
 function navItemClass({ isActive }: { isActive: boolean }): string {
@@ -49,12 +48,15 @@ export function Header() {
   const displayName = user?.profile?.name ?? me?.email ?? user?.profile?.email ?? "Account";
   const email = me?.email ?? user?.profile?.email ?? null;
   const initials = initialsFor(displayName || email);
+  // Branded logo when the deployment configures one (loaded before mount by
+  // main.tsx), otherwise the bundled Nebari wordmark.
+  const logo = brandLogo(isDarkMode);
 
   return (
     <NavigationMenu className="h-14 justify-between border-header-border bg-header-background pl-4 text-header-foreground">
       <div className="flex items-center gap-6">
         <MenuBarBrand href="/" aria-label="Go to homepage">
-          <img src={isDarkMode ? logoDark : logoLight} alt="Nebari" className="h-8 w-auto" />
+          <img src={logo.src} alt={logo.alt} className="h-8 w-auto" />
         </MenuBarBrand>
 
         <MenuBarNav className="flex-none">
