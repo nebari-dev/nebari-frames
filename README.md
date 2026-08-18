@@ -122,6 +122,51 @@ Installing from a git checkout also works, as shown in [`chart/README.md`](chart
 
 Reviewers: @dharhas, @jbouder.
 
+## Releasing
+
+A release is cut by pushing a `v*` tag to `main`. Everything downstream keys off that tag name.
+
+```bash
+git checkout main && git pull
+git tag v0.1.7
+git push origin v0.1.7
+```
+
+`.github/workflows/release.yml` runs `go test ./... -race` first, then two jobs in parallel:
+
+- **`release-cli`** — GoReleaser builds the CLI binaries, creates the GitHub Release, and updates the Homebrew tap.
+- **`release-chart`** — copies `chart/` into `nebari-dev/helm-repository` and **pushes directly to `main`** (no review PR), so the chart is installable as soon as the job is green.
+
+`.github/workflows/build-images.yaml` triggers on the same tag and publishes the image to `ghcr.io` and `quay.io`.
+
+### Versions are stamped at release time
+
+`chart/Chart.yaml` in this repo reads `0.1.0` and stays that way — **do not bump it by hand**. The release job stamps both fields from the tag, and they use *different* forms:
+
+| Field | Value for tag `v0.1.7` |
+|---|---|
+| `version` | `0.1.7` (tag minus the leading `v`) |
+| `appVersion` | `v0.1.7` (the literal tag) |
+
+`appVersion` keeps the `v` because `image.tag` defaults to `.Chart.AppVersion`, and the published image tags are v-prefixed. Breaking that contract makes the chart reference an image that does not exist.
+
+The practical consequence: **vendor or inspect the published chart, not the git tree.** Copying `chart/` out of a tag gives you a chart labelled `0.1.0` whose image tag resolves to a nonexistent `0.1.0` image. Use:
+
+```bash
+helm pull nebari/nebari-frames --version <v> --untar
+```
+
+### The SPA ships inside the image
+
+The web app is embedded in the Go binary, so every frontend change — header, nav, branding — reaches a cluster through the **image**, not the chart. A chart-only bump will not move the UI, and a UI change that appears not to have landed is usually a stale image tag rather than a chart problem.
+
+### Verify the release landed
+
+```bash
+curl -s https://nebari-dev.github.io/helm-repository/index.yaml | \
+  yq '.entries.nebari-frames[].version'
+```
+
 ## Status
 
 The data-model + RBAC foundation, backend service, CLI, web app, and MCP endpoint are implemented. See [Run locally](#run-locally).
