@@ -1,4 +1,4 @@
-import type { FrameDoc } from "@/lib/frame-yaml";
+import { type FrameDoc, DEFAULT_VISIBILITY } from "@/lib/frame-yaml";
 
 export interface AuthoringForm extends FrameDoc {
   changelog: string;
@@ -42,6 +42,9 @@ export function formToDoc(form: AuthoringForm): FrameDoc {
     name: form.name,
     description: form.description,
     version: form.version,
+    visibility: form.visibility,
+    scope: (form.scope ?? "").trim(),
+    maintainer: (form.maintainer ?? "").trim(),
     slots,
   };
 
@@ -59,5 +62,8 @@ export function formToDoc(form: AuthoringForm): FrameDoc {
 }
 
 export function docToForm(doc: FrameDoc, changelog: string): AuthoringForm {
-  return { ...doc, changelog };
+  // Frames published before `visibility` existed carry none. Seed the spec
+  // default rather than showing an empty required field, so opening an old
+  // frame for editing does not present an error the author did not cause.
+  return { ...doc, visibility: doc.visibility || DEFAULT_VISIBILITY, changelog };
 }

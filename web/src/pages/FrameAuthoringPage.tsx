@@ -1,45 +1,102 @@
 import { useState, useEffect } from "react";
-import { useForm, FormProvider, useWatch } from "react-hook-form";
+import { useForm, FormProvider, useWatch, type FieldErrors } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { useNavigate, useParams } from "react-router";
+import { useNavigate, useParams, useSearchParams } from "react-router";
 import { useMutation, useQuery, createConnectQueryKey } from "@connectrpc/connect-query";
 import { useQueryClient } from "@tanstack/react-query";
+import { MoreHorizontal, X } from "lucide-react";
 import { FrameService } from "@gen/frames/v1/frame_service_pb";
 import { authoringFormSchema, emptyFrameDoc, suggestNextVersion } from "@/lib/authoring-schema";
 import { serializeFrameDoc, parseFrameContent } from "@/lib/frame-yaml";
+import { SLOT_SECTIONS, sectionHasContent, type SlotSectionDef } from "@/lib/slot-sections";
 import { mapPublishError } from "@/lib/publish-errors";
 import { type AuthoringForm, formToDoc, docToForm } from "@/components/form/form-model";
-import { MetadataFields } from "@/components/form/MetadataFields";
 import { ExtendsEditor } from "@/components/form/ExtendsEditor";
 import { ExcludesEditor } from "@/components/form/ExcludesEditor";
 import { TerminologyEditor } from "@/components/form/TerminologyEditor";
 import { ListEditor } from "@/components/form/ListEditor";
 import { MarkdownField } from "@/components/form/MarkdownField";
-import { ChangelogField } from "@/components/form/ChangelogField";
+import { MarkdownSourceEditor } from "@/components/form/MarkdownSourceEditor";
+import { DocMetadataHeader } from "@/components/document/DocMetadataHeader";
+import { AddSectionMenu } from "@/components/document/AddSectionMenu";
+import { PublishDialog } from "@/components/document/PublishDialog";
 import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
 import { Alert } from "@/components/ui/alert";
+import {
+  DropdownMenu,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuPortal,
+} from "@/components/ui/dropdown-menu";
 import { ResolvedPreview } from "@/components/form/ResolvedPreview";
 
-const PROSE: { name: `slots.${string}`; label: string }[] = [
-  { name: "slots.tool_specs", label: "Tool Specifications" },
-  { name: "slots.goals", label: "Goals" },
-  { name: "slots.style", label: "Style" },
-  { name: "slots.norms", label: "Norms" },
-  { name: "slots.architecture", label: "Architecture" },
-  { name: "slots.business_process", label: "Business Process" },
-];
+const encode = (s: string) => new TextEncoder().encode(s);
+const decode = (b: Uint8Array) => new TextDecoder().decode(b);
+
+// One editable section of the document: heading, the editor for its content
+// shape, and a remove control. Sections the author has not added simply are
+// not on the page - the document editor shows the document, not the schema.
+function SectionEditor({
+  def,
+  onRemove,
+}: {
+  def: SlotSectionDef;
+  onRemove: () => void;
+}) {
+  return (
+    <section className="group space-y-2 border-t border-border pt-4">
+      <div className="flex items-center justify-between">
+        <h2 className="text-lg font-semibold">{def.label}</h2>
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          className="text-muted-foreground opacity-0 transition-opacity group-focus-within:opacity-100 group-hover:opacity-100"
+          onClick={onRemove}
+        >
+          <X className="size-4" />
+          Remove section
+        </Button>
+      </div>
+      <p className="text-xs text-muted-foreground">{def.hint}</p>
+      {def.kind === "terms" && <TerminologyEditor />}
+      {def.kind === "list" && (
+        <ListEditor name={def.path as `slots.${"rules" | "skills" | "prompts"}`} label={def.label} />
+      )}
+      {def.kind === "prose" && <MarkdownField name={def.path} />}
+    </section>
+  );
+}
 
 export function FrameAuthoringPage({ mode }: { mode: "create" | "edit" }) {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const [searchParams] = useSearchParams();
   const [formError, setFormError] = useState<string | null>(null);
 
   const methods = useForm<AuthoringForm>({
     resolver: zodResolver(authoringFormSchema),
-    defaultValues: docToForm(emptyFrameDoc(), ""),
+    // A first frame is 1.0.0 unless the author says otherwise at publish time.
+    defaultValues: docToForm({ ...emptyFrameDoc(), version: "1.0.0" }, ""),
   });
 
+  // "Import a .frame.md" lands straight in the Markdown editor: it is the
+  // import surface, so there is no separate mapping screen to keep in step
+  // with the codec. Otherwise Markdown is a secondary mode reached via the
+  // overflow menu, never a persistent preference.
+  const importing = mode === "create" && searchParams.get("import") === "1";
+  const [editorMode, setEditorMode] = useState<"document" | "markdown">(
+    importing ? "markdown" : "document",
+  );
+  const [markdownSource, setMarkdownSource] = useState("");
+  const [markdownErrors, setMarkdownErrors] = useState<string[]>([]);
+
+  // Sections the author added this session; content-bearing sections are
+  // always visible regardless (which covers the async edit-mode prefill).
+  const [added, setAdded] = useState<ReadonlySet<string>>(new Set());
+
+  const [publishOpen, setPublishOpen] = useState(false);
   const [previewOpen, setPreviewOpen] = useState(false);
   const { org = "", name = "" } = useParams();
   const editQ = useQuery(
@@ -61,6 +118,14 @@ export function FrameAuthoringPage({ mode }: { mode: "create" | "edit" }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mode, editQ.data?.version?.digest]);
 
+  const slots = useWatch({ control: methods.control, name: "slots" }) as
+    | AuthoringForm["slots"]
+    | undefined;
+  const visibleSections = SLOT_SECTIONS.filter(
+    (d) => added.has(d.key) || sectionHasContent(d, slots ?? {}),
+  );
+  const hiddenSections = SLOT_SECTIONS.filter((d) => !visibleSections.includes(d));
+
   const extendsVal = useWatch({ control: methods.control, name: "extends" }) as { ref: string }[] | undefined;
   const hasParents = (extendsVal ?? []).some((e) => e.ref?.trim());
 
@@ -68,8 +133,13 @@ export function FrameAuthoringPage({ mode }: { mode: "create" | "edit" }) {
   // not the slug, and the detail route is keyed by slug, so read it from GetMe.
   const meQ = useQuery(FrameService.method.getMe, {});
   const publish = useMutation(FrameService.method.publishFrame);
+  // One RPC backs both editor directions, import, and export, so the slot
+  // table lives only in Go rather than being mirrored again in TypeScript.
+  const convert = useMutation(FrameService.method.convertFrame);
 
-  const isDirty = methods.formState.isDirty && !publish.isSuccess;
+  const busy = publish.isPending || convert.isPending;
+
+  const isDirty = (methods.formState.isDirty || markdownSource !== "") && !publish.isSuccess;
   // In-app SPA route-change blocking would require migrating to a data router
   // (createBrowserRouter + RouterProvider); deferred. The beforeunload handler
   // below covers browser-level navigation (tab close / refresh / hard nav) per
@@ -81,78 +151,234 @@ export function FrameAuthoringPage({ mode }: { mode: "create" | "edit" }) {
     return () => window.removeEventListener("beforeunload", handler);
   }, [isDirty]);
 
+  const addSection = (def: SlotSectionDef) => {
+    setAdded((prev) => new Set(prev).add(def.key));
+  };
+  const removeSection = (def: SlotSectionDef) => {
+    // Clearing the value is what removes a content-bearing section; the set
+    // only tracks intentionally-added empty ones.
+    methods.setValue(def.path as never, (def.kind === "prose" ? "" : []) as never, { shouldDirty: true });
+    methods.clearErrors(def.path as never);
+    setAdded((prev) => {
+      const next = new Set(prev);
+      next.delete(def.key);
+      return next;
+    });
+  };
+
+  // Collects violation messages for the markdown editor. Structural failures
+  // arrive on "markdown"; value failures (an unpinned inherits ref) arrive on
+  // their form path and are shown with that path so they stay actionable.
+  const showViolations = (err: unknown) => {
+    const { fieldErrors, formError: fe } = mapPublishError(err);
+    const messages = Object.entries(fieldErrors).map(([path, msg]) =>
+      path === "markdown" ? msg : `${path}: ${msg}`,
+    );
+    setMarkdownErrors(messages);
+    setFormError(messages.length > 0 ? null : fe);
+  };
+
+  const toMarkdown = () => {
+    setFormError(null);
+    const yaml = serializeFrameDoc(formToDoc(methods.getValues()));
+    convert.mutate(
+      { source: { case: "yaml", value: encode(yaml) } },
+      {
+        onSuccess: (res) => {
+          setMarkdownSource(decode(res.markdown));
+          setMarkdownErrors([]);
+          setEditorMode("markdown");
+        },
+        onError: (err) => setFormError(mapPublishError(err).formError ?? "Could not render this frame as Markdown."),
+      },
+    );
+  };
+
+  // Markdown is a superset view of the document, so the parse must succeed
+  // before switching back; on failure the author stays in Markdown with the
+  // errors annotated.
+  const toForm = () => {
+    setFormError(null);
+    convert.mutate(
+      { source: { case: "markdown", value: encode(markdownSource) } },
+      {
+        onSuccess: (res) => {
+          try {
+            const doc = parseFrameContent(res.yaml);
+            methods.reset(docToForm(doc, methods.getValues("changelog")));
+            setMarkdownErrors([]);
+            setEditorMode("document");
+          } catch {
+            setMarkdownErrors(["The converted frame could not be loaded into the form."]);
+          }
+        },
+        onError: showViolations,
+      },
+    );
+  };
+
+  const afterPublish = (publishedName: string) => {
+    queryClient.invalidateQueries({
+      queryKey: createConnectQueryKey({
+        schema: FrameService.method.listFrames,
+        cardinality: "finite",
+      }),
+    });
+    const slug = mode === "edit" ? org : (meQ.data?.org?.slug ?? "");
+    navigate(`/frames/${slug}/${publishedName}`);
+  };
+
+  // A publish failure closes the dialog only when the problem lives outside
+  // it: a version conflict must be fixed where the version input is.
   const onSubmit = (form: AuthoringForm) => {
     setFormError(null);
-    const doc = formToDoc(form);
-    const content = new TextEncoder().encode(serializeFrameDoc(doc));
+    const content = encode(serializeFrameDoc(formToDoc(form)));
     publish.mutate(
       { content, changelog: form.changelog },
       {
-        onSuccess: () => {
-          queryClient.invalidateQueries({
-            queryKey: createConnectQueryKey({
-              schema: FrameService.method.listFrames,
-              cardinality: "finite",
-            }),
-          });
-          const slug = mode === "edit" ? org : (meQ.data?.org?.slug ?? "");
-          navigate(`/frames/${slug}/${form.name}`);
-        },
+        onSuccess: () => afterPublish(form.name),
         onError: (err: unknown) => {
           const { fieldErrors, formError: fe } = mapPublishError(err);
           for (const [path, message] of Object.entries(fieldErrors)) {
             methods.setError(path as never, { type: "server", message });
           }
           setFormError(fe);
+          if (!fieldErrors.version) setPublishOpen(false);
         },
       },
     );
   };
 
+  // Invalid form on publish: keep the dialog open only when the version itself
+  // is the problem; otherwise close it so the inline errors are visible.
+  const onInvalid = (errors: FieldErrors<AuthoringForm>) => {
+    if (!errors.version) {
+      setPublishOpen(false);
+      setFormError("Fix the highlighted fields, then publish again.");
+    }
+  };
+
+  // Publishing from Markdown converts first so there is still exactly one
+  // publish path: the server only ever stores the canonical slot YAML.
+  const publishFromMarkdown = () => {
+    setFormError(null);
+    convert.mutate(
+      { source: { case: "markdown", value: encode(markdownSource) } },
+      {
+        onSuccess: (res) => {
+          publish.mutate(
+            { content: res.yaml, changelog: methods.getValues("changelog") },
+            {
+              onSuccess: () => {
+                let published = methods.getValues("name");
+                try {
+                  published = parseFrameContent(res.yaml).name;
+                } catch {
+                  // Fall back to the form's name; the server accepted the doc.
+                }
+                afterPublish(published);
+              },
+              onError: (err) => {
+                setPublishOpen(false);
+                showViolations(err);
+              },
+            },
+          );
+        },
+        onError: (err) => {
+          setPublishOpen(false);
+          showViolations(err);
+        },
+      },
+    );
+  };
+
+  const confirmPublish = () => {
+    if (editorMode === "markdown") publishFromMarkdown();
+    else void methods.handleSubmit(onSubmit, onInvalid)();
+  };
+
+  const title = mode === "edit" ? "Edit Frame" : importing ? "Import Frame" : "New Frame";
+
   return (
     <FormProvider {...methods}>
-      <form onSubmit={methods.handleSubmit(onSubmit)} className="max-w-6xl space-y-6">
+      <form onSubmit={(e) => e.preventDefault()} className="mx-auto max-w-3xl space-y-6">
         <div className="flex items-center justify-between">
-          <h1 className="text-2xl font-semibold">{mode === "create" ? "New Frame" : "Edit Frame"}</h1>
-          <div className="flex gap-2">
-            <Button type="button" variant="outline" disabled={!hasParents} onClick={() => setPreviewOpen(true)}>Preview as resolved Frame</Button>
+          <h1 className="text-sm font-medium uppercase tracking-wide text-muted-foreground">{title}</h1>
+          <div className="flex items-center gap-2">
+            {editorMode === "markdown" ? (
+              !importing && (
+                <Button type="button" variant="ghost" disabled={busy} onClick={toForm}>
+                  Back to editor
+                </Button>
+              )
+            ) : (
+              <DropdownMenu>
+                <DropdownMenuTrigger variant="ghost" aria-label="More actions">
+                  <MoreHorizontal className="size-4" />
+                </DropdownMenuTrigger>
+                <DropdownMenuPortal>
+        <DropdownMenuContent align="end">
+                  <DropdownMenuItem onClick={toMarkdown}>Edit as Markdown</DropdownMenuItem>
+                  <DropdownMenuItem disabled={!hasParents} onClick={() => setPreviewOpen(true)}>
+                    Preview as resolved Frame
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+      </DropdownMenuPortal>
+              </DropdownMenu>
+            )}
             <Button type="button" variant="outline" onClick={() => navigate(-1)}>Cancel</Button>
-            {/* base-ui Button defaults to type="button"; the render prop wins mergeProps precedence, so set submit on the rendered element */}
-            <Button render={<button type="submit" />} disabled={publish.isPending}>Publish</Button>
+            <Button type="button" disabled={busy} onClick={() => setPublishOpen(true)}>
+              Publish&hellip;
+            </Button>
           </div>
         </div>
         {formError && <Alert variant="destructive">{formError}</Alert>}
 
-        <div className="grid gap-10 lg:grid-cols-[minmax(0,1fr)_30rem] lg:items-start">
-          {/* Left: descriptive content — metadata, prose slots, changelog */}
-          <Card className="min-w-0 space-y-6 p-5">
-            <section className="space-y-2"><h2 className="text-sm font-semibold uppercase text-muted-foreground">Metadata</h2><MetadataFields nameReadOnly={mode === "edit"} /></section>
-            {PROSE.map((p) => <section key={p.name}><MarkdownField name={p.name} label={p.label} /></section>)}
-            <section><ChangelogField /></section>
-          </Card>
+        {editorMode === "markdown" ? (
+          <MarkdownSourceEditor
+            value={markdownSource}
+            onChange={(v) => {
+              setMarkdownSource(v);
+              setMarkdownErrors([]);
+            }}
+            errors={markdownErrors}
+            busy={busy}
+          />
+        ) : (
+          <div className="space-y-6">
+            <DocMetadataHeader nameReadOnly={mode === "edit"} />
 
-          {/* Right: repeatable list editors (the "+ add" sections) */}
-          <aside className="space-y-6">
-            <Card className="space-y-6 p-5">
-              <h2 className="text-sm font-semibold uppercase text-muted-foreground">Composition</h2>
-              <section className="space-y-2"><h3 className="text-xs font-medium text-muted-foreground">Inherits from</h3><ExtendsEditor /></section>
-              <section className="space-y-2"><h3 className="text-xs font-medium text-muted-foreground">Excludes</h3><ExcludesEditor /></section>
-            </Card>
-            <Card className="space-y-6 p-5">
-              <h2 className="text-sm font-semibold uppercase text-muted-foreground">Slots</h2>
-              <section className="space-y-2"><h3 className="text-xs font-medium text-muted-foreground">Terminology</h3><TerminologyEditor /></section>
-              <section className="space-y-2"><h3 className="text-xs font-medium text-muted-foreground">Rules</h3><ListEditor name="slots.rules" label="Rules" /></section>
-              <section className="space-y-2"><h3 className="text-xs font-medium text-muted-foreground">Skills</h3><ListEditor name="slots.skills" label="Skills" /></section>
-              <section className="space-y-2"><h3 className="text-xs font-medium text-muted-foreground">Prompts</h3><ListEditor name="slots.prompts" label="Prompts" /></section>
-            </Card>
-          </aside>
-        </div>
+            {/* Composition sits between metadata and content, the way the
+                frontmatter it maps to sits above the document body. */}
+            <div className="space-y-3 rounded-md border border-border bg-card p-4">
+              <div className="space-y-2">
+                <h3 className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Inherits from</h3>
+                <ExtendsEditor />
+              </div>
+              <div className="space-y-2">
+                <h3 className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Excludes</h3>
+                <ExcludesEditor />
+              </div>
+            </div>
 
-        <div className="flex justify-end gap-2">
-          <Button type="button" variant="outline" onClick={() => navigate(-1)}>Cancel</Button>
-          {/* base-ui Button defaults to type="button"; the render prop wins mergeProps precedence, so set submit on the rendered element */}
-          <Button render={<button type="submit" />} disabled={publish.isPending}>Publish</Button>
-        </div>
+            {visibleSections.map((def) => (
+              <SectionEditor key={def.key} def={def} onRemove={() => removeSection(def)} />
+            ))}
+
+            <div className="border-t border-border pt-4">
+              <AddSectionMenu available={hiddenSections} onAdd={addSection} />
+            </div>
+          </div>
+        )}
+
+        <PublishDialog
+          open={publishOpen}
+          onOpenChange={setPublishOpen}
+          onConfirm={confirmPublish}
+          pending={busy}
+          versionFromSource={editorMode === "markdown"}
+        />
 
         <ResolvedPreview
           org={org}

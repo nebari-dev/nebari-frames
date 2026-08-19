@@ -1,4 +1,5 @@
 import { render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes } from "react-router";
 import { expect, it, vi } from "vitest";
 
@@ -120,7 +121,7 @@ it("renders header, slots, and version history", () => {
   expect(screen.getByText(/Version history/)).toBeInTheDocument();
 });
 
-it("renders version metadata, changelog, and excludes", () => {
+it("renders version metadata, changelog, and excludes", async () => {
   useQueryMock.mockImplementation((method: unknown) => {
     if (method === FrameService.method.getFrame) {
       return {
@@ -141,11 +142,17 @@ it("renders version metadata, changelog, and excludes", () => {
     </MemoryRouter>,
   );
 
-  expect(screen.getByText("pub-user")).toBeInTheDocument();
-  expect(screen.getByText("sha256:abc123")).toBeInTheDocument();
-  expect(screen.getByText("2.0 KB")).toBeInTheDocument();
-  expect(screen.getByText("initial release")).toBeInTheDocument();
+  // Excludes and the version hint live in the header, always visible.
   expect(screen.getByText("openteams/legacy")).toBeInTheDocument();
   // viewing v1.0.0 while latest is v2.0.0 -> shows the latest hint, not "Latest"
   expect(screen.getByText("latest: v2.0.0")).toBeInTheDocument();
+
+  // Registry bookkeeping is collapsed by default (Base UI unmounts a closed
+  // panel, so it is genuinely absent until opened).
+  expect(screen.queryByText("sha256:abc123")).not.toBeInTheDocument();
+  await userEvent.click(screen.getByRole("button", { name: /details/i }));
+  expect(await screen.findByText("pub-user")).toBeInTheDocument();
+  expect(screen.getByText("sha256:abc123")).toBeInTheDocument();
+  expect(screen.getByText("2.0 KB")).toBeInTheDocument();
+  expect(screen.getByText("initial release")).toBeInTheDocument();
 });

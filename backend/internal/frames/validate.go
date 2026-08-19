@@ -9,6 +9,20 @@ import (
 
 var nameRe = regexp.MustCompile(`^[a-z0-9][a-z0-9-]{0,63}$`)
 
+// VisibilityValues are the values Frame Spec v0.2 defines for `visibility`.
+// It is declared intent that travels with the document, not an access control:
+// frame_grants remains authoritative for who may read a frame.
+var VisibilityValues = []string{"private", "internal", "shared", "public"}
+
+func validVisibility(v string) bool {
+	for _, ok := range VisibilityValues {
+		if v == ok {
+			return true
+		}
+	}
+	return false
+}
+
 // FieldError is a single validation failure at a specific field path.
 type FieldError struct {
 	Path    string
@@ -42,6 +56,13 @@ func Validate(doc *Doc) error {
 	}
 	if strings.TrimSpace(doc.Version) == "" {
 		add("version", "must not be empty")
+	}
+	// Frame Spec v0.2 requires visibility, but documents published before the
+	// field existed do not carry one, so it is only checked when set. The
+	// authoring form always writes a value, making it required in practice
+	// without invalidating anything already published.
+	if v := doc.Visibility; v != "" && !validVisibility(v) {
+		add("visibility", "must be one of "+strings.Join(VisibilityValues, ", "))
 	}
 
 	seenTerm := map[string]bool{}

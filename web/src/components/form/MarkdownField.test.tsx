@@ -11,7 +11,7 @@ function Wrap({ children }: { children: ReactNode }) {
 }
 
 it("toggles between textarea and rendered preview", async () => {
-  render(<Wrap><MarkdownField name="slots.goals" label="Goals" /></Wrap>);
+  render(<Wrap><MarkdownField name="slots.goals" /></Wrap>);
   expect(screen.getByRole("textbox")).toBeInTheDocument();
   await userEvent.click(screen.getByRole("button", { name: /preview/i }));
   expect(screen.queryByRole("textbox")).not.toBeInTheDocument();

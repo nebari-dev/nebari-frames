@@ -51,6 +51,9 @@ const (
 	// FrameServiceDeleteFrameProcedure is the fully-qualified name of the FrameService's DeleteFrame
 	// RPC.
 	FrameServiceDeleteFrameProcedure = "/frames.v1.FrameService/DeleteFrame"
+	// FrameServiceConvertFrameProcedure is the fully-qualified name of the FrameService's ConvertFrame
+	// RPC.
+	FrameServiceConvertFrameProcedure = "/frames.v1.FrameService/ConvertFrame"
 	// FrameServiceListOrgMembersProcedure is the fully-qualified name of the FrameService's
 	// ListOrgMembers RPC.
 	FrameServiceListOrgMembersProcedure = "/frames.v1.FrameService/ListOrgMembers"
@@ -81,6 +84,9 @@ type FrameServiceClient interface {
 	ListFrameVersions(context.Context, *connect.Request[v1.ListFrameVersionsRequest]) (*connect.Response[v1.ListFrameVersionsResponse], error)
 	// Write - delete a frame. Blocks if the frame is a parent unless force=true.
 	DeleteFrame(context.Context, *connect.Request[v1.DeleteFrameRequest]) (*connect.Response[v1.DeleteFrameResponse], error)
+	// Pure conversion between the canonical slot YAML and the spec-conformant
+	// .frame.md form. Stateless and unauthenticated beyond org membership.
+	ConvertFrame(context.Context, *connect.Request[v1.ConvertFrameRequest]) (*connect.Response[v1.ConvertFrameResponse], error)
 	// Admin only - list the caller's org members.
 	ListOrgMembers(context.Context, *connect.Request[v1.ListOrgMembersRequest]) (*connect.Response[v1.ListOrgMembersResponse], error)
 	// Admin only - add a member to the caller's org by email (pending until login).
@@ -144,6 +150,12 @@ func NewFrameServiceClient(httpClient connect.HTTPClient, baseURL string, opts .
 			connect.WithSchema(frameServiceMethods.ByName("DeleteFrame")),
 			connect.WithClientOptions(opts...),
 		),
+		convertFrame: connect.NewClient[v1.ConvertFrameRequest, v1.ConvertFrameResponse](
+			httpClient,
+			baseURL+FrameServiceConvertFrameProcedure,
+			connect.WithSchema(frameServiceMethods.ByName("ConvertFrame")),
+			connect.WithClientOptions(opts...),
+		),
 		listOrgMembers: connect.NewClient[v1.ListOrgMembersRequest, v1.ListOrgMembersResponse](
 			httpClient,
 			baseURL+FrameServiceListOrgMembersProcedure,
@@ -180,6 +192,7 @@ type frameServiceClient struct {
 	getMe             *connect.Client[v1.GetMeRequest, v1.GetMeResponse]
 	listFrameVersions *connect.Client[v1.ListFrameVersionsRequest, v1.ListFrameVersionsResponse]
 	deleteFrame       *connect.Client[v1.DeleteFrameRequest, v1.DeleteFrameResponse]
+	convertFrame      *connect.Client[v1.ConvertFrameRequest, v1.ConvertFrameResponse]
 	listOrgMembers    *connect.Client[v1.ListOrgMembersRequest, v1.ListOrgMembersResponse]
 	addOrgMember      *connect.Client[v1.AddOrgMemberRequest, v1.AddOrgMemberResponse]
 	setMemberRole     *connect.Client[v1.SetMemberRoleRequest, v1.SetMemberRoleResponse]
@@ -221,6 +234,11 @@ func (c *frameServiceClient) DeleteFrame(ctx context.Context, req *connect.Reque
 	return c.deleteFrame.CallUnary(ctx, req)
 }
 
+// ConvertFrame calls frames.v1.FrameService.ConvertFrame.
+func (c *frameServiceClient) ConvertFrame(ctx context.Context, req *connect.Request[v1.ConvertFrameRequest]) (*connect.Response[v1.ConvertFrameResponse], error) {
+	return c.convertFrame.CallUnary(ctx, req)
+}
+
 // ListOrgMembers calls frames.v1.FrameService.ListOrgMembers.
 func (c *frameServiceClient) ListOrgMembers(ctx context.Context, req *connect.Request[v1.ListOrgMembersRequest]) (*connect.Response[v1.ListOrgMembersResponse], error) {
 	return c.listOrgMembers.CallUnary(ctx, req)
@@ -257,6 +275,9 @@ type FrameServiceHandler interface {
 	ListFrameVersions(context.Context, *connect.Request[v1.ListFrameVersionsRequest]) (*connect.Response[v1.ListFrameVersionsResponse], error)
 	// Write - delete a frame. Blocks if the frame is a parent unless force=true.
 	DeleteFrame(context.Context, *connect.Request[v1.DeleteFrameRequest]) (*connect.Response[v1.DeleteFrameResponse], error)
+	// Pure conversion between the canonical slot YAML and the spec-conformant
+	// .frame.md form. Stateless and unauthenticated beyond org membership.
+	ConvertFrame(context.Context, *connect.Request[v1.ConvertFrameRequest]) (*connect.Response[v1.ConvertFrameResponse], error)
 	// Admin only - list the caller's org members.
 	ListOrgMembers(context.Context, *connect.Request[v1.ListOrgMembersRequest]) (*connect.Response[v1.ListOrgMembersResponse], error)
 	// Admin only - add a member to the caller's org by email (pending until login).
@@ -316,6 +337,12 @@ func NewFrameServiceHandler(svc FrameServiceHandler, opts ...connect.HandlerOpti
 		connect.WithSchema(frameServiceMethods.ByName("DeleteFrame")),
 		connect.WithHandlerOptions(opts...),
 	)
+	frameServiceConvertFrameHandler := connect.NewUnaryHandler(
+		FrameServiceConvertFrameProcedure,
+		svc.ConvertFrame,
+		connect.WithSchema(frameServiceMethods.ByName("ConvertFrame")),
+		connect.WithHandlerOptions(opts...),
+	)
 	frameServiceListOrgMembersHandler := connect.NewUnaryHandler(
 		FrameServiceListOrgMembersProcedure,
 		svc.ListOrgMembers,
@@ -356,6 +383,8 @@ func NewFrameServiceHandler(svc FrameServiceHandler, opts ...connect.HandlerOpti
 			frameServiceListFrameVersionsHandler.ServeHTTP(w, r)
 		case FrameServiceDeleteFrameProcedure:
 			frameServiceDeleteFrameHandler.ServeHTTP(w, r)
+		case FrameServiceConvertFrameProcedure:
+			frameServiceConvertFrameHandler.ServeHTTP(w, r)
 		case FrameServiceListOrgMembersProcedure:
 			frameServiceListOrgMembersHandler.ServeHTTP(w, r)
 		case FrameServiceAddOrgMemberProcedure:
@@ -399,6 +428,10 @@ func (UnimplementedFrameServiceHandler) ListFrameVersions(context.Context, *conn
 
 func (UnimplementedFrameServiceHandler) DeleteFrame(context.Context, *connect.Request[v1.DeleteFrameRequest]) (*connect.Response[v1.DeleteFrameResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("frames.v1.FrameService.DeleteFrame is not implemented"))
+}
+
+func (UnimplementedFrameServiceHandler) ConvertFrame(context.Context, *connect.Request[v1.ConvertFrameRequest]) (*connect.Response[v1.ConvertFrameResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("frames.v1.FrameService.ConvertFrame is not implemented"))
 }
 
 func (UnimplementedFrameServiceHandler) ListOrgMembers(context.Context, *connect.Request[v1.ListOrgMembersRequest]) (*connect.Response[v1.ListOrgMembersResponse], error) {

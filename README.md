@@ -12,6 +12,20 @@ Enterprise AI adoption is gated less by model capability and more by the organiz
 
 See [Background §1.1 in the migration design doc](docs/design/2026-05-21-nebari-frames-migration.md#11-the-whitepaper-in-one-paragraph) for the broader framing from the OpenTeams *Intelligence Hub Whitepaper - v4*.
 
+### Frame Spec conformance
+
+Frames are stored in a slot-typed YAML schema with inheritance and RBAC, which is richer than
+[Frame Spec v0.2](https://github.com/openteams-ai/frame-spec) describes. The registry interoperates
+with the spec rather than replacing it: every Frame **imports and exports as a conformant
+`.frame.md` document** (`type: frame [0.2]`, YAML frontmatter, one `##` section per slot), and the
+web app's authoring page offers that document as a second editor alongside the typed form. Exports
+pass the spec project's own `tools/validate_frames.py`; `examples/*.frame.md` are checked-in
+examples of the output.
+
+The spec's optional `visibility`, `scope`, and `maintainer` fields travel with the document so a
+Frame survives a round trip through other tooling. **`visibility` is declared intent, not an access
+control** - who may read a Frame is decided by this registry's roles and grants.
+
 ## Run locally
 
 **Prerequisites:** Go 1.25.7+, Node 16+ (Docker also required for `make dev-auth`).

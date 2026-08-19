@@ -5,6 +5,7 @@ import type { FrameDoc } from "@/lib/frame-yaml";
 
 const doc: FrameDoc = {
   name: "x", description: "", version: "1.0.0",
+  visibility: "internal", scope: "", maintainer: "",
   slots: {
     terminology: [{ term: "customer", definition: "an org" }],
     rules: ["no hype"],

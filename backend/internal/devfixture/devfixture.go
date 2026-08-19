@@ -95,6 +95,9 @@ func buildFrames(orgSlug string) []fixtureFrame {
 						Name:        "base-ml-env",
 						Description: "Base machine-learning environment: shared conventions every ML frame inherits.",
 						Version:     "1.0.0",
+						Visibility:  "internal",
+						Scope:       "company",
+						Maintainer:  "platform engineering",
 						Slots: frames.Slots{
 							Terminology: []frames.Term{
 								{Term: "Frame", Definition: "A versioned, composable unit of environment and agent context that other frames can extend."},
@@ -119,6 +122,9 @@ func buildFrames(orgSlug string) []fixtureFrame {
 						Name:        "base-ml-env",
 						Description: "Base machine-learning environment: shared conventions every ML frame inherits.",
 						Version:     "2.0.0",
+						Visibility:  "internal",
+						Scope:       "company",
+						Maintainer:  "platform engineering",
 						Slots: frames.Slots{
 							Terminology: []frames.Term{
 								{Term: "Frame", Definition: "A versioned, composable unit of environment and agent context that other frames can extend."},
@@ -151,6 +157,9 @@ func buildFrames(orgSlug string) []fixtureFrame {
 						Name:        "pytorch-gpu",
 						Description: "PyTorch GPU environment layered on the base ML env, tuned for CUDA training.",
 						Version:     "1.0.0",
+						Visibility:  "internal",
+						Scope:       "department",
+						Maintainer:  "ml platform",
 						Extends: []frames.ExtendRef{
 							{Ref: orgSlug + "/base-ml-env", Version: "2.0.0"},
 						},
@@ -189,6 +198,9 @@ func buildFrames(orgSlug string) []fixtureFrame {
 						Name:        "team-notebook",
 						Description: "Team notebook profile: PyTorch GPU env plus the data-science team's shared conventions.",
 						Version:     "1.0.0",
+						Visibility:  "private",
+						Scope:       "project",
+						Maintainer:  "data science",
 						Extends: []frames.ExtendRef{
 							{Ref: orgSlug + "/pytorch-gpu", Version: "1.0.0"},
 						},
@@ -226,6 +238,9 @@ func buildFrames(orgSlug string) []fixtureFrame {
 						Name:        "standalone-frame",
 						Description: "Standalone data-cleaning frame with no parents, for exercising the non-inheriting case.",
 						Version:     "1.0.0",
+						Visibility:  "shared",
+						Scope:       "project",
+						Maintainer:  "data science",
 						Slots: frames.Slots{
 							Terminology: []frames.Term{
 								{Term: "Tidy data", Definition: "A table where each variable is a column, each observation a row, and each cell a single value."},

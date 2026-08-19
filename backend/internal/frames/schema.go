@@ -36,10 +36,19 @@ type Slots struct {
 }
 
 // Doc is the parsed representation of a Frame YAML document.
+//
+// Visibility, Scope, and Maintainer carry the Frame Spec v0.2 metadata fields
+// through the canonical form so the .frame.md codec round-trips them. They are
+// optional: documents published before these fields existed decode with the
+// zero value and stay valid. Visibility is declared intent only - frame_grants
+// remains the sole access-control authority (see rbac).
 type Doc struct {
 	Name        string      `yaml:"name"`
 	Description string      `yaml:"description"`
 	Version     string      `yaml:"version"`
+	Visibility  string      `yaml:"visibility,omitempty"`
+	Scope       string      `yaml:"scope,omitempty"`
+	Maintainer  string      `yaml:"maintainer,omitempty"`
 	Extends     []ExtendRef `yaml:"extends,omitempty"`
 	Excludes    []string    `yaml:"excludes,omitempty"`
 	Slots       Slots       `yaml:"slots"`

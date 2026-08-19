@@ -73,6 +73,11 @@ func (s *StubService) DeleteFrame(_ context.Context, r *connect.Request[framesv1
 	return nil, unimpl()
 }
 
+// ConvertFrame is web-only; the CLI keeps publishing frame.yaml directly.
+func (s *StubService) ConvertFrame(_ context.Context, r *connect.Request[framesv1.ConvertFrameRequest]) (*connect.Response[framesv1.ConvertFrameResponse], error) {
+	return nil, unimpl()
+}
+
 func (s *StubService) ListOrgMembers(_ context.Context, r *connect.Request[framesv1.ListOrgMembersRequest]) (*connect.Response[framesv1.ListOrgMembersResponse], error) {
 	return nil, unimpl()
 }

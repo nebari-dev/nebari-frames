@@ -12,7 +12,7 @@
 
 ## TL;DR
 
-A web application that lets non-technical users discover, **author**, edit, and connect Frames in their organization. Frames are surfaced through a polished browse UI; new Frames are created through a form with typed inputs per slot (terminology row editor, list editors for rules / skills / prompts, markdown textareas for prose slots, parent-Frame picker for `extends`); and once published, users can wire their AI client of choice to the Hub's MCP endpoint through guided per-provider connector pages.
+A web application that lets non-technical users discover, **author**, edit, and connect Frames in their organization. Frames are surfaced through a polished browse UI; new Frames are created through either of two editors over the same document - a form with typed inputs per slot (terminology row editor, list editors for rules / skills / prompts, markdown textareas for prose slots, parent-Frame picker for `extends`) or a raw [Frame Spec v0.2](https://github.com/openteams-ai/frame-spec) `.frame.md` source editor that doubles as the import surface; and once published, users can wire their AI client of choice to the Hub's MCP endpoint through guided per-provider connector pages.
 
 This is the primary user-facing surface for everyone who isn't a CLI user. The app is a Single-Page Application built with React + Vite + TypeScript + Tailwind, served as embedded static assets from the same Go binary as the backend. Auth is OIDC standard authorization code flow with PKCE. All RBAC enforcement is server-side; the web app is presentation only.
 
@@ -46,6 +46,7 @@ The migration doc rejected desktop as the MVP user surface (D7). Web apps ship f
 |---|------|
 | G1 | Let a non-technical user log in and see the Frames they're entitled to read |
 | G2 | Let a Publisher author a new Frame through a typed form (no raw YAML) and publish it |
+| G2a | Let a Publisher who prefers the spec format author, import, and export a Frame as a `.frame.md` document |
 | G3 | Let an author edit and publish new versions of Frames they own |
 | G4 | Provide step-by-step per-provider instructions for adding the Hub as an MCP connector (Claude.ai first) |
 | G5 | Allow org admins to manage org membership and have admin-override access to all org Frames |
@@ -114,82 +115,98 @@ One artifact, one deploy, one URL. No CORS. Trade-off: the web app cannot update
 
 ### 3.4 Frame Authoring (the headline new surface)
 
-The authoring form is the single most consequential new screen. It must let a non-technical Publisher fill in a Frame without ever seeing YAML, while still producing data the schema validates cleanly.
+The authoring page is a **document editor**: it keeps the shape of the page the reader will see,
+because the spec's thesis is that a Frame *is* a Markdown document. View and edit share one
+single-column, content-first layout; editing means editing that document in place.
 
-**Layout.** Single-page form, sections collapsible, sections rendered in the schema order from the migration doc:
+- **Title and description** are quiet inline inputs styled as the document's heading - a visible
+  border appears on hover/focus so they stay discoverable as fields.
+- **Spec metadata** (`visibility` select, `scope`, `maintainer`) is one compact row under the
+  description. `visibility` is declared intent that travels with the document - `frame_grants`
+  remains the sole access-control authority.
+- **Composition** (Inherits from / Excludes) sits between metadata and content, the way the
+  frontmatter it maps to sits above a document body.
+- **Sections are added on demand.** Only sections that carry content (or that the author added
+  this session) are on the page; an **"+ Add section" menu** lists the rest, each with a one-line
+  hint ("Rules - hard constraints the AI must follow"), so the schema documents itself at the
+  moment it is needed and a new frame is never a wall of empty inputs. Every visible section has
+  a hover-revealed "Remove section" control that clears it.
+- **Version and changelog are publish-time decisions**, not document content: the Publish button
+  opens a small dialog with the version (pre-filled - `1.0.0` for a first frame, patch-bumped by
+  `suggestNextVersion` on edit) and the changelog. A version conflict (AlreadyExists) keeps the
+  dialog open with the error on the version input; any other failure closes it so the inline
+  field errors are visible.
 
 ```
-┌─────────────────────────────────────────────────────────┐
-│  New Frame                                  [Cancel] [Publish] │
-├─────────────────────────────────────────────────────────┤
-│  Metadata                                                │
-│   Name        [brand-voice                          ]   │
-│   Description [OpenTeams brand voice                ]   │
-│   Version     [1.0.0                                ]   │
-│                                                          │
-│  Inherits from                                           │
-│   ┌────────────────────────────────────────────────┐    │
-│   │ openteams/company-frame  @ [1.2.0     ▼]   [X] │    │
-│   ├────────────────────────────────────────────────┤    │
-│   │ industry/healthcare-compliance @ [2024.4 ▼] [X] │    │
-│   └────────────────────────────────────────────────┘    │
-│   [+ Add parent Frame]                                   │
-│                                                          │
-│  Excludes (optional)                                     │
-│   [+ Add exclusion]                                      │
-│                                                          │
-│  ▼ Terminology                                           │
-│   ┌─────────────────────────────────────────────────┐   │
-│   │ Term        | Definition                  | [X] │   │
-│   │ customer    | An enterprise organization  |     │   │
-│   │ hub         | A deployed Nebari instance  |     │   │
-│   └─────────────────────────────────────────────────┘   │
-│   [+ Add term]                                           │
-│                                                          │
-│  ▼ Rules                                                 │
-│   • Never claim performance numbers without ... [X]      │
-│   • Avoid the word "revolutionary" in customer-... [X]   │
-│   [+ Add rule]                                           │
-│                                                          │
-│  ▶ Skills              (collapsed: 0 entries)            │
-│  ▶ Prompts             (collapsed: 0 entries)            │
-│  ▶ Tool Specifications (collapsed: empty)                │
-│                                                          │
-│  ▼ Goals                                                 │
-│   [markdown textarea, 6 rows by default, autosize]   [Preview] │
-│                                                          │
-│  ▶ Style              (collapsed: empty)                 │
-│  ▶ Norms              (collapsed: empty)                 │
-│  ▶ Architecture       (collapsed: empty)                 │
-│  ▶ Business Process   (collapsed: empty)                 │
-│                                                          │
-│  Changelog (this version)                                │
-│   [textarea]                                             │
-│                                                          │
-│                                              [Cancel] [Publish] │
-└─────────────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────┐
+│  NEW FRAME                     [⋯] [Cancel] [Publish…]│
+│                                                        │
+│  frame-name                    (inline title input)    │
+│  What is this frame for?       (inline description)    │
+│  Visibility [internal▾]  Scope [    ]  Maintainer [  ] │
+│  ┌──────────────────────────────────────────────────┐  │
+│  │ INHERITS FROM  [+ Add parent Frame]              │  │
+│  │ EXCLUDES       [+ Add exclusion]                 │  │
+│  └──────────────────────────────────────────────────┘  │
+│  ──────────────────────────────────────────────────    │
+│  Rules                          (hover: Remove section)│
+│   Hard constraints the AI must follow.                 │
+│   • Never claim performance numbers…          [Remove] │
+│   [+ Add rule]                                         │
+│  ──────────────────────────────────────────────────    │
+│  [+ Add section ▾]   (Terminology, Skills, Goals, …)   │
+└──────────────────────────────────────────────────────┘
 ```
 
-**Per-slot component shapes:**
+**Markdown is a secondary mode**, not a header toggle: "Edit as Markdown" lives in the ⋯ overflow
+menu (alongside "Preview as resolved Frame"), swaps the page for the `.frame.md` source editor
+with a "Back to editor" action, and is never persisted as a preference. Publishing from Markdown
+takes the version from the document's own frontmatter, so the publish dialog offers only the
+changelog there. Import (`/frames/new?import=1`, reached from the catalog's "Import .frame.md"
+button) lands straight in the Markdown editor with paste/drop/Load file.
 
-- **Metadata** (name, description, version) - text inputs with inline validation. `name` enforces slug regex client-side and server-side. `version` accepts any string but suggests semver via a placeholder.
-- **Extends** - rows of `{Frame picker, Version select, Remove button}`. The Frame picker is an autocomplete that calls `frames.List` server-side to find Frames the current user can read (you can only inherit from Frames you have read access to). The Version select is populated from the chosen Frame's `frame_versions` list.
-- **Excludes** - same picker as Extends, single Frame per row.
-- **Terminology** - a 2-column repeatable row editor (`term` + `definition`). Inline validation: term is non-empty and unique within the slot.
-- **Rules / Skills / Prompts** - single-column repeatable row editor. Each row is a textarea (skills/rules can be long).
-- **Tool Specs** - one markdown textarea (we deferred typed shape for this slot).
-- **Prose slots** (Goals, Style, Norms, Architecture, Business Process) - markdown textarea each, with a small Preview button that renders the markdown inline.
+**Editor kinds per section** are unchanged: terminology is a two-column row editor, rules/skills/
+prompts are single-column row editors, prose sections are markdown textareas with a preview
+toggle. The section list (keys, labels, editor kind, hints) lives once in
+`web/src/lib/slot-sections.ts`, mirroring the Go `SlotTable`; the read-only renderer
+(`FrameSlots`) and the editor both consume it.
 
-**Validation feedback.** Two phases:
+**The view page mirrors the editor.** Frame Detail leads with identity (name, version badges,
+visibility/scope badges, description, maintainer, inherits chips linking to parents) and then the
+document itself, unboxed at readable width. Registry bookkeeping - owner, publisher, timestamps,
+size, digest, changelog - is demoted to a collapsed "Details" disclosure in the sidebar, which
+otherwise carries "Use this Frame" (MCP URI), version history, and the hierarchy link. Export is
+a small menu (Download `.frame.md` / Copy as Markdown) available to anyone who can read the frame.
 
-1. **Client-side** as the user types (name regex, term uniqueness, required-field hints). React-hook-form + zod handles this.
-2. **Server-side** on Publish. The server returns structured errors mapped to field paths (`slots.terminology[2].definition: must not be empty`); the client maps each error to the relevant input and shows it inline. Cycle detection in `extends` is a server-side error that surfaces as a banner naming the cycle.
+**Validation feedback.** Two phases, as before: zod client-side, then server `FieldViolations` on
+publish. Every field renders its own message through the shared `FieldError` component
+(`components/form/FieldError.tsx`), which also wires `aria-invalid` / `aria-describedby`. Server
+paths use bracket notation (`slots.rules[0]`) while inputs register dotted paths
+(`slots.rules.0`); react-hook-form's `get` resolves both to the same node, so they meet on the
+input that caused them. Cycle detection in `extends` remains a form-level banner.
 
-**Save behavior.** No autosave to a separate draft state in MVP. The form holds in-memory until Publish. On Publish, a new version row is inserted in `frame_versions` and the form returns to read-only state showing the new version. If the user navigates away with unsaved changes, a browser confirmation prompts them.
+**The `.frame.md` codec.** Conversion lives only in Go (`backend/internal/frames/framemd.go`) and is
+reached through one stateless `ConvertFrame` RPC, so the slot table is not mirrored into TypeScript
+a fifth time. `frames.SlotTable` is the single source of slot keys, markdown headings, and content
+shape, shared with `mcp/compose.go`. Round-tripping is covered by a golden corpus over `examples/`.
 
-**Edit flow.** The edit page (`/frames/:org/:name/edit`) is the same form, pre-filled from the latest version's content. The version field is pre-populated with a suggested bump (`1.2.0` -> `1.2.1`) which the author can edit. Publish creates a new version row. Old versions remain in `frame_versions`; nothing is overwritten.
+Parsing is strict about **structure** and lenient about **values**:
 
-**Preview.** The Frame Detail page IS the preview - after Publish, the user lands there to verify what they shipped. For richer pre-publish preview, a "Preview as resolved Frame" button (open a modal showing the inheritance-merged version) is a small additive feature; ship it if scope allows, defer otherwise.
+- *Structural* (blocks conversion): unknown `##` heading, unknown frontmatter key, malformed
+  terminology bullet, missing/unterminated frontmatter, bad `type`. Errors name the line and
+  suggest the closest slot (`unknown section "## Ways of Working" - did you mean "## Norms"?`).
+- *Value* (does not block): an unpinned or unqualified `inherits`, an empty description. These
+  convert successfully and land as fixable inline errors in the form.
+
+That split is what makes import usable: the spec's own `examples/complete/frame.md` uses
+`inherits: editorial-style-guide` - bare name, no org, no pinned version - which a single strict
+gate would reject outright. Because slot bodies are delimited by `##`, an author must use `###` or
+deeper for headings inside a section; the editor says so inline.
+
+**Save behavior.** No draft state: the document holds in memory until Publish, which inserts a new
+`frame_versions` row. Publishing from Markdown converts first, so the server only ever stores
+canonical slot YAML and there is exactly one publish path. Edit is the same page, prefilled, with
+the name rendered as a fixed title.
 
 ### 3.5 Catalog and Frame Detail
 
@@ -285,7 +302,7 @@ Rejected (reversed during design review). Browsing alone treats non-technical us
 
 ### 5.2 Raw YAML editor in browser
 
-Rejected for the primary authoring surface. Defeats the purpose of having a non-technical UI; users would still need to know YAML. Considered as a "View as YAML" power-user toggle; deferred to roadmap (OQ deferred).
+Rejected for the *primary* authoring surface: it defeats the purpose of a non-technical UI. Delivered instead as the secondary "Markdown" editor, in the spec's `.frame.md` form rather than raw slot YAML - the format authors outside this app already use, which makes the same surface serve import and export.
 
 ### 5.3 Server-rendered with HTMX
 
@@ -337,7 +354,7 @@ Rejected for MVP. Textarea + preview is plenty for slot content. WYSIWYG is a bo
 
 1. **Diff view** between Frame versions on the version-history panel.
 2. **Pre-publish preview** showing the inheritance-resolved Frame.
-3. **"View as YAML" power-user toggle** in the authoring form.
+3. ~~**"View as YAML" power-user toggle** in the authoring form.~~ - shipped as the `.frame.md` Markdown editor; see §3.4.
 4. **Active-stack curation** (user picks default Frames for MCP).
 5. **Sharing UI** for cross-user and cross-org grants.
 6. **Feedback / scoring UI** (whitepaper's -10..+10 with suggested edits).

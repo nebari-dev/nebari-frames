@@ -1,4 +1,5 @@
 import { render, screen, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Routes, Route } from "react-router";
 import { expect, it, vi } from "vitest";
 
@@ -28,7 +29,7 @@ slots:
     - Cite benchmarks.
 `;
 
-it("pre-fills the form and suggests a bumped version with name read-only", async () => {
+it("pre-fills the document with the name fixed and suggests a bumped version", async () => {
   useQueryMock.mockImplementation((method: unknown) =>
     method === FrameService.method.getFrame
       ? { data: { frame: { name: "brand-voice" }, version: { version: "1.2.0", digest: "d1", content: new TextEncoder().encode(sample) } }, isLoading: false }
@@ -39,8 +40,14 @@ it("pre-fills the form and suggests a bumped version with name read-only", async
       <Routes><Route path="/frames/:org/:name/edit" element={<FrameAuthoringPage mode="edit" />} /></Routes>
     </MemoryRouter>,
   );
-  await waitFor(() => expect(screen.getByDisplayValue("brand-voice")).toBeInTheDocument());
-  expect(screen.getByDisplayValue("brand-voice")).toHaveAttribute("readonly");
-  expect(screen.getByDisplayValue("1.2.1")).toBeInTheDocument(); // patch-bumped suggestion
+  // Identity is fixed after creation: the name renders as the title, not an input.
+  await waitFor(() => expect(screen.getByText("brand-voice")).toBeInTheDocument());
+  expect(screen.queryByLabelText(/frame name/i)).not.toBeInTheDocument();
+
+  // Sections carrying content are on the page without any adding.
   expect(screen.getByDisplayValue("Cite benchmarks.")).toBeInTheDocument();
+
+  // The bumped version suggestion lives in the publish dialog.
+  await userEvent.click(screen.getByRole("button", { name: /publish…/i }));
+  expect(await screen.findByDisplayValue("1.2.1")).toBeInTheDocument();
 });

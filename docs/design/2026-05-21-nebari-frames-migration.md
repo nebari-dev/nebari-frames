@@ -258,6 +258,10 @@ name: brand-voice                     # [a-z0-9][a-z0-9-]{0,63}, unique within o
 description: OpenTeams brand voice    # max 280 chars
 version: 1.2.0                        # semver-ish
 
+visibility: internal                  # private | internal | shared | public (Frame Spec v0.2)
+scope: company                        # optional, free-form (company, department, user:alice, ...)
+maintainer: marketing                 # optional, free-form (person, team, or email)
+
 extends:                              # ordered list; later wins on slot conflict
   - ref: openteams/company-frame      # org_slug/frame_name (MVP: fully-qualified required; see note below)
     version: 3.1.0
@@ -324,6 +328,40 @@ slots:
 
 Resolution at read time (not publish time) keeps storage simple. Pinned parent refs mean read-time results are stable until the child re-publishes.
 
+#### Frame Spec metadata and the `.frame.md` interchange format
+
+`visibility`, `scope`, and `maintainer` are the [Frame Spec v0.2](https://github.com/openteams-ai/frame-spec)
+metadata fields. All three are optional in the stored document, so versions published before they
+existed keep parsing and validating; the authoring form always writes a `visibility`, and the
+exporter defaults it to `internal`. **`visibility` is declared intent only** - it travels with the
+document so it survives a round trip through another tool. `frame_grants` remains the sole
+access-control authority, and nothing in the resolver or RBAC path reads this field.
+
+The canonical stored form is still the slot YAML above. On top of it sits a lossless codec
+(`backend/internal/frames/framemd.go`) for the spec's single-Markdown-file form, exposed through the
+stateless `ConvertFrame` RPC and used for the web app's Markdown editor, import, and export:
+
+| `.frame.md` | canonical YAML |
+| --- | --- |
+| `type: frame [0.2]` | (constant; verified on import, not stored) |
+| `visibility` / `scope` / `maintainer` | same keys |
+| `inherits: ["org/name@1.2.0", ...]` | `extends: [{ref, version}]` - split on the last `@` |
+| `x-nebari-excludes` | `excludes` (no spec equivalent; namespaced as the spec advises) |
+| `## Terminology` -> `- **term**: definition` | `slots.terminology` |
+| `## Rules` / `## Skills` / `## Prompts` | the matching list slots |
+| `## Goals`, `## Style`, ... | the matching prose slots |
+
+Inheritance order agrees with the spec by coincidence rather than adaptation: the spec says later
+`inherits` entries win, which is what `resolver.go` already did for `extends`.
+
+Section headings and ordering come from `frames.SlotTable`, shared with `mcp/compose.go`, so the two
+markdown renderings cannot drift. `examples/*.frame.md` are checked-in golden files asserting both
+`yaml -> md` output and `yaml -> md -> yaml` identity; they also pass the frame-spec project's own
+`tools/validate_frames.py`.
+
+Adding a slot therefore means editing `SlotTable`, `Slots`, `validate.go`, the two zod mirrors in
+`web/src/lib/`, and regenerating the goldens - the codec and the MCP composer follow automatically.
+
 ### 3.5 RBAC model
 
 **Three layers - data model, enforcement, UX - ship independently.**
@@ -387,7 +425,7 @@ Because the protocol is MCP, the same endpoint serves any MCP-capable client (Ch
 
 Detailed design is deferred to a follow-up spec.
 
-The MVP web app supports **browse + authoring + connect**. Non-technical users are the people whose Frame content (brand voice, compliance rules, sales playbooks) is most valuable; a browse-only web app would treat them as second-class consumers. Authoring is form-based with typed inputs per slot - no raw YAML in the browser. See [web app design](./2026-05-21-web-app-design.md) §3.4 for the detailed authoring shape. The CLI continues to serve technical authors in parallel.
+The MVP web app supports **browse + authoring + connect**. Non-technical users are the people whose Frame content (brand voice, compliance rules, sales playbooks) is most valuable; a browse-only web app would treat them as second-class consumers. Authoring offers two editors over the same document: a form with typed inputs per slot (no raw YAML in the browser), and a `.frame.md` source editor conforming to [Frame Spec v0.2](https://github.com/openteams-ai/frame-spec), which also serves import and export. See [web app design](./2026-05-21-web-app-design.md) §3.4 for the detailed authoring shape. The CLI continues to serve technical authors in parallel.
 
 Web app MVP screens:
 

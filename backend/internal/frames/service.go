@@ -82,20 +82,7 @@ func (s *Service) PublishFrame(ctx context.Context, req *connect.Request[framesv
 		return nil, connect.NewError(connect.CodeInvalidArgument, err)
 	}
 	if verr := Validate(doc); verr != nil {
-		cerr := connect.NewError(connect.CodeInvalidArgument, verr)
-		var ve *ValidationError
-		if errors.As(verr, &ve) {
-			fv := &framesv1.FieldViolations{}
-			for _, fe := range ve.Errors {
-				fv.Violations = append(fv.Violations, &framesv1.FieldViolation{
-					Field: fe.Path, Message: fe.Message,
-				})
-			}
-			if detail, derr := connect.NewErrorDetail(fv); derr == nil {
-				cerr.AddDetail(detail)
-			}
-		}
-		return nil, cerr
+		return nil, violationErr(verr)
 	}
 
 	org, err := s.repo.GetOrgByID(ctx, caller.OrgID)
@@ -492,4 +479,68 @@ func (f *readFetcher) FetchParent(ctx context.Context, ref, version string) (*Do
 		return nil, nil, nil, err
 	}
 	return doc, doc.Extends, doc.Excludes, nil
+}
+
+// violationErr maps a *ValidationError onto an InvalidArgument Connect error
+// carrying FieldViolations, so a client can attach each failure to the input
+// that caused it. Shared by PublishFrame (value errors, paths like
+// "slots.terminology[2].definition") and ConvertFrame (markdown structure
+// errors, path "markdown").
+func violationErr(err error) *connect.Error {
+	cerr := connect.NewError(connect.CodeInvalidArgument, err)
+	var ve *ValidationError
+	if errors.As(err, &ve) {
+		fv := &framesv1.FieldViolations{}
+		for _, fe := range ve.Errors {
+			fv.Violations = append(fv.Violations, &framesv1.FieldViolation{
+				Field: fe.Path, Message: fe.Message,
+			})
+		}
+		if detail, derr := connect.NewErrorDetail(fv); derr == nil {
+			cerr.AddDetail(detail)
+		}
+	}
+	return cerr
+}
+
+// ConvertFrame translates between the canonical slot YAML and the .frame.md
+// interchange format defined by Frame Spec v0.2. It is a pure function of its
+// input - it touches no storage - so it requires only that the caller is a
+// member of an org. It backs the web app's markdown editor, import, and export.
+//
+// Converting markdown in reports only structural failures. Value-level problems
+// (an unpinned inherits ref, an empty description) convert successfully and are
+// left for Validate on publish, so they surface on the relevant form field
+// instead of blocking an import outright.
+func (s *Service) ConvertFrame(ctx context.Context, req *connect.Request[framesv1.ConvertFrameRequest]) (*connect.Response[framesv1.ConvertFrameResponse], error) {
+	if _, err := s.resolveCaller(ctx); err != nil {
+		return nil, err
+	}
+	switch src := req.Msg.GetSource().(type) {
+	case *framesv1.ConvertFrameRequest_Yaml:
+		doc, err := Parse(src.Yaml)
+		if err != nil {
+			return nil, connect.NewError(connect.CodeInvalidArgument, err)
+		}
+		md, err := MarshalMarkdown(doc)
+		if err != nil {
+			return nil, connect.NewError(connect.CodeInternal, err)
+		}
+		return connect.NewResponse(&framesv1.ConvertFrameResponse{Yaml: src.Yaml, Markdown: md}), nil
+
+	case *framesv1.ConvertFrameRequest_Markdown:
+		doc, err := UnmarshalMarkdown(src.Markdown)
+		if err != nil {
+			return nil, violationErr(err)
+		}
+		y, err := Marshal(doc)
+		if err != nil {
+			return nil, connect.NewError(connect.CodeInternal, err)
+		}
+		return connect.NewResponse(&framesv1.ConvertFrameResponse{Yaml: y, Markdown: src.Markdown}), nil
+
+	default:
+		return nil, connect.NewError(connect.CodeInvalidArgument,
+			errors.New("exactly one of yaml or markdown must be set"))
+	}
 }

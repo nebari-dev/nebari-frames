@@ -20,6 +20,9 @@ service FrameService {
   rpc ListFrameVersions(ListFrameVersionsRequest) returns (ListFrameVersionsResponse);
   // Write - delete a frame. Blocks if the frame is a parent unless force=true.
   rpc DeleteFrame(DeleteFrameRequest) returns (DeleteFrameResponse);
+  // Pure conversion between the canonical slot YAML and the spec-conformant
+  // .frame.md form. Stateless and unauthenticated beyond org membership.
+  rpc ConvertFrame(ConvertFrameRequest) returns (ConvertFrameResponse);
   // Admin only - list the caller's org members.
   rpc ListOrgMembers(ListOrgMembersRequest) returns (ListOrgMembersResponse);
   // Admin only - add a member to the caller's org by email (pending until login).
@@ -92,8 +95,25 @@ message FieldViolation {
 }
 // FieldViolations is attached as a Connect error detail on PublishFrame when
 // schema validation fails, so clients can map failures to individual inputs.
+// ConvertFrame reuses it for markdown structure errors, with field "markdown"
+// and a message naming the offending line.
 message FieldViolations {
   repeated FieldViolation violations = 1;
+}
+
+// ConvertFrame translates between the two representations of the same frame:
+// the canonical slot YAML stored in frame_versions.content, and the single
+// Markdown file with YAML frontmatter defined by Frame Spec v0.2. It backs the
+// web app's Markdown editor, .frame.md import, and .frame.md export.
+message ConvertFrameRequest {
+  oneof source {
+    bytes yaml = 1;     // canonical YAML in -> .frame.md out
+    bytes markdown = 2; // .frame.md in -> canonical YAML out
+  }
+}
+message ConvertFrameResponse {
+  bytes yaml = 1;
+  bytes markdown = 2;
 }
 
 message DeleteFrameRequest {

@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"strings"
 	"testing"
 
 	"connectrpc.com/connect"
@@ -441,5 +442,137 @@ func TestResolveDoc_DeniedReadIsNotFound(t *testing.T) {
 	}
 	if connect.CodeOf(err) != connect.CodeNotFound {
 		t.Errorf("want CodeNotFound, got %v", connect.CodeOf(err))
+	}
+}
+
+func TestConvertFrame_YamlToMarkdown(t *testing.T) {
+	const doc = `name: brand-voice
+description: Voice guardrails.
+version: 1.0.0
+visibility: internal
+slots:
+  rules:
+    - Cite benchmarks.
+`
+	repo := store.NewMemory()
+	ctx := seedOrg(t, repo, "pub", "publisher")
+	svc := frames.NewService(repo)
+
+	resp, err := svc.ConvertFrame(ctx, connect.NewRequest(&framesv1.ConvertFrameRequest{
+		Source: &framesv1.ConvertFrameRequest_Yaml{Yaml: []byte(doc)},
+	}))
+	if err != nil {
+		t.Fatalf("convert: %v", err)
+	}
+	got := string(resp.Msg.Markdown)
+	for _, want := range []string{"type: frame [0.2]", "## Rules", "- Cite benchmarks."} {
+		if !strings.Contains(got, want) {
+			t.Errorf("markdown missing %q:\n%s", want, got)
+		}
+	}
+}
+
+func TestConvertFrame_MarkdownToYaml(t *testing.T) {
+	const md = `---
+type: frame [0.2]
+name: brand-voice
+description: Voice guardrails.
+visibility: internal
+version: 1.0.0
+inherits: openteams/company-core@1.2.0
+---
+
+## Rules
+
+- Cite benchmarks.
+`
+	repo := store.NewMemory()
+	ctx := seedOrg(t, repo, "pub", "publisher")
+	svc := frames.NewService(repo)
+
+	resp, err := svc.ConvertFrame(ctx, connect.NewRequest(&framesv1.ConvertFrameRequest{
+		Source: &framesv1.ConvertFrameRequest_Markdown{Markdown: []byte(md)},
+	}))
+	if err != nil {
+		t.Fatalf("convert: %v", err)
+	}
+	parsed, err := frames.Parse(resp.Msg.Yaml)
+	if err != nil {
+		t.Fatalf("converted yaml does not parse: %v", err)
+	}
+	if parsed.Visibility != "internal" || parsed.Name != "brand-voice" {
+		t.Errorf("metadata lost: %+v", parsed)
+	}
+	if len(parsed.Extends) != 1 || parsed.Extends[0].Version != "1.2.0" {
+		t.Errorf("inherits not converted: %+v", parsed.Extends)
+	}
+	if err := frames.Validate(parsed); err != nil {
+		t.Errorf("converted doc should validate: %v", err)
+	}
+}
+
+// A structural markdown error must arrive as FieldViolations on "markdown" so
+// the editor can show it against the source, the same way publish errors map to
+// their inputs.
+func TestConvertFrame_StructuralErrorDetail(t *testing.T) {
+	const md = `---
+type: frame [0.2]
+name: c
+description: d
+visibility: internal
+---
+
+## Ways of Working
+
+- something
+`
+	repo := store.NewMemory()
+	ctx := seedOrg(t, repo, "pub", "publisher")
+	svc := frames.NewService(repo)
+
+	_, err := svc.ConvertFrame(ctx, connect.NewRequest(&framesv1.ConvertFrameRequest{
+		Source: &framesv1.ConvertFrameRequest_Markdown{Markdown: []byte(md)},
+	}))
+	if err == nil {
+		t.Fatal("want error, got nil")
+	}
+	if connect.CodeOf(err) != connect.CodeInvalidArgument {
+		t.Fatalf("want CodeInvalidArgument, got %v", connect.CodeOf(err))
+	}
+	var connErr *connect.Error
+	if !errors.As(err, &connErr) {
+		t.Fatalf("want *connect.Error, got %T", err)
+	}
+	found := false
+	for _, d := range connErr.Details() {
+		msg, verr := d.Value()
+		if verr != nil {
+			continue
+		}
+		fv, ok := msg.(*framesv1.FieldViolations)
+		if !ok {
+			continue
+		}
+		for _, v := range fv.Violations {
+			if v.Field == "markdown" && strings.Contains(v.Message, "did you mean \"## Norms\"?") {
+				found = true
+			}
+		}
+	}
+	if !found {
+		t.Errorf("expected a markdown FieldViolation naming the suggestion, got %v", connErr.Details())
+	}
+}
+
+// Conversion is stateless but still org-scoped: a caller with no membership is
+// rejected before any parsing happens.
+func TestConvertFrame_RequiresMembership(t *testing.T) {
+	repo := store.NewMemory()
+	svc := frames.NewService(repo)
+	_, err := svc.ConvertFrame(context.Background(), connect.NewRequest(&framesv1.ConvertFrameRequest{
+		Source: &framesv1.ConvertFrameRequest_Yaml{Yaml: []byte("name: c\ndescription: d\nversion: 1.0.0\nslots: {}\n")},
+	}))
+	if err == nil {
+		t.Fatal("want error for a caller with no org membership")
 	}
 }
