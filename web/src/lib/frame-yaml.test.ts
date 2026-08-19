@@ -65,12 +65,18 @@ slots:
       name: "minimal",
       description: "d",
       version: "1.0.0",
+      visibility: "",
+      scope: "",
+      maintainer: "",
       slots: { rules: [], goals: "", terminology: [] },
     };
     const out = serializeFrameDoc(doc);
     expect(out).not.toMatch(/rules/);
     expect(out).not.toMatch(/goals/);
     expect(out).not.toMatch(/terminology/);
+    expect(out).not.toMatch(/visibility/);
+    expect(out).not.toMatch(/scope/);
+    expect(out).not.toMatch(/maintainer/);
     expect(out).not.toMatch(/extends/);
     expect(out).not.toMatch(/excludes/);
     // re-parse must succeed (no stray keys for KnownFields(true))

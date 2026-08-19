@@ -5,6 +5,7 @@ describe("form-model", () => {
   it("docToForm then formToDoc round-trips slot content", () => {
     const doc = {
       name: "n", description: "d", version: "1.0.0",
+      visibility: "internal", scope: "company", maintainer: "marketing",
       extends: [{ ref: "o/p", version: "1.0.0" }],
       slots: { rules: ["a"], goals: "g" },
     };
@@ -16,6 +17,7 @@ describe("form-model", () => {
   it("formToDoc drops empty extends and blank slots", () => {
     const doc = formToDoc({
       name: "n", description: "d", version: "1.0.0", changelog: "",
+      visibility: "internal", scope: "", maintainer: "",
       extends: [{ ref: "", version: "" }],
       slots: { rules: [], goals: "" },
     });

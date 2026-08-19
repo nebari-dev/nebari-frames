@@ -1,6 +1,9 @@
 name: q4-sales-playbook
 description: Q4 enterprise sales motion, talk tracks, and qualification rules.
 version: 1.0.0
+visibility: internal
+scope: department
+maintainer: revenue
 extends:
   - ref: openteams/brand-voice
     version: 1.0.0

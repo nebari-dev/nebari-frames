@@ -1,6 +1,9 @@
 name: healthcare-compliance
 description: Compliance guardrails for healthcare-sector messaging and deliverables.
 version: 1.0.0
+visibility: internal
+scope: department
+maintainer: legal
 slots:
   rules:
     - Never state or imply HIPAA compliance without legal sign-off.

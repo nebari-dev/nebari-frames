@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Link, useSearchParams } from "react-router";
 import { useQuery } from "@connectrpc/connect-query";
 import { FrameService } from "@gen/frames/v1/frame_service_pb";
-import { GitFork, LayoutGrid, Plus, Search, Table2 } from "lucide-react";
+import { GitFork, LayoutGrid, Plus, Search, Table2, Upload } from "lucide-react";
 import { filterFrames } from "@/lib/filter";
 import { FramesTable } from "@/components/frame/FramesTable";
 import { FrameHierarchyView } from "@/components/frame/FrameHierarchyView";
@@ -73,10 +73,18 @@ export function CatalogPage() {
         <div className="ml-auto flex items-center gap-3">
           <ViewToggle view={view} onChange={setView} />
           {data?.canCreate && (
-            <Button render={<Link to="/frames/new" />}>
-              <Plus />
-              Create new Frame
-            </Button>
+            <>
+              {/* Importing an existing .frame.md is a first-class way to add a
+                  frame, not a hidden alternative to starting from scratch. */}
+              <Button variant="outline" render={<Link to="/frames/new?import=1" />}>
+                <Upload />
+                Import .frame.md
+              </Button>
+              <Button render={<Link to="/frames/new" />}>
+                <Plus />
+                Create new Frame
+              </Button>
+            </>
           )}
         </div>
       </div>

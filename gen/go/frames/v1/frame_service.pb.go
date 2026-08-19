@@ -717,6 +717,8 @@ func (x *FieldViolation) GetMessage() string {
 
 // FieldViolations is attached as a Connect error detail on PublishFrame when
 // schema validation fails, so clients can map failures to individual inputs.
+// ConvertFrame reuses it for markdown structure errors, with field "markdown"
+// and a message naming the offending line.
 type FieldViolations struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Violations    []*FieldViolation      `protobuf:"bytes,1,rep,name=violations,proto3" json:"violations,omitempty"`
@@ -761,6 +763,144 @@ func (x *FieldViolations) GetViolations() []*FieldViolation {
 	return nil
 }
 
+// ConvertFrame translates between the two representations of the same frame:
+// the canonical slot YAML stored in frame_versions.content, and the single
+// Markdown file with YAML frontmatter defined by Frame Spec v0.2. It backs the
+// web app's Markdown editor, .frame.md import, and .frame.md export.
+type ConvertFrameRequest struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Types that are valid to be assigned to Source:
+	//
+	//	*ConvertFrameRequest_Yaml
+	//	*ConvertFrameRequest_Markdown
+	Source        isConvertFrameRequest_Source `protobuf_oneof:"source"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ConvertFrameRequest) Reset() {
+	*x = ConvertFrameRequest{}
+	mi := &file_frames_v1_frame_service_proto_msgTypes[14]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ConvertFrameRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ConvertFrameRequest) ProtoMessage() {}
+
+func (x *ConvertFrameRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_frames_v1_frame_service_proto_msgTypes[14]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ConvertFrameRequest.ProtoReflect.Descriptor instead.
+func (*ConvertFrameRequest) Descriptor() ([]byte, []int) {
+	return file_frames_v1_frame_service_proto_rawDescGZIP(), []int{14}
+}
+
+func (x *ConvertFrameRequest) GetSource() isConvertFrameRequest_Source {
+	if x != nil {
+		return x.Source
+	}
+	return nil
+}
+
+func (x *ConvertFrameRequest) GetYaml() []byte {
+	if x != nil {
+		if x, ok := x.Source.(*ConvertFrameRequest_Yaml); ok {
+			return x.Yaml
+		}
+	}
+	return nil
+}
+
+func (x *ConvertFrameRequest) GetMarkdown() []byte {
+	if x != nil {
+		if x, ok := x.Source.(*ConvertFrameRequest_Markdown); ok {
+			return x.Markdown
+		}
+	}
+	return nil
+}
+
+type isConvertFrameRequest_Source interface {
+	isConvertFrameRequest_Source()
+}
+
+type ConvertFrameRequest_Yaml struct {
+	Yaml []byte `protobuf:"bytes,1,opt,name=yaml,proto3,oneof"` // canonical YAML in -> .frame.md out
+}
+
+type ConvertFrameRequest_Markdown struct {
+	Markdown []byte `protobuf:"bytes,2,opt,name=markdown,proto3,oneof"` // .frame.md in -> canonical YAML out
+}
+
+func (*ConvertFrameRequest_Yaml) isConvertFrameRequest_Source() {}
+
+func (*ConvertFrameRequest_Markdown) isConvertFrameRequest_Source() {}
+
+type ConvertFrameResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Yaml          []byte                 `protobuf:"bytes,1,opt,name=yaml,proto3" json:"yaml,omitempty"`
+	Markdown      []byte                 `protobuf:"bytes,2,opt,name=markdown,proto3" json:"markdown,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ConvertFrameResponse) Reset() {
+	*x = ConvertFrameResponse{}
+	mi := &file_frames_v1_frame_service_proto_msgTypes[15]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ConvertFrameResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ConvertFrameResponse) ProtoMessage() {}
+
+func (x *ConvertFrameResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_frames_v1_frame_service_proto_msgTypes[15]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ConvertFrameResponse.ProtoReflect.Descriptor instead.
+func (*ConvertFrameResponse) Descriptor() ([]byte, []int) {
+	return file_frames_v1_frame_service_proto_rawDescGZIP(), []int{15}
+}
+
+func (x *ConvertFrameResponse) GetYaml() []byte {
+	if x != nil {
+		return x.Yaml
+	}
+	return nil
+}
+
+func (x *ConvertFrameResponse) GetMarkdown() []byte {
+	if x != nil {
+		return x.Markdown
+	}
+	return nil
+}
+
 type DeleteFrameRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	OrgSlug       string                 `protobuf:"bytes,1,opt,name=org_slug,json=orgSlug,proto3" json:"org_slug,omitempty"`
@@ -772,7 +912,7 @@ type DeleteFrameRequest struct {
 
 func (x *DeleteFrameRequest) Reset() {
 	*x = DeleteFrameRequest{}
-	mi := &file_frames_v1_frame_service_proto_msgTypes[14]
+	mi := &file_frames_v1_frame_service_proto_msgTypes[16]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -784,7 +924,7 @@ func (x *DeleteFrameRequest) String() string {
 func (*DeleteFrameRequest) ProtoMessage() {}
 
 func (x *DeleteFrameRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_frames_v1_frame_service_proto_msgTypes[14]
+	mi := &file_frames_v1_frame_service_proto_msgTypes[16]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -797,7 +937,7 @@ func (x *DeleteFrameRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeleteFrameRequest.ProtoReflect.Descriptor instead.
 func (*DeleteFrameRequest) Descriptor() ([]byte, []int) {
-	return file_frames_v1_frame_service_proto_rawDescGZIP(), []int{14}
+	return file_frames_v1_frame_service_proto_rawDescGZIP(), []int{16}
 }
 
 func (x *DeleteFrameRequest) GetOrgSlug() string {
@@ -829,7 +969,7 @@ type DeleteFrameResponse struct {
 
 func (x *DeleteFrameResponse) Reset() {
 	*x = DeleteFrameResponse{}
-	mi := &file_frames_v1_frame_service_proto_msgTypes[15]
+	mi := &file_frames_v1_frame_service_proto_msgTypes[17]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -841,7 +981,7 @@ func (x *DeleteFrameResponse) String() string {
 func (*DeleteFrameResponse) ProtoMessage() {}
 
 func (x *DeleteFrameResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_frames_v1_frame_service_proto_msgTypes[15]
+	mi := &file_frames_v1_frame_service_proto_msgTypes[17]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -854,7 +994,7 @@ func (x *DeleteFrameResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeleteFrameResponse.ProtoReflect.Descriptor instead.
 func (*DeleteFrameResponse) Descriptor() ([]byte, []int) {
-	return file_frames_v1_frame_service_proto_rawDescGZIP(), []int{15}
+	return file_frames_v1_frame_service_proto_rawDescGZIP(), []int{17}
 }
 
 // DeleteBlocked is attached as a Connect error detail on DeleteFrame when the
@@ -868,7 +1008,7 @@ type DeleteBlocked struct {
 
 func (x *DeleteBlocked) Reset() {
 	*x = DeleteBlocked{}
-	mi := &file_frames_v1_frame_service_proto_msgTypes[16]
+	mi := &file_frames_v1_frame_service_proto_msgTypes[18]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -880,7 +1020,7 @@ func (x *DeleteBlocked) String() string {
 func (*DeleteBlocked) ProtoMessage() {}
 
 func (x *DeleteBlocked) ProtoReflect() protoreflect.Message {
-	mi := &file_frames_v1_frame_service_proto_msgTypes[16]
+	mi := &file_frames_v1_frame_service_proto_msgTypes[18]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -893,7 +1033,7 @@ func (x *DeleteBlocked) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeleteBlocked.ProtoReflect.Descriptor instead.
 func (*DeleteBlocked) Descriptor() ([]byte, []int) {
-	return file_frames_v1_frame_service_proto_rawDescGZIP(), []int{16}
+	return file_frames_v1_frame_service_proto_rawDescGZIP(), []int{18}
 }
 
 func (x *DeleteBlocked) GetBlockingFrames() []string {
@@ -911,7 +1051,7 @@ type ListOrgMembersRequest struct {
 
 func (x *ListOrgMembersRequest) Reset() {
 	*x = ListOrgMembersRequest{}
-	mi := &file_frames_v1_frame_service_proto_msgTypes[17]
+	mi := &file_frames_v1_frame_service_proto_msgTypes[19]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -923,7 +1063,7 @@ func (x *ListOrgMembersRequest) String() string {
 func (*ListOrgMembersRequest) ProtoMessage() {}
 
 func (x *ListOrgMembersRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_frames_v1_frame_service_proto_msgTypes[17]
+	mi := &file_frames_v1_frame_service_proto_msgTypes[19]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -936,7 +1076,7 @@ func (x *ListOrgMembersRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListOrgMembersRequest.ProtoReflect.Descriptor instead.
 func (*ListOrgMembersRequest) Descriptor() ([]byte, []int) {
-	return file_frames_v1_frame_service_proto_rawDescGZIP(), []int{17}
+	return file_frames_v1_frame_service_proto_rawDescGZIP(), []int{19}
 }
 
 type ListOrgMembersResponse struct {
@@ -948,7 +1088,7 @@ type ListOrgMembersResponse struct {
 
 func (x *ListOrgMembersResponse) Reset() {
 	*x = ListOrgMembersResponse{}
-	mi := &file_frames_v1_frame_service_proto_msgTypes[18]
+	mi := &file_frames_v1_frame_service_proto_msgTypes[20]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -960,7 +1100,7 @@ func (x *ListOrgMembersResponse) String() string {
 func (*ListOrgMembersResponse) ProtoMessage() {}
 
 func (x *ListOrgMembersResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_frames_v1_frame_service_proto_msgTypes[18]
+	mi := &file_frames_v1_frame_service_proto_msgTypes[20]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -973,7 +1113,7 @@ func (x *ListOrgMembersResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListOrgMembersResponse.ProtoReflect.Descriptor instead.
 func (*ListOrgMembersResponse) Descriptor() ([]byte, []int) {
-	return file_frames_v1_frame_service_proto_rawDescGZIP(), []int{18}
+	return file_frames_v1_frame_service_proto_rawDescGZIP(), []int{20}
 }
 
 func (x *ListOrgMembersResponse) GetMembers() []*Membership {
@@ -993,7 +1133,7 @@ type AddOrgMemberRequest struct {
 
 func (x *AddOrgMemberRequest) Reset() {
 	*x = AddOrgMemberRequest{}
-	mi := &file_frames_v1_frame_service_proto_msgTypes[19]
+	mi := &file_frames_v1_frame_service_proto_msgTypes[21]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1005,7 +1145,7 @@ func (x *AddOrgMemberRequest) String() string {
 func (*AddOrgMemberRequest) ProtoMessage() {}
 
 func (x *AddOrgMemberRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_frames_v1_frame_service_proto_msgTypes[19]
+	mi := &file_frames_v1_frame_service_proto_msgTypes[21]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1018,7 +1158,7 @@ func (x *AddOrgMemberRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AddOrgMemberRequest.ProtoReflect.Descriptor instead.
 func (*AddOrgMemberRequest) Descriptor() ([]byte, []int) {
-	return file_frames_v1_frame_service_proto_rawDescGZIP(), []int{19}
+	return file_frames_v1_frame_service_proto_rawDescGZIP(), []int{21}
 }
 
 func (x *AddOrgMemberRequest) GetEmail() string {
@@ -1044,7 +1184,7 @@ type AddOrgMemberResponse struct {
 
 func (x *AddOrgMemberResponse) Reset() {
 	*x = AddOrgMemberResponse{}
-	mi := &file_frames_v1_frame_service_proto_msgTypes[20]
+	mi := &file_frames_v1_frame_service_proto_msgTypes[22]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1056,7 +1196,7 @@ func (x *AddOrgMemberResponse) String() string {
 func (*AddOrgMemberResponse) ProtoMessage() {}
 
 func (x *AddOrgMemberResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_frames_v1_frame_service_proto_msgTypes[20]
+	mi := &file_frames_v1_frame_service_proto_msgTypes[22]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1069,7 +1209,7 @@ func (x *AddOrgMemberResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AddOrgMemberResponse.ProtoReflect.Descriptor instead.
 func (*AddOrgMemberResponse) Descriptor() ([]byte, []int) {
-	return file_frames_v1_frame_service_proto_rawDescGZIP(), []int{20}
+	return file_frames_v1_frame_service_proto_rawDescGZIP(), []int{22}
 }
 
 func (x *AddOrgMemberResponse) GetMember() *Membership {
@@ -1091,7 +1231,7 @@ type SetMemberRoleRequest struct {
 
 func (x *SetMemberRoleRequest) Reset() {
 	*x = SetMemberRoleRequest{}
-	mi := &file_frames_v1_frame_service_proto_msgTypes[21]
+	mi := &file_frames_v1_frame_service_proto_msgTypes[23]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1103,7 +1243,7 @@ func (x *SetMemberRoleRequest) String() string {
 func (*SetMemberRoleRequest) ProtoMessage() {}
 
 func (x *SetMemberRoleRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_frames_v1_frame_service_proto_msgTypes[21]
+	mi := &file_frames_v1_frame_service_proto_msgTypes[23]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1116,7 +1256,7 @@ func (x *SetMemberRoleRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SetMemberRoleRequest.ProtoReflect.Descriptor instead.
 func (*SetMemberRoleRequest) Descriptor() ([]byte, []int) {
-	return file_frames_v1_frame_service_proto_rawDescGZIP(), []int{21}
+	return file_frames_v1_frame_service_proto_rawDescGZIP(), []int{23}
 }
 
 func (x *SetMemberRoleRequest) GetUserSub() string {
@@ -1149,7 +1289,7 @@ type SetMemberRoleResponse struct {
 
 func (x *SetMemberRoleResponse) Reset() {
 	*x = SetMemberRoleResponse{}
-	mi := &file_frames_v1_frame_service_proto_msgTypes[22]
+	mi := &file_frames_v1_frame_service_proto_msgTypes[24]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1161,7 +1301,7 @@ func (x *SetMemberRoleResponse) String() string {
 func (*SetMemberRoleResponse) ProtoMessage() {}
 
 func (x *SetMemberRoleResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_frames_v1_frame_service_proto_msgTypes[22]
+	mi := &file_frames_v1_frame_service_proto_msgTypes[24]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1174,7 +1314,7 @@ func (x *SetMemberRoleResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SetMemberRoleResponse.ProtoReflect.Descriptor instead.
 func (*SetMemberRoleResponse) Descriptor() ([]byte, []int) {
-	return file_frames_v1_frame_service_proto_rawDescGZIP(), []int{22}
+	return file_frames_v1_frame_service_proto_rawDescGZIP(), []int{24}
 }
 
 func (x *SetMemberRoleResponse) GetMember() *Membership {
@@ -1194,7 +1334,7 @@ type RemoveOrgMemberRequest struct {
 
 func (x *RemoveOrgMemberRequest) Reset() {
 	*x = RemoveOrgMemberRequest{}
-	mi := &file_frames_v1_frame_service_proto_msgTypes[23]
+	mi := &file_frames_v1_frame_service_proto_msgTypes[25]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1206,7 +1346,7 @@ func (x *RemoveOrgMemberRequest) String() string {
 func (*RemoveOrgMemberRequest) ProtoMessage() {}
 
 func (x *RemoveOrgMemberRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_frames_v1_frame_service_proto_msgTypes[23]
+	mi := &file_frames_v1_frame_service_proto_msgTypes[25]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1219,7 +1359,7 @@ func (x *RemoveOrgMemberRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RemoveOrgMemberRequest.ProtoReflect.Descriptor instead.
 func (*RemoveOrgMemberRequest) Descriptor() ([]byte, []int) {
-	return file_frames_v1_frame_service_proto_rawDescGZIP(), []int{23}
+	return file_frames_v1_frame_service_proto_rawDescGZIP(), []int{25}
 }
 
 func (x *RemoveOrgMemberRequest) GetUserSub() string {
@@ -1244,7 +1384,7 @@ type RemoveOrgMemberResponse struct {
 
 func (x *RemoveOrgMemberResponse) Reset() {
 	*x = RemoveOrgMemberResponse{}
-	mi := &file_frames_v1_frame_service_proto_msgTypes[24]
+	mi := &file_frames_v1_frame_service_proto_msgTypes[26]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1256,7 +1396,7 @@ func (x *RemoveOrgMemberResponse) String() string {
 func (*RemoveOrgMemberResponse) ProtoMessage() {}
 
 func (x *RemoveOrgMemberResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_frames_v1_frame_service_proto_msgTypes[24]
+	mi := &file_frames_v1_frame_service_proto_msgTypes[26]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1269,7 +1409,7 @@ func (x *RemoveOrgMemberResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RemoveOrgMemberResponse.ProtoReflect.Descriptor instead.
 func (*RemoveOrgMemberResponse) Descriptor() ([]byte, []int) {
-	return file_frames_v1_frame_service_proto_rawDescGZIP(), []int{24}
+	return file_frames_v1_frame_service_proto_rawDescGZIP(), []int{26}
 }
 
 var File_frames_v1_frame_service_proto protoreflect.FileDescriptor
@@ -1323,7 +1463,14 @@ const file_frames_v1_frame_service_proto_rawDesc = "" +
 	"\x0fFieldViolations\x129\n" +
 	"\n" +
 	"violations\x18\x01 \x03(\v2\x19.frames.v1.FieldViolationR\n" +
-	"violations\"Y\n" +
+	"violations\"S\n" +
+	"\x13ConvertFrameRequest\x12\x14\n" +
+	"\x04yaml\x18\x01 \x01(\fH\x00R\x04yaml\x12\x1c\n" +
+	"\bmarkdown\x18\x02 \x01(\fH\x00R\bmarkdownB\b\n" +
+	"\x06source\"F\n" +
+	"\x14ConvertFrameResponse\x12\x12\n" +
+	"\x04yaml\x18\x01 \x01(\fR\x04yaml\x12\x1a\n" +
+	"\bmarkdown\x18\x02 \x01(\fR\bmarkdown\"Y\n" +
 	"\x12DeleteFrameRequest\x12\x19\n" +
 	"\borg_slug\x18\x01 \x01(\tR\aorgSlug\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12\x14\n" +
@@ -1348,7 +1495,7 @@ const file_frames_v1_frame_service_proto_rawDesc = "" +
 	"\x16RemoveOrgMemberRequest\x12\x19\n" +
 	"\buser_sub\x18\x01 \x01(\tR\auserSub\x12\x14\n" +
 	"\x05email\x18\x02 \x01(\tR\x05email\"\x19\n" +
-	"\x17RemoveOrgMemberResponse2\x80\a\n" +
+	"\x17RemoveOrgMemberResponse2\xd1\a\n" +
 	"\fFrameService\x12O\n" +
 	"\fPublishFrame\x12\x1e.frames.v1.PublishFrameRequest\x1a\x1f.frames.v1.PublishFrameResponse\x12I\n" +
 	"\n" +
@@ -1357,7 +1504,8 @@ const file_frames_v1_frame_service_proto_rawDesc = "" +
 	"\fResolveFrame\x12\x1e.frames.v1.ResolveFrameRequest\x1a\x1f.frames.v1.ResolveFrameResponse\x12:\n" +
 	"\x05GetMe\x12\x17.frames.v1.GetMeRequest\x1a\x18.frames.v1.GetMeResponse\x12^\n" +
 	"\x11ListFrameVersions\x12#.frames.v1.ListFrameVersionsRequest\x1a$.frames.v1.ListFrameVersionsResponse\x12L\n" +
-	"\vDeleteFrame\x12\x1d.frames.v1.DeleteFrameRequest\x1a\x1e.frames.v1.DeleteFrameResponse\x12U\n" +
+	"\vDeleteFrame\x12\x1d.frames.v1.DeleteFrameRequest\x1a\x1e.frames.v1.DeleteFrameResponse\x12O\n" +
+	"\fConvertFrame\x12\x1e.frames.v1.ConvertFrameRequest\x1a\x1f.frames.v1.ConvertFrameResponse\x12U\n" +
 	"\x0eListOrgMembers\x12 .frames.v1.ListOrgMembersRequest\x1a!.frames.v1.ListOrgMembersResponse\x12O\n" +
 	"\fAddOrgMember\x12\x1e.frames.v1.AddOrgMemberRequest\x1a\x1f.frames.v1.AddOrgMemberResponse\x12R\n" +
 	"\rSetMemberRole\x12\x1f.frames.v1.SetMemberRoleRequest\x1a .frames.v1.SetMemberRoleResponse\x12X\n" +
@@ -1377,7 +1525,7 @@ func file_frames_v1_frame_service_proto_rawDescGZIP() []byte {
 	return file_frames_v1_frame_service_proto_rawDescData
 }
 
-var file_frames_v1_frame_service_proto_msgTypes = make([]protoimpl.MessageInfo, 25)
+var file_frames_v1_frame_service_proto_msgTypes = make([]protoimpl.MessageInfo, 27)
 var file_frames_v1_frame_service_proto_goTypes = []any{
 	(*PublishFrameRequest)(nil),       // 0: frames.v1.PublishFrameRequest
 	(*PublishFrameResponse)(nil),      // 1: frames.v1.PublishFrameResponse
@@ -1393,64 +1541,68 @@ var file_frames_v1_frame_service_proto_goTypes = []any{
 	(*ListFrameVersionsResponse)(nil), // 11: frames.v1.ListFrameVersionsResponse
 	(*FieldViolation)(nil),            // 12: frames.v1.FieldViolation
 	(*FieldViolations)(nil),           // 13: frames.v1.FieldViolations
-	(*DeleteFrameRequest)(nil),        // 14: frames.v1.DeleteFrameRequest
-	(*DeleteFrameResponse)(nil),       // 15: frames.v1.DeleteFrameResponse
-	(*DeleteBlocked)(nil),             // 16: frames.v1.DeleteBlocked
-	(*ListOrgMembersRequest)(nil),     // 17: frames.v1.ListOrgMembersRequest
-	(*ListOrgMembersResponse)(nil),    // 18: frames.v1.ListOrgMembersResponse
-	(*AddOrgMemberRequest)(nil),       // 19: frames.v1.AddOrgMemberRequest
-	(*AddOrgMemberResponse)(nil),      // 20: frames.v1.AddOrgMemberResponse
-	(*SetMemberRoleRequest)(nil),      // 21: frames.v1.SetMemberRoleRequest
-	(*SetMemberRoleResponse)(nil),     // 22: frames.v1.SetMemberRoleResponse
-	(*RemoveOrgMemberRequest)(nil),    // 23: frames.v1.RemoveOrgMemberRequest
-	(*RemoveOrgMemberResponse)(nil),   // 24: frames.v1.RemoveOrgMemberResponse
-	(*Frame)(nil),                     // 25: frames.v1.Frame
-	(*FrameVersion)(nil),              // 26: frames.v1.FrameVersion
-	(*FrameSummary)(nil),              // 27: frames.v1.FrameSummary
-	(*ParentRef)(nil),                 // 28: frames.v1.ParentRef
-	(*Permissions)(nil),               // 29: frames.v1.Permissions
-	(*Org)(nil),                       // 30: frames.v1.Org
-	(*FrameVersionSummary)(nil),       // 31: frames.v1.FrameVersionSummary
-	(*Membership)(nil),                // 32: frames.v1.Membership
+	(*ConvertFrameRequest)(nil),       // 14: frames.v1.ConvertFrameRequest
+	(*ConvertFrameResponse)(nil),      // 15: frames.v1.ConvertFrameResponse
+	(*DeleteFrameRequest)(nil),        // 16: frames.v1.DeleteFrameRequest
+	(*DeleteFrameResponse)(nil),       // 17: frames.v1.DeleteFrameResponse
+	(*DeleteBlocked)(nil),             // 18: frames.v1.DeleteBlocked
+	(*ListOrgMembersRequest)(nil),     // 19: frames.v1.ListOrgMembersRequest
+	(*ListOrgMembersResponse)(nil),    // 20: frames.v1.ListOrgMembersResponse
+	(*AddOrgMemberRequest)(nil),       // 21: frames.v1.AddOrgMemberRequest
+	(*AddOrgMemberResponse)(nil),      // 22: frames.v1.AddOrgMemberResponse
+	(*SetMemberRoleRequest)(nil),      // 23: frames.v1.SetMemberRoleRequest
+	(*SetMemberRoleResponse)(nil),     // 24: frames.v1.SetMemberRoleResponse
+	(*RemoveOrgMemberRequest)(nil),    // 25: frames.v1.RemoveOrgMemberRequest
+	(*RemoveOrgMemberResponse)(nil),   // 26: frames.v1.RemoveOrgMemberResponse
+	(*Frame)(nil),                     // 27: frames.v1.Frame
+	(*FrameVersion)(nil),              // 28: frames.v1.FrameVersion
+	(*FrameSummary)(nil),              // 29: frames.v1.FrameSummary
+	(*ParentRef)(nil),                 // 30: frames.v1.ParentRef
+	(*Permissions)(nil),               // 31: frames.v1.Permissions
+	(*Org)(nil),                       // 32: frames.v1.Org
+	(*FrameVersionSummary)(nil),       // 33: frames.v1.FrameVersionSummary
+	(*Membership)(nil),                // 34: frames.v1.Membership
 }
 var file_frames_v1_frame_service_proto_depIdxs = []int32{
-	25, // 0: frames.v1.PublishFrameResponse.frame:type_name -> frames.v1.Frame
-	26, // 1: frames.v1.PublishFrameResponse.version:type_name -> frames.v1.FrameVersion
-	27, // 2: frames.v1.ListFramesResponse.frames:type_name -> frames.v1.FrameSummary
-	25, // 3: frames.v1.GetFrameResponse.frame:type_name -> frames.v1.Frame
-	26, // 4: frames.v1.GetFrameResponse.version:type_name -> frames.v1.FrameVersion
-	28, // 5: frames.v1.GetFrameResponse.extends:type_name -> frames.v1.ParentRef
-	29, // 6: frames.v1.GetFrameResponse.permissions:type_name -> frames.v1.Permissions
-	30, // 7: frames.v1.GetMeResponse.org:type_name -> frames.v1.Org
-	31, // 8: frames.v1.ListFrameVersionsResponse.versions:type_name -> frames.v1.FrameVersionSummary
+	27, // 0: frames.v1.PublishFrameResponse.frame:type_name -> frames.v1.Frame
+	28, // 1: frames.v1.PublishFrameResponse.version:type_name -> frames.v1.FrameVersion
+	29, // 2: frames.v1.ListFramesResponse.frames:type_name -> frames.v1.FrameSummary
+	27, // 3: frames.v1.GetFrameResponse.frame:type_name -> frames.v1.Frame
+	28, // 4: frames.v1.GetFrameResponse.version:type_name -> frames.v1.FrameVersion
+	30, // 5: frames.v1.GetFrameResponse.extends:type_name -> frames.v1.ParentRef
+	31, // 6: frames.v1.GetFrameResponse.permissions:type_name -> frames.v1.Permissions
+	32, // 7: frames.v1.GetMeResponse.org:type_name -> frames.v1.Org
+	33, // 8: frames.v1.ListFrameVersionsResponse.versions:type_name -> frames.v1.FrameVersionSummary
 	12, // 9: frames.v1.FieldViolations.violations:type_name -> frames.v1.FieldViolation
-	32, // 10: frames.v1.ListOrgMembersResponse.members:type_name -> frames.v1.Membership
-	32, // 11: frames.v1.AddOrgMemberResponse.member:type_name -> frames.v1.Membership
-	32, // 12: frames.v1.SetMemberRoleResponse.member:type_name -> frames.v1.Membership
+	34, // 10: frames.v1.ListOrgMembersResponse.members:type_name -> frames.v1.Membership
+	34, // 11: frames.v1.AddOrgMemberResponse.member:type_name -> frames.v1.Membership
+	34, // 12: frames.v1.SetMemberRoleResponse.member:type_name -> frames.v1.Membership
 	0,  // 13: frames.v1.FrameService.PublishFrame:input_type -> frames.v1.PublishFrameRequest
 	2,  // 14: frames.v1.FrameService.ListFrames:input_type -> frames.v1.ListFramesRequest
 	4,  // 15: frames.v1.FrameService.GetFrame:input_type -> frames.v1.GetFrameRequest
 	6,  // 16: frames.v1.FrameService.ResolveFrame:input_type -> frames.v1.ResolveFrameRequest
 	8,  // 17: frames.v1.FrameService.GetMe:input_type -> frames.v1.GetMeRequest
 	10, // 18: frames.v1.FrameService.ListFrameVersions:input_type -> frames.v1.ListFrameVersionsRequest
-	14, // 19: frames.v1.FrameService.DeleteFrame:input_type -> frames.v1.DeleteFrameRequest
-	17, // 20: frames.v1.FrameService.ListOrgMembers:input_type -> frames.v1.ListOrgMembersRequest
-	19, // 21: frames.v1.FrameService.AddOrgMember:input_type -> frames.v1.AddOrgMemberRequest
-	21, // 22: frames.v1.FrameService.SetMemberRole:input_type -> frames.v1.SetMemberRoleRequest
-	23, // 23: frames.v1.FrameService.RemoveOrgMember:input_type -> frames.v1.RemoveOrgMemberRequest
-	1,  // 24: frames.v1.FrameService.PublishFrame:output_type -> frames.v1.PublishFrameResponse
-	3,  // 25: frames.v1.FrameService.ListFrames:output_type -> frames.v1.ListFramesResponse
-	5,  // 26: frames.v1.FrameService.GetFrame:output_type -> frames.v1.GetFrameResponse
-	7,  // 27: frames.v1.FrameService.ResolveFrame:output_type -> frames.v1.ResolveFrameResponse
-	9,  // 28: frames.v1.FrameService.GetMe:output_type -> frames.v1.GetMeResponse
-	11, // 29: frames.v1.FrameService.ListFrameVersions:output_type -> frames.v1.ListFrameVersionsResponse
-	15, // 30: frames.v1.FrameService.DeleteFrame:output_type -> frames.v1.DeleteFrameResponse
-	18, // 31: frames.v1.FrameService.ListOrgMembers:output_type -> frames.v1.ListOrgMembersResponse
-	20, // 32: frames.v1.FrameService.AddOrgMember:output_type -> frames.v1.AddOrgMemberResponse
-	22, // 33: frames.v1.FrameService.SetMemberRole:output_type -> frames.v1.SetMemberRoleResponse
-	24, // 34: frames.v1.FrameService.RemoveOrgMember:output_type -> frames.v1.RemoveOrgMemberResponse
-	24, // [24:35] is the sub-list for method output_type
-	13, // [13:24] is the sub-list for method input_type
+	16, // 19: frames.v1.FrameService.DeleteFrame:input_type -> frames.v1.DeleteFrameRequest
+	14, // 20: frames.v1.FrameService.ConvertFrame:input_type -> frames.v1.ConvertFrameRequest
+	19, // 21: frames.v1.FrameService.ListOrgMembers:input_type -> frames.v1.ListOrgMembersRequest
+	21, // 22: frames.v1.FrameService.AddOrgMember:input_type -> frames.v1.AddOrgMemberRequest
+	23, // 23: frames.v1.FrameService.SetMemberRole:input_type -> frames.v1.SetMemberRoleRequest
+	25, // 24: frames.v1.FrameService.RemoveOrgMember:input_type -> frames.v1.RemoveOrgMemberRequest
+	1,  // 25: frames.v1.FrameService.PublishFrame:output_type -> frames.v1.PublishFrameResponse
+	3,  // 26: frames.v1.FrameService.ListFrames:output_type -> frames.v1.ListFramesResponse
+	5,  // 27: frames.v1.FrameService.GetFrame:output_type -> frames.v1.GetFrameResponse
+	7,  // 28: frames.v1.FrameService.ResolveFrame:output_type -> frames.v1.ResolveFrameResponse
+	9,  // 29: frames.v1.FrameService.GetMe:output_type -> frames.v1.GetMeResponse
+	11, // 30: frames.v1.FrameService.ListFrameVersions:output_type -> frames.v1.ListFrameVersionsResponse
+	17, // 31: frames.v1.FrameService.DeleteFrame:output_type -> frames.v1.DeleteFrameResponse
+	15, // 32: frames.v1.FrameService.ConvertFrame:output_type -> frames.v1.ConvertFrameResponse
+	20, // 33: frames.v1.FrameService.ListOrgMembers:output_type -> frames.v1.ListOrgMembersResponse
+	22, // 34: frames.v1.FrameService.AddOrgMember:output_type -> frames.v1.AddOrgMemberResponse
+	24, // 35: frames.v1.FrameService.SetMemberRole:output_type -> frames.v1.SetMemberRoleResponse
+	26, // 36: frames.v1.FrameService.RemoveOrgMember:output_type -> frames.v1.RemoveOrgMemberResponse
+	25, // [25:37] is the sub-list for method output_type
+	13, // [13:25] is the sub-list for method input_type
 	13, // [13:13] is the sub-list for extension type_name
 	13, // [13:13] is the sub-list for extension extendee
 	0,  // [0:13] is the sub-list for field type_name
@@ -1462,13 +1614,17 @@ func file_frames_v1_frame_service_proto_init() {
 		return
 	}
 	file_frames_v1_frame_proto_init()
+	file_frames_v1_frame_service_proto_msgTypes[14].OneofWrappers = []any{
+		(*ConvertFrameRequest_Yaml)(nil),
+		(*ConvertFrameRequest_Markdown)(nil),
+	}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_frames_v1_frame_service_proto_rawDesc), len(file_frames_v1_frame_service_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   25,
+			NumMessages:   27,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

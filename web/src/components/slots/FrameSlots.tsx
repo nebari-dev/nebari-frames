@@ -1,40 +1,23 @@
 import type { FrameDoc } from "@/lib/frame-yaml";
+import { SLOT_SECTIONS, sectionHasContent } from "@/lib/slot-sections";
 import { MarkdownView } from "@/components/MarkdownView";
 import { SlotSection } from "./SlotSection";
 import { TerminologyList } from "./TerminologyList";
 import { BulletList } from "./BulletList";
 
-// Prose slots in schema order, with display labels.
-const PROSE: { key: keyof FrameDoc["slots"]; label: string }[] = [
-  { key: "tool_specs", label: "Tool Specifications" },
-  { key: "goals", label: "Goals" },
-  { key: "style", label: "Style" },
-  { key: "norms", label: "Norms" },
-  { key: "architecture", label: "Architecture" },
-  { key: "business_process", label: "Business Process" },
-];
-
+// Renders the populated sections of a frame in canonical order, hiding the
+// empty ones - the reader sees the document, not the schema.
 export function FrameSlots({ doc }: { doc: FrameDoc }) {
   const s = doc.slots;
   return (
     <div className="divide-y">
-      {s.terminology && s.terminology.length > 0 && (
-        <SlotSection title="Terminology"><TerminologyList terms={s.terminology} /></SlotSection>
-      )}
-      {s.rules && s.rules.length > 0 && (
-        <SlotSection title="Rules"><BulletList items={s.rules} /></SlotSection>
-      )}
-      {s.skills && s.skills.length > 0 && (
-        <SlotSection title="Skills"><BulletList items={s.skills} /></SlotSection>
-      )}
-      {s.prompts && s.prompts.length > 0 && (
-        <SlotSection title="Prompts"><BulletList items={s.prompts} /></SlotSection>
-      )}
-      {PROSE.map(({ key, label }) => {
-        const val = s[key];
-        if (typeof val !== "string" || val.trim() === "") return null;
-        return <SlotSection key={key} title={label}><MarkdownView source={val} /></SlotSection>;
-      })}
+      {SLOT_SECTIONS.filter((def) => sectionHasContent(def, s)).map((def) => (
+        <SlotSection key={def.key} title={def.label}>
+          {def.kind === "terms" && <TerminologyList terms={s.terminology ?? []} />}
+          {def.kind === "list" && <BulletList items={(s[def.key] as string[]) ?? []} />}
+          {def.kind === "prose" && <MarkdownView source={(s[def.key] as string) ?? ""} />}
+        </SlotSection>
+      ))}
     </div>
   );
 }

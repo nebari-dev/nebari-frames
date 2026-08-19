@@ -27,7 +27,12 @@ func Resolve(ctx context.Context, fetcher ParentFetcher, doc *Doc, extends []Ext
 	for _, e := range excludes {
 		excludeSet[e] = true
 	}
-	acc := &Doc{Name: doc.Name, Description: doc.Description, Version: doc.Version}
+	// Spec metadata describes the child itself and is never inherited, so it is
+	// carried straight through rather than merged from parents.
+	acc := &Doc{
+		Name: doc.Name, Description: doc.Description, Version: doc.Version,
+		Visibility: doc.Visibility, Scope: doc.Scope, Maintainer: doc.Maintainer,
+	}
 	visiting := map[string]bool{}
 	if err := mergeParents(ctx, fetcher, extends, excludeSet, acc, visiting, []string{doc.Name}); err != nil {
 		return nil, err

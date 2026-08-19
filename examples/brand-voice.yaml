@@ -1,6 +1,9 @@
 name: brand-voice
 description: OpenTeams brand voice and messaging guardrails.
 version: 1.0.0
+visibility: internal
+scope: company
+maintainer: marketing
 slots:
   terminology:
     - term: customer

@@ -20,10 +20,19 @@ const slotsSchema = z.object({
 
 const extendRefSchema = z.object({ ref: z.string(), version: z.string() });
 
+// Frame Spec v0.2 metadata. Optional in the stored document so frames published
+// before these fields existed still parse; the authoring form always writes a
+// visibility, and the backend defaults it on export.
+export const VISIBILITY_VALUES = ["private", "internal", "shared", "public"] as const;
+export const DEFAULT_VISIBILITY = "internal";
+
 export const frameDocSchema = z.object({
   name: z.string(),
   description: z.string().default(""),
   version: z.string().default(""),
+  visibility: z.string().default(""),
+  scope: z.string().default(""),
+  maintainer: z.string().default(""),
   extends: z.array(extendRefSchema).optional(),
   excludes: z.array(z.string()).optional(),
   slots: slotsSchema.default({}),
@@ -59,6 +68,10 @@ export function serializeFrameDoc(doc: FrameDoc): string {
     description: doc.description,
     version: doc.version,
   };
+  for (const key of ["visibility", "scope", "maintainer"] as const) {
+    const v = doc[key];
+    if (typeof v === "string" && v.trim() !== "") out[key] = v;
+  }
   if (doc.extends && doc.extends.length > 0) out.extends = doc.extends;
   if (doc.excludes && doc.excludes.length > 0) out.excludes = doc.excludes;
   out.slots = compactSlots(doc.slots);

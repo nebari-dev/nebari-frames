@@ -3,11 +3,17 @@ import { authoringSchema, emptyFrameDoc, suggestNextVersion } from "./authoring-
 
 describe("authoringSchema", () => {
   it("accepts a minimal valid doc", () => {
-    const r = authoringSchema.safeParse({ name: "ok-name", description: "d", version: "1.0.0", slots: {} });
+    const r = authoringSchema.safeParse({
+      name: "ok-name", description: "d", version: "1.0.0",
+      visibility: "internal", scope: "", maintainer: "", slots: {},
+    });
     expect(r.success).toBe(true);
   });
   it("rejects bad name, empty description, empty version", () => {
-    const r = authoringSchema.safeParse({ name: "Bad_Name", description: "", version: "", slots: {} });
+    const r = authoringSchema.safeParse({
+      name: "Bad_Name", description: "", version: "",
+      visibility: "internal", scope: "", maintainer: "", slots: {},
+    });
     expect(r.success).toBe(false);
     const paths = !r.success ? r.error.issues.map((i) => i.path.join(".")) : [];
     expect(paths).toContain("name");

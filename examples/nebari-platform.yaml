@@ -11,6 +11,9 @@ description: >-
   software pack catalog. Context for writing accurate client proposals: value
   proposition, vocabulary, and guardrails for the today-vs-roadmap line.
 version: 0.1.0
+visibility: shared
+scope: company
+maintainer: platform engineering
 
 slots:
   terminology:
