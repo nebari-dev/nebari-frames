@@ -98,7 +98,7 @@ export function Header() {
             <DropdownMenuTrigger
               variant="ghost"
               aria-label="Account menu"
-              className="h-auto px-2.5 py-1 hover:bg-header-action-hover focus-visible:ring-offset-0 active:bg-header-action-hover data-[popup-open]:bg-header-action-hover"
+              className="h-auto px-2.5 py-1 hover:bg-header-action-hover hover:no-underline focus-visible:ring-offset-0 active:bg-header-action-hover data-[popup-open]:bg-header-action-hover data-[popup-open]:no-underline"
             >
               <Avatar>
                 <AvatarFallback className="bg-primary font-semibold text-primary-foreground">
@@ -113,7 +113,7 @@ export function Header() {
 
             <DropdownMenuPortal>
               <DropdownMenuContent align="end" className="w-[248px] p-2">
-                <div className="border-b px-1.5 pb-2">
+                <div className="border-b border-border px-1.5 pb-2">
                   <p className="truncate text-sm font-medium text-foreground">{displayName}</p>
                   {email ? (
                     <p className="truncate text-xs text-muted-foreground">
@@ -148,7 +148,7 @@ export function Header() {
                 <DropdownMenuSeparator />
 
                 <DropdownMenuItem
-                  className="leading-5 text-sign-out-foreground data-[highlighted]:text-sign-out-foreground"
+                  className="leading-5 text-sign-out-foreground no-underline hover:no-underline data-[highlighted]:text-sign-out-foreground data-[highlighted]:no-underline"
                   onClick={() => void logout()}
                 >
                   <LogOut className="size-4 shrink-0" aria-hidden="true" />
