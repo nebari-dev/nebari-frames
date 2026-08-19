@@ -27,7 +27,13 @@ export function AddSectionMenu({
         Add section
       </DropdownMenuTrigger>
       <DropdownMenuPortal>
-        <DropdownMenuContent align="start" className="w-96">
+        {/* Ten items with hints outgrow the space around the trigger; cap the
+            popup at Base UI's measured --available-height and scroll inside it
+            so it never runs past the viewport edge. */}
+        <DropdownMenuContent
+          align="start"
+          className="max-h-[min(var(--available-height),28rem)] w-96 overflow-y-auto"
+        >
         {available.map((def) => (
           <DropdownMenuItem key={def.key} onClick={() => onAdd(def)}>
             <div className="flex flex-col items-start gap-0.5 py-0.5">
