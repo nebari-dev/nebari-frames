@@ -136,11 +136,16 @@ Consequences to weigh before enabling it:
   role on their next request. To actually revoke access, disable the user in Keycloak, or unset
   `auth.defaultRole` and manage membership explicitly.
 - **"Add member" stops working for anyone who has already signed in.** They already hold a
-  membership, so adding them by email fails with "a member with that email already exists". Change
-  their role from the members list instead.
-- **Set `seed.adminEmail` (or `seed.adminSub`) as well.** A user who has signed in at the baseline
+  membership, so adding them by email is rejected as already present. Change their role from the
+  members list instead. If their sign-in address differs from the one you invite (a different
+  address, not just different capitalization), the invite is accepted and then never applies, because
+  they already have a membership - see
+  [#66](https://github.com/nebari-dev/nebari-frames/issues/66).
+- **Set `seed.adminSub` (or `seed.adminEmail`) as well.** A user who has signed in at the baseline
   role already has a membership, which is why the server promotes the configured admin whenever the
-  organization has none. That recovery only works if an admin is configured, so configure one.
+  organization has none. That recovery only works if an admin is configured, so configure one -
+  and prefer `seed.adminSub`, since it identifies the user by their stable subject rather than by an
+  address that may not match what their token carries.
 
 An invalid role, or a role set without `seed.orgSlug`, fails at startup with a message naming the
 variable rather than silently denying every request.

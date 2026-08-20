@@ -120,6 +120,18 @@ func promoteIfNoAdmins(ctx context.Context, repo store.Repository, orgID string,
 	if m.Role == "admin" {
 		return false, nil
 	}
+	// A membership is unique per subject across all orgs, so the configured
+	// admin's existing row may belong to a different org than the one being
+	// seeded - which is what happens when seed.orgSlug changes while the
+	// database persists. Promoting by (orgID, sub) would match nothing and the
+	// resulting error would exit the server on startup, so leave it alone: the
+	// operator's admin is a member of somewhere else, and this org's admin
+	// problem is not fixable by rewriting that row.
+	if m.OrgId != orgID {
+		slog.Warn("seed: configured admin belongs to a different organization, not promoting",
+			"configured_org", orgID, "membership_org", m.OrgId, "user_sub", m.UserSub)
+		return false, nil
+	}
 	admins, err := repo.CountAdmins(ctx, orgID)
 	if err != nil {
 		return false, err
@@ -130,6 +142,13 @@ func promoteIfNoAdmins(ctx context.Context, repo store.Repository, orgID string,
 		return false, nil
 	}
 	if err := repo.UpdateMembershipRole(ctx, orgID, m.UserSub, m.Email, "admin"); err != nil {
+		// Nothing matched. Startup must not fail over a membership that moved or
+		// vanished between the read and the update.
+		if errors.Is(err, store.ErrNotFound) {
+			slog.Warn("seed: configured admin membership not found while promoting, skipping",
+				"org", orgID, "user_sub", m.UserSub)
+			return false, nil
+		}
 		return false, err
 	}
 	return true, nil

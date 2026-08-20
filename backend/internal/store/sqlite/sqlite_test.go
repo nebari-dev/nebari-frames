@@ -697,3 +697,41 @@ func TestSQLite_PublishAtomicRollback(t *testing.T) {
 		})
 	}
 }
+
+// Activating an invite must touch exactly one row. Two pending invites differing
+// only in case can coexist (see #65), and a case-insensitive UPDATE with no row
+// scoping would try to give both the same user_sub, violating the unique index
+// on user_sub and rolling the whole statement back - locking the user out with
+// an internal error instead of activating their invite.
+func TestActivatePendingMembershipTouchesOneRow(t *testing.T) {
+	r := newRepo(t)
+	ctx := context.Background()
+	seedOrg(t, r, "o1", "acme")
+	now := timestamppb.Now()
+
+	if err := r.AddPendingMembership(ctx, &framesv1.Membership{OrgId: "o1", Role: "viewer", Email: "boss@x.io", AddedAt: now}); err != nil {
+		t.Fatalf("first invite: %v", err)
+	}
+	// Permitted today because the unique index on (org_id, email) is
+	// case-sensitive; tracked in #65.
+	if err := r.AddPendingMembership(ctx, &framesv1.Membership{OrgId: "o1", Role: "publisher", Email: "Boss@X.io", AddedAt: now}); err != nil {
+		t.Fatalf("second invite: %v", err)
+	}
+
+	if err := r.ActivatePendingMembership(ctx, "boss@x.io", "s1"); err != nil {
+		t.Fatalf("activate: %v", err)
+	}
+	members, err := r.ListMembershipsByOrg(ctx, "o1")
+	if err != nil {
+		t.Fatalf("list: %v", err)
+	}
+	activated := 0
+	for _, m := range members {
+		if m.UserSub == "s1" {
+			activated++
+		}
+	}
+	if activated != 1 {
+		t.Errorf("activated %d rows, want exactly 1: %+v", activated, members)
+	}
+}

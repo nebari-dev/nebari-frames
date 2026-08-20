@@ -356,10 +356,19 @@ func TestResolveCallerMatchesInviteEmailCaseInsensitively(t *testing.T) {
 	}
 }
 
-// Concurrent first requests from the same user must converge on one membership
-// row, and every caller must see the role that actually got stored rather than
-// the one it optimistically assumed. Runs against real SQLite because the
-// in-memory fake does not enforce the unique index that makes one writer lose.
+// Concurrent first requests from the same user must converge on exactly one
+// membership row, with every caller succeeding and agreeing on the role. All
+// racers share one configuration because that is what a single process does -
+// the default role comes from one environment variable.
+//
+// What this does NOT prove is that a caller which loses the insert re-reads the
+// winner's row instead of returning its own assumption: with identical config
+// both answers are the same role. That property is pinned by
+// TestResolveCallerDefaultRoleEmailCollisionDenies, which fails if the
+// ErrAlreadyExists handling is removed.
+//
+// Runs against real SQLite because the in-memory fake does not enforce the
+// unique index that makes a writer lose.
 func TestResolveCallerDefaultRoleConcurrentFirstRequests(t *testing.T) {
 	ctx := context.Background()
 	db, err := sqlitestore.Open(t.TempDir() + "/t.db")
@@ -406,5 +415,58 @@ func TestResolveCallerDefaultRoleConcurrentFirstRequests(t *testing.T) {
 	}
 	if len(members) != 1 {
 		t.Errorf("got %d membership rows, want exactly 1", len(members))
+	}
+}
+
+func TestResolveCallerDefaultRoleStoresCanonicalEmail(t *testing.T) {
+	tests := []struct {
+		name  string
+		claim string
+		want  string
+	}{
+		{name: "surrounding whitespace is stripped", claim: " bob@x.io ", want: "bob@x.io"},
+		{name: "case is folded", claim: "Bob@X.io", want: "bob@x.io"},
+		{name: "both", claim: "  BOB@X.IO\n", want: "bob@x.io"},
+		{name: "already canonical", claim: "bob@x.io", want: "bob@x.io"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ctx := context.Background()
+			repo := store.NewMemory()
+			if err := repo.CreateOrg(ctx, &framesv1.Org{Id: "o1", Slug: "acme"}); err != nil {
+				t.Fatalf("seed org: %v", err)
+			}
+			cfg := orgs.DefaultMembership{Role: rbac.RoleViewer, OrgSlug: "acme"}
+			if _, err := orgs.ResolveCaller(auth.WithClaims(ctx, &auth.Claims{Subject: "s1", Email: tt.claim}), repo, cfg); err != nil {
+				t.Fatalf("resolve: %v", err)
+			}
+			m, err := repo.GetMembership(ctx, "s1")
+			if err != nil {
+				t.Fatalf("get membership: %v", err)
+			}
+			if m.Email != tt.want {
+				t.Errorf("stored email = %q, want %q", m.Email, tt.want)
+			}
+		})
+	}
+}
+
+// A baseline row must not let a later invite look like it succeeded when it can
+// never take effect. The admin should get a conflict they can act on.
+func TestAddingAnInviteForAnExistingBaselineMemberConflicts(t *testing.T) {
+	ctx := context.Background()
+	repo := store.NewMemory()
+	if err := repo.CreateOrg(ctx, &framesv1.Org{Id: "o1", Slug: "acme"}); err != nil {
+		t.Fatalf("seed org: %v", err)
+	}
+	cfg := orgs.DefaultMembership{Role: rbac.RoleViewer, OrgSlug: "acme"}
+	if _, err := orgs.ResolveCaller(auth.WithClaims(ctx, &auth.Claims{Subject: "s1", Email: "Bob@X.io"}), repo, cfg); err != nil {
+		t.Fatalf("resolve: %v", err)
+	}
+	// Any casing of the same address must be recognised as already present.
+	for _, email := range []string{"bob@x.io", "Bob@X.io", "BOB@X.IO"} {
+		if err := repo.AddPendingMembership(ctx, &framesv1.Membership{OrgId: "o1", Role: "admin", Email: email}); !errors.Is(err, store.ErrAlreadyExists) {
+			t.Errorf("AddPendingMembership(%q) err = %v, want ErrAlreadyExists: a dead invite must not look like a success", email, err)
+		}
 	}
 }

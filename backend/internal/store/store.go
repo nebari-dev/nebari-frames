@@ -6,6 +6,7 @@ package store
 import (
 	"context"
 	"errors"
+	"strings"
 
 	framesv1 "github.com/nebari-dev/nebari-frames/gen/go/frames/v1"
 )
@@ -14,6 +15,18 @@ var (
 	ErrNotFound      = errors.New("not found")
 	ErrAlreadyExists = errors.New("already exists")
 )
+
+// CanonicalEmail normalizes an address for storage and comparison. Identity
+// providers do not guarantee the case or surrounding whitespace of an email
+// claim, and invites are typed by hand, so an address has to be reduced to one
+// form before it can be compared or constrained.
+//
+// Applied to rows this package writes. Rows written before it existed are not
+// retrofitted, and the SQLite unique index on (org_id, email) is still
+// case-sensitive; both are tracked in #65.
+func CanonicalEmail(email string) string {
+	return strings.ToLower(strings.TrimSpace(email))
+}
 
 // Grant is a permission grant on a frame (whole-frame only in MVP).
 type Grant struct {

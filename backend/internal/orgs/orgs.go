@@ -5,7 +5,6 @@ import (
 	"context"
 	"errors"
 	"log/slog"
-	"strings"
 
 	"google.golang.org/protobuf/types/known/timestamppb"
 
@@ -80,7 +79,7 @@ func withoutMembership(ctx context.Context, repo store.Repository, claims *auth.
 	// the identity provider, and the two disagreeing on case must not cause the
 	// invite to be missed. Missing it would silently hand the caller the default
 	// role, which can outrank the role they were actually invited with.
-	if email := strings.TrimSpace(claims.Email); email != "" {
+	if email := store.CanonicalEmail(claims.Email); email != "" {
 		pending, err := repo.GetPendingMembershipByEmail(ctx, email)
 		switch {
 		case err == nil:
@@ -121,7 +120,10 @@ func provisionDefault(ctx context.Context, repo store.Repository, claims *auth.C
 		OrgId:   org.Id,
 		UserSub: claims.Subject,
 		Role:    string(def.Role),
-		Email:   claims.Email,
+		// Canonical, not verbatim: a row carrying the claim's stray whitespace or
+		// casing would not collide with a later invite typed normally, so that
+		// invite would be accepted and then never take effect.
+		Email:   store.CanonicalEmail(claims.Email),
 		AddedAt: timestamppb.Now(),
 	}
 	if err := repo.UpsertMembership(ctx, m); err != nil {

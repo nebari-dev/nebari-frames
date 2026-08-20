@@ -109,7 +109,7 @@ func (m *Memory) GetPendingMembershipByEmail(_ context.Context, email string) (*
 	defer m.mu.RUnlock()
 	for _, mem := range m.memberships {
 		// Mirrors the SQLite COLLATE NOCASE lookup.
-		if mem.UserSub == "" && strings.EqualFold(mem.Email, email) {
+		if mem.UserSub == "" && CanonicalEmail(mem.Email) == CanonicalEmail(email) {
 			return mem, nil
 		}
 	}
@@ -240,7 +240,9 @@ func (m *Memory) AddPendingMembership(_ context.Context, mem *framesv1.Membershi
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	for _, e := range m.memberships {
-		if e.OrgId == mem.OrgId && e.Email == mem.Email {
+		// Case-insensitive so the fake rejects what a canonicalized store would;
+		// the SQLite index is still case-sensitive, tracked in #65.
+		if e.OrgId == mem.OrgId && CanonicalEmail(e.Email) == CanonicalEmail(mem.Email) {
 			return ErrAlreadyExists
 		}
 	}
@@ -257,7 +259,7 @@ func (m *Memory) ActivatePendingMembership(_ context.Context, email, sub string)
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	for _, e := range m.memberships {
-		if e.UserSub == "" && strings.EqualFold(e.Email, email) {
+		if e.UserSub == "" && CanonicalEmail(e.Email) == CanonicalEmail(email) {
 			e.UserSub = sub
 			return nil
 		}

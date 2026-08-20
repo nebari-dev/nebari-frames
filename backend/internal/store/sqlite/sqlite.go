@@ -447,8 +447,18 @@ func (r *Repository) AddPendingMembership(ctx context.Context, m *framesv1.Membe
 }
 
 func (r *Repository) ActivatePendingMembership(ctx context.Context, email, sub string) error {
+	// Scoped to a single row by rowid. The email is the address the lookup
+	// returned, so an exact match is right here - and case-variant invites can
+	// coexist (#65), so an unscoped predicate could match several rows and try to
+	// give them all the same user_sub, violating the unique index on user_sub and
+	// rolling back the whole statement.
 	res, err := r.db.ExecContext(ctx,
-		`UPDATE org_memberships SET user_sub = ? WHERE email = ? COLLATE NOCASE AND user_sub = ''`, sub, email)
+		`UPDATE org_memberships SET user_sub = ?
+		 WHERE rowid = (
+		     SELECT rowid FROM org_memberships
+		     WHERE email = ? AND user_sub = ''
+		     ORDER BY rowid LIMIT 1
+		 )`, sub, email)
 	if err != nil {
 		return err
 	}

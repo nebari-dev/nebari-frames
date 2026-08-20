@@ -258,3 +258,62 @@ func TestRun_PromotesConfiguredAdminWhenOrgHasNone(t *testing.T) {
 		})
 	}
 }
+
+// A membership is unique per subject across all orgs, so the configured admin's
+// existing membership may belong to a different org than the one being seeded -
+// which happens as soon as seed.orgSlug changes while the database persists.
+// Promoting a row in the wrong org matches nothing, and returning that error
+// from Run makes the server exit, crash-looping on an opaque "not found".
+func TestRun_DoesNotFailWhenConfiguredAdminBelongsToAnotherOrg(t *testing.T) {
+	ctx := context.Background()
+	repo := store.NewMemory()
+	if err := seed.Run(ctx, repo, seed.Config{OrgSlug: "old", AdminSub: "root"}); err != nil {
+		t.Fatalf("first seed: %v", err)
+	}
+	old, err := repo.GetOrgBySlug(ctx, "old")
+	if err != nil {
+		t.Fatalf("get old org: %v", err)
+	}
+	// A user who picked up a membership in the original org.
+	if err := repo.UpsertMembership(ctx, &framesv1.Membership{OrgId: old.Id, UserSub: "boss", Role: "viewer"}); err != nil {
+		t.Fatalf("seed membership: %v", err)
+	}
+
+	// The operator changes seed.orgSlug and names that user as admin.
+	if err := seed.Run(ctx, repo, seed.Config{OrgSlug: "new", AdminSub: "boss"}); err != nil {
+		t.Fatalf("second seed must not fail the server startup: %v", err)
+	}
+}
+
+// A stale pending invite must not prevent the break-glass promote. A pending row
+// is not an admin (CountAdmins ignores it), so an org holding only a pending
+// invite plus baseline-role members has zero admins; naming a signed-in user via
+// seed.adminSub has to still work. Recovery by email cannot help here - the
+// invite is for an address that user never signed in with - which is why
+// adminSub is the reliable lever.
+func TestRun_AStalePendingInviteDoesNotBlockPromotion(t *testing.T) {
+	ctx := context.Background()
+	repo := store.NewMemory()
+	if err := repo.CreateOrg(ctx, &framesv1.Org{Id: "o1", Slug: "acme"}); err != nil {
+		t.Fatalf("create org: %v", err)
+	}
+	// An invite for the configured admin that has not been claimed.
+	if err := repo.AddPendingMembership(ctx, &framesv1.Membership{OrgId: "o1", Role: "admin", Email: "boss@x.io"}); err != nil {
+		t.Fatalf("invite: %v", err)
+	}
+	// The same person signed in under a different address and got the baseline.
+	if err := repo.UpsertMembership(ctx, &framesv1.Membership{OrgId: "o1", UserSub: "boss-sub", Role: "viewer", Email: "boss.work@x.io"}); err != nil {
+		t.Fatalf("baseline row: %v", err)
+	}
+	if n, _ := repo.CountAdmins(ctx, "o1"); n != 0 {
+		t.Fatalf("precondition: want 0 admins, got %d", n)
+	}
+
+	// Seeding with the sub of the signed-in user must promote them.
+	if err := seed.Run(ctx, repo, seed.Config{OrgSlug: "acme", AdminSub: "boss-sub", AdminEmail: "boss@x.io"}); err != nil {
+		t.Fatalf("run: %v", err)
+	}
+	if n, _ := repo.CountAdmins(ctx, "o1"); n != 1 {
+		t.Errorf("admins = %d, want 1: the org must not be left without one", n)
+	}
+}
