@@ -207,3 +207,298 @@ func connectSDK(t *testing.T, ctx context.Context, endpoint string) *gomcp.Clien
 	}
 	return session
 }
+
+// newWriteTestSession wires the real frames.Service to an in-process MCP client
+// session in dev mode, with the dev user holding role in org o1. Nothing is
+// stubbed on the permission path, so these tests fail if the MCP layer ever
+// gains a shortcut around RBAC.
+func newWriteTestSession(t *testing.T, role string) (*gomcp.ClientSession, *store.Memory) {
+	t.Helper()
+	ctx := context.Background()
+	mem := store.NewMemory()
+	seedOrgAndReadableFrame(t, mem)
+	if err := mem.UpsertMembership(ctx, &framesv1.Membership{
+		OrgId: "o1", UserSub: "dev-user", Role: role,
+	}); err != nil {
+		t.Fatalf("UpsertMembership: %v", err)
+	}
+
+	svc := frames.NewService(mem)
+	comp := mcppkg.NewComponent(mcppkg.Config{DevMode: true, PublicURL: "https://frames.example.com"}, svc, nil)
+	mux := http.NewServeMux()
+	comp.Mount(mux)
+	srv := httptest.NewServer(mux)
+	t.Cleanup(srv.Close)
+
+	client := gomcp.NewClient(&gomcp.Implementation{Name: "test", Version: "v1"}, nil)
+	cs, err := client.Connect(ctx, &gomcp.StreamableClientTransport{Endpoint: srv.URL + "/mcp"}, nil)
+	if err != nil {
+		t.Fatalf("client connect: %v", err)
+	}
+	t.Cleanup(func() { _ = cs.Close() })
+	return cs, mem
+}
+
+// callTool invokes a tool and returns its text plus whether it reported an error.
+func callTool(t *testing.T, cs *gomcp.ClientSession, name string, args map[string]any) (string, bool) {
+	t.Helper()
+	res, err := cs.CallTool(context.Background(), &gomcp.CallToolParams{Name: name, Arguments: args})
+	if err != nil {
+		t.Fatalf("call %s: %v", name, err)
+	}
+	var b strings.Builder
+	for _, c := range res.Content {
+		if tc, ok := c.(*gomcp.TextContent); ok {
+			b.WriteString(tc.Text)
+		}
+	}
+	return b.String(), res.IsError
+}
+
+func TestMCPWritesEnforceRBAC(t *testing.T) {
+	newFrame := map[string]any{
+		"name":        "brand-voice",
+		"description": "How we write",
+		"version":     "1.0.0",
+		"rules":       []any{"Cite benchmarks."},
+	}
+
+	t.Run("a viewer cannot create a frame", func(t *testing.T) {
+		cs, mem := newWriteTestSession(t, "viewer")
+		text, isErr := callTool(t, cs, "create_frame", newFrame)
+		if !isErr {
+			t.Fatalf("viewer created a frame: %q", text)
+		}
+		if !strings.Contains(text, "permission denied") {
+			t.Errorf("text = %q, want a permission denial", text)
+		}
+		if _, err := mem.GetFrameBySlugName(context.Background(), "openteams", "brand-voice"); !errors.Is(err, store.ErrNotFound) {
+			t.Errorf("a denied create still wrote a frame (err=%v)", err)
+		}
+	})
+
+	t.Run("a publisher can create a frame and read it back", func(t *testing.T) {
+		cs, mem := newWriteTestSession(t, "publisher")
+		text, isErr := callTool(t, cs, "create_frame", newFrame)
+		if isErr {
+			t.Fatalf("publisher denied: %q", text)
+		}
+		if !strings.Contains(text, "brand-voice@1.0.0") {
+			t.Errorf("text = %q, want the published name and version", text)
+		}
+		f, err := mem.GetFrameBySlugName(context.Background(), "openteams", "brand-voice")
+		if err != nil {
+			t.Fatalf("frame not persisted: %v", err)
+		}
+		if f.OwnerSub != "dev-user" {
+			t.Errorf("owner = %q, want dev-user", f.OwnerSub)
+		}
+		// The new Frame is immediately readable through the read tool.
+		got, isErr := callTool(t, cs, "get_frame", map[string]any{"name": "brand-voice"})
+		if isErr || !strings.Contains(got, "Cite benchmarks.") {
+			t.Errorf("get_frame after create = %q (isErr=%v)", got, isErr)
+		}
+	})
+
+	t.Run("creating over an existing name fails", func(t *testing.T) {
+		cs, _ := newWriteTestSession(t, "publisher")
+		if _, isErr := callTool(t, cs, "create_frame", newFrame); isErr {
+			t.Fatal("first create should succeed")
+		}
+		text, isErr := callTool(t, cs, "create_frame", newFrame)
+		if !isErr {
+			t.Fatalf("second create succeeded: %q", text)
+		}
+		if !strings.Contains(text, "already exists") {
+			t.Errorf("text = %q, want an already-exists error", text)
+		}
+	})
+
+	t.Run("the owner can update their frame", func(t *testing.T) {
+		cs, mem := newWriteTestSession(t, "publisher")
+		if _, isErr := callTool(t, cs, "create_frame", newFrame); isErr {
+			t.Fatal("create should succeed")
+		}
+		updated := map[string]any{
+			"name":        "brand-voice",
+			"description": "How we write, revised",
+			"version":     "1.1.0",
+			"rules":       []any{"Cite benchmarks.", "Avoid jargon."},
+			"changelog":   "added a rule",
+		}
+		text, isErr := callTool(t, cs, "update_frame", updated)
+		if isErr {
+			t.Fatalf("owner denied update: %q", text)
+		}
+		f, err := mem.GetFrameBySlugName(context.Background(), "openteams", "brand-voice")
+		if err != nil {
+			t.Fatalf("get frame: %v", err)
+		}
+		if f.LatestVersion != "1.1.0" {
+			t.Errorf("latest version = %q, want 1.1.0", f.LatestVersion)
+		}
+	})
+
+	t.Run("updating a frame the caller cannot edit is denied", func(t *testing.T) {
+		// alpha is seeded owned by "someone" with only an org-level read grant.
+		cs, _ := newWriteTestSession(t, "publisher")
+		text, isErr := callTool(t, cs, "update_frame", map[string]any{
+			"name":        "alpha",
+			"description": "hijacked",
+			"version":     "2.0.0",
+			"rules":       []any{"mine now"},
+		})
+		if !isErr {
+			t.Fatalf("edit permission was bypassed: %q", text)
+		}
+		if !strings.Contains(text, "permission denied") {
+			t.Errorf("text = %q, want a permission denial", text)
+		}
+	})
+
+	t.Run("updating an unknown frame reports not found", func(t *testing.T) {
+		cs, _ := newWriteTestSession(t, "publisher")
+		text, isErr := callTool(t, cs, "update_frame", map[string]any{
+			"name":        "ghost",
+			"description": "x",
+			"version":     "1.0.0",
+			"rules":       []any{"r"},
+		})
+		if !isErr {
+			t.Fatalf("update of an unknown frame succeeded: %q", text)
+		}
+		if !strings.Contains(text, "not found") {
+			t.Errorf("text = %q, want a not-found error", text)
+		}
+	})
+
+	t.Run("an invalid document is rejected by the canonical validator", func(t *testing.T) {
+		cs, mem := newWriteTestSession(t, "publisher")
+		text, isErr := callTool(t, cs, "create_frame", map[string]any{
+			"name":        "Not A Valid Name",
+			"description": "x",
+			"version":     "1.0.0",
+			"rules":       []any{"r"},
+		})
+		if !isErr {
+			t.Fatalf("invalid name accepted: %q", text)
+		}
+		if !strings.Contains(text, "invalid frame") {
+			t.Errorf("text = %q, want an invalid-frame error", text)
+		}
+		if _, err := mem.GetFrameBySlugName(context.Background(), "openteams", "Not A Valid Name"); !errors.Is(err, store.ErrNotFound) {
+			t.Errorf("an invalid create still wrote something (err=%v)", err)
+		}
+	})
+}
+
+// An update must not destroy what the caller did not mention. Absent fields keep
+// their current values; supplied fields replace them; an explicitly empty list
+// clears. Without this, an AI that updates one slot silently wipes the Frame's
+// visibility, maintainer, and - worst - its inheritance edges.
+func TestMCPUpdatePreservesOmittedFields(t *testing.T) {
+	cs, mem := newWriteTestSession(t, "publisher")
+	ctx := context.Background()
+
+	// A parent to inherit from, then a child that pins it and carries metadata.
+	if _, isErr := callTool(t, cs, "create_frame", map[string]any{
+		"name": "base", "description": "Base", "version": "1.0.0",
+		"rules": []any{"from parent"},
+	}); isErr {
+		t.Fatal("create base failed")
+	}
+	if _, isErr := callTool(t, cs, "create_frame", map[string]any{
+		"name": "child", "description": "Child", "version": "1.0.0",
+		"rules":      []any{"from child"},
+		"visibility": "private",
+		"scope":      "company",
+		"maintainer": "platform team",
+		"extends":    []any{map[string]any{"ref": "openteams/base", "version": "1.0.0"}},
+		"goals":      "ship the thing",
+	}); isErr {
+		t.Fatal("create child failed")
+	}
+
+	// Update only the rules. Everything else must survive.
+	text, isErr := callTool(t, cs, "update_frame", map[string]any{
+		"name": "child", "version": "1.1.0",
+		"rules": []any{"from child", "and another"},
+	})
+	if isErr {
+		t.Fatalf("update failed: %q", text)
+	}
+
+	v, _, _, err := mem.GetFrameVersion(ctx, mustFrameID(t, mem, "child"), "1.1.0")
+	if err != nil {
+		t.Fatalf("get version: %v", err)
+	}
+	doc, err := frames.Parse(v.Content)
+	if err != nil {
+		t.Fatalf("parse stored content: %v", err)
+	}
+
+	if doc.Visibility != "private" {
+		t.Errorf("visibility = %q, want private (omitted fields must be preserved)", doc.Visibility)
+	}
+	if doc.Scope != "company" {
+		t.Errorf("scope = %q, want company", doc.Scope)
+	}
+	if doc.Maintainer != "platform team" {
+		t.Errorf("maintainer = %q, want %q", doc.Maintainer, "platform team")
+	}
+	if len(doc.Extends) != 1 || doc.Extends[0].Ref != "openteams/base" || doc.Extends[0].Version != "1.0.0" {
+		t.Errorf("extends = %+v, want the pinned parent preserved: inheritance must survive an update", doc.Extends)
+	}
+	if doc.Slots.Goals != "ship the thing" {
+		t.Errorf("goals = %q, want the original prose preserved", doc.Slots.Goals)
+	}
+	if doc.Description != "Child" {
+		t.Errorf("description = %q, want Child", doc.Description)
+	}
+	// The parent's rule must NOT have been copied into the child.
+	if len(doc.Slots.Rules) != 2 {
+		t.Errorf("rules = %v, want exactly the two supplied (no inherited content flattened in)", doc.Slots.Rules)
+	}
+	for _, r := range doc.Slots.Rules {
+		if r == "from parent" {
+			t.Errorf("parent content was flattened into the child: %v", doc.Slots.Rules)
+		}
+	}
+
+	t.Run("supplied fields replace, and an explicit empty list clears", func(t *testing.T) {
+		text, isErr := callTool(t, cs, "update_frame", map[string]any{
+			"name": "child", "version": "1.2.0",
+			"maintainer": "data team",
+			"extends":    []any{},
+		})
+		if isErr {
+			t.Fatalf("update failed: %q", text)
+		}
+		v, _, _, err := mem.GetFrameVersion(ctx, mustFrameID(t, mem, "child"), "1.2.0")
+		if err != nil {
+			t.Fatalf("get version: %v", err)
+		}
+		doc, err := frames.Parse(v.Content)
+		if err != nil {
+			t.Fatalf("parse: %v", err)
+		}
+		if doc.Maintainer != "data team" {
+			t.Errorf("maintainer = %q, want the supplied value", doc.Maintainer)
+		}
+		if len(doc.Extends) != 0 {
+			t.Errorf("extends = %+v, want cleared by the explicit empty list", doc.Extends)
+		}
+		if doc.Visibility != "private" {
+			t.Errorf("visibility = %q, still want private (untouched)", doc.Visibility)
+		}
+	})
+}
+
+func mustFrameID(t *testing.T, mem *store.Memory, name string) string {
+	t.Helper()
+	f, err := mem.GetFrameBySlugName(context.Background(), "openteams", name)
+	if err != nil {
+		t.Fatalf("frame %q: %v", name, err)
+	}
+	return f.Id
+}

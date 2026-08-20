@@ -13,6 +13,7 @@ import (
 
 	"github.com/nebari-dev/nebari-frames/backend/internal/auth"
 	"github.com/nebari-dev/nebari-frames/backend/internal/frames"
+	framesv1 "github.com/nebari-dev/nebari-frames/gen/go/frames/v1"
 )
 
 // compile-time assertion that the real service satisfies the adapter's interface.
@@ -23,6 +24,11 @@ var _ FrameSource = (*frames.Service)(nil)
 type FrameSource interface {
 	ListReadable(ctx context.Context) ([]frames.ReadableFrame, error)
 	ResolveDoc(ctx context.Context, orgSlug, name, version string) (*frames.Doc, error)
+	// SourceDoc reads a frame's own unresolved document, for use as the merge
+	// base of an update. Distinct from ResolveDoc on purpose: see updateFrameTool.
+	SourceDoc(ctx context.Context, name, version string) (*frames.Doc, error)
+	// PublishDoc is the RBAC-enforcing write path shared with the Connect API.
+	PublishDoc(ctx context.Context, doc *frames.Doc, changelog string, intent frames.PublishIntent) (*framesv1.Frame, *framesv1.FrameVersion, error)
 }
 
 type resourceServer struct {
@@ -88,6 +94,17 @@ func (rs *resourceServer) getServer(req *http.Request) *gomcp.Server {
 		Name:        "get_frame",
 		Description: "Get the full composed Markdown of a Frame by name (optionally a specific version). Use this to load an organization Frame as context before writing.",
 	}, rs.getFrameTool(claims))
+	// Writes. Permission is enforced entirely by frames.PublishDoc, the same
+	// path the Connect API uses; a caller without the role or grant gets an
+	// error result rather than a partial write.
+	gomcp.AddTool(srv, &gomcp.Tool{
+		Name:        "create_frame",
+		Description: "Create a new Frame in the user's organization. Fails if a Frame with that name already exists, or if the user may not publish. Call list_frames first to check the name is free.",
+	}, rs.createFrameTool(claims))
+	gomcp.AddTool(srv, &gomcp.Tool{
+		Name:        "update_frame",
+		Description: "Publish a new version of an existing Frame, changing only the fields you supply. Anything you omit keeps its current value, so send just what changes; pass an empty list to clear a list. Do NOT copy get_frame output back in - that returns the composed form including inherited content, and resending it would duplicate the parents' content into this Frame. Fails if no Frame with that name exists, or if the user may not edit it.",
+	}, rs.updateFrameTool(claims))
 
 	return srv
 }

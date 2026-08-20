@@ -8,7 +8,7 @@ title: Architecture
 - **Web app** (`web/`) - a Vite-built SPA, embedded into the backend binary at build time (`make build-web`) so the shipped artifact is one binary and one container image.
 - **Store** (`backend/internal/store/sqlite`) - SQLite via `modernc.org/sqlite` (pure Go, no cgo), on a PVC in Kubernetes. Single-writer by design: `replicaCount` is pinned to `1` and the Deployment uses the `Recreate` strategy so the previous pod releases the volume before the next one mounts it.
 - **CLI** (`cli/`) - the `frames` binary (built on `github.com/spf13/cobra`), talking to the backend over Connect RPC. See the [CLI Reference](/reference/cli/frames/).
-- **MCP endpoint** (`backend/internal/mcp`) - a remote MCP server mounted at `/mcp`, letting any MCP-capable AI client (Claude, ChatGPT, Gemini, and others) read Frames the authenticated caller can access.
+- **MCP endpoint** (`backend/internal/mcp`) - a remote MCP server mounted at `/mcp`, letting any MCP-capable AI client (Claude, ChatGPT, Gemini, and others) read the Frames the authenticated caller can access, and create or update Frames they have permission to write. It is a protocol adapter only: reads go through `frames.Service.ResolveDoc` and writes through `frames.Service.PublishDoc`, the same RBAC-enforcing methods the Connect API uses, so the two surfaces cannot disagree about who may do what.
 - **NebariApp / operator integration** (`chart/templates/nebariapp.yaml`) - on a Nebari cluster, the chart creates a `NebariApp` custom resource; the nebari-operator reconciles it into routing, TLS, a landing-page tile, and (optionally) an OIDC client.
 
 ## Request flow

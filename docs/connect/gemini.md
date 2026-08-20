@@ -49,8 +49,8 @@ This doc covers the Gemini CLI path.
    /mcp list
    ```
 
-   You should see `nebari-frames` connected with the `list_frames` and
-   `get_frame` tools.
+   You should see `nebari-frames` connected with the `list_frames`,
+   `get_frame`, `create_frame`, and `update_frame` tools.
 
 ## Using it
 

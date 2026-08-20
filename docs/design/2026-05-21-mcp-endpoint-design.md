@@ -273,10 +273,17 @@ Rejected. Claude.ai's connector mechanism IS MCP. There is no shorter path. "Bui
 ## 6. Security Considerations
 
 - **All RBAC server-side.** The `/mcp` endpoint never returns frame content without `rbac.Can(caller, Read, frame)` returning allow.
-- **OAuth scopes.** MCP client gets read-only scope (`frames:read`). No publish or admin capability via MCP - those flow through CLI / web app. Reduces blast radius if an MCP token is compromised.
+- **OAuth scopes.** ~~MCP client gets read-only scope (`frames:read`). No publish or admin capability via MCP - those flow through CLI / web app. Reduces blast radius if an MCP token is compromised.~~ **Superseded by [#51](https://github.com/nebari-dev/nebari-frames/issues/51):** the endpoint now also exposes `create_frame` and `update_frame`. The blast-radius argument above was the reason writes were originally excluded, and it still applies - a compromised MCP token can now publish as its owner. What limits it is that writes carry no privilege of their own: they run through `frames.Service.PublishDoc`, so a token belonging to a viewer cannot write at all, and one belonging to a publisher can only create Frames and edit those it holds an edit grant on. Deletion is still not reachable over MCP.
+  A second threat is specific to exposing writes as an AI tool rather than a CLI: Frame content is
+  untrusted text that an AI client reads into its context, so a prompt-injection payload can attempt
+  to drive `update_frame` and rewrite an organization's shared context with no token theft at all.
+  What blunts it is that an update carries only the caller's own permissions, every version is
+  retained so a bad write is auditable and revertable, and `update_frame` merges onto the Frame's
+  stored document rather than replacing it, so a malformed call cannot silently erase slots or
+  inheritance it never mentioned.
 - **Token TTL.** MCP OAuth tokens follow standard OAuth refresh semantics (short access token + refresh token). The user can revoke at the OIDC provider level.
 - **Same-origin and CSRF.** Not applicable; MCP is API-to-API after OAuth. Token in bearer header.
-- **Content size caps.** Server enforces the same 512KB per-frame content cap as the rest of the system. A Frame with 100MB of inherited content is rejected at publish time, not at MCP-read time.
+- **Content size caps.** Server enforces a 512KB per-version cap on stored content (`frames.MaxContentBytes`), checked in the shared publish path so the Connect API and the MCP write tools are both covered. The cap applies to the stored document, not the resolved form: a Frame that inherits heavily can still compose to more than this, so a resolved-size limit remains unimplemented.
 - **Information disclosure via list.** `resources/list` returns Frame names and descriptions even before content is fetched. Names and descriptions are intentionally shareable within an org (that's the point of a registry); cross-org names are not listed because `rbac` filters by org.
 - **Connector trust prompts.** Enterprise admins at the consumer side (claude.ai org admin etc.) often gate third-party connectors. We document the trust prompts in the per-provider Connect pages.
 
