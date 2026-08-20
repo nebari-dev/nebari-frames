@@ -992,3 +992,36 @@ func TestService_PublishWithoutABaseVersionIsUnchecked(t *testing.T) {
 		t.Errorf("unchecked publish should succeed: %v", err)
 	}
 }
+
+// The version error is reported as a field violation so the web form can mark
+// the version input, the way it already does for a duplicate version.
+func TestService_NonAdvancingVersionIsAFieldViolation(t *testing.T) {
+	repo := store.NewMemory()
+	ctx := seedOrg(t, repo, "pub", "publisher")
+	svc := frames.NewService(repo)
+	if _, _, err := svc.PublishDoc(ctx, docFor("brand-voice", "2.0.0", "a"), "", frames.PublishCreate); err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+	_, _, err := svc.PublishDoc(ctx, docFor("brand-voice", "1.0.0", "b"), "", frames.PublishUpdate)
+	var ce *connect.Error
+	if !errors.As(err, &ce) {
+		t.Fatalf("want a connect error, got %v", err)
+	}
+	found := false
+	for _, d := range ce.Details() {
+		v, derr := d.Value()
+		if derr != nil {
+			continue
+		}
+		if fv, ok := v.(*framesv1.FieldViolations); ok {
+			for _, viol := range fv.Violations {
+				if viol.Field == "version" {
+					found = true
+				}
+			}
+		}
+	}
+	if !found {
+		t.Errorf("no field violation on 'version'; details = %v", ce.Details())
+	}
+}

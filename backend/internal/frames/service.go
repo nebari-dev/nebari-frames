@@ -220,9 +220,14 @@ func (s *Service) publish(ctx context.Context, caller rbac.Caller, doc *Doc, con
 		// which CreateFrameVersion reports as AlreadyExists - a more precise
 		// answer than "does not advance".
 		if cmp, ok := compareVersions(doc.Version, existing.LatestVersion); ok && cmp < 0 {
-			return nil, nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf(
-				"version %s does not advance the frame, whose latest is %s",
-				doc.Version, existing.LatestVersion))
+			// Reported as a field violation on `version`, so the web form marks
+			// the offending field rather than showing a form-level error, and
+			// the CLI names the field too.
+			return nil, nil, violationErr(&ValidationError{Errors: []FieldError{{
+				Path: "version",
+				Message: fmt.Sprintf("must be higher than the current version %s",
+					existing.LatestVersion),
+			}}})
 		}
 		frame = existing
 		frame.Description = doc.Description
