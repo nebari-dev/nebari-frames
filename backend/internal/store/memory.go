@@ -82,6 +82,7 @@ func (m *Memory) GetMembership(_ context.Context, userSub string) (*framesv1.Mem
 func (m *Memory) UpsertMembership(_ context.Context, mem *framesv1.Membership) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
+	mem.Email = CanonicalEmail(mem.Email)
 	for i, existing := range m.memberships {
 		if existing.UserSub == mem.UserSub && mem.UserSub != "" {
 			m.memberships[i] = mem
@@ -249,7 +250,7 @@ func (m *Memory) AddPendingMembership(_ context.Context, mem *framesv1.Membershi
 	m.memberships = append(m.memberships, &framesv1.Membership{
 		OrgId:   mem.OrgId,
 		Role:    mem.Role,
-		Email:   mem.Email,
+		Email:   CanonicalEmail(mem.Email),
 		AddedAt: mem.AddedAt,
 	})
 	return nil

@@ -698,40 +698,95 @@ func TestSQLite_PublishAtomicRollback(t *testing.T) {
 	}
 }
 
-// Activating an invite must touch exactly one row. Two pending invites differing
-// only in case can coexist (see #65), and a case-insensitive UPDATE with no row
-// scoping would try to give both the same user_sub, violating the unique index
-// on user_sub and rolling the whole statement back - locking the user out with
-// an internal error instead of activating their invite.
+// Activating an invite must touch exactly one row. Emails are unique per org,
+// not globally, so the same person can hold a pending invite in two orgs - and
+// the activation UPDATE matches on email alone. Without row scoping it would
+// try to give both rows the same user_sub, violating the unique index on
+// user_sub and rolling the statement back, which locks the user out with an
+// internal error instead of activating their invite.
 func TestActivatePendingMembershipTouchesOneRow(t *testing.T) {
 	r := newRepo(t)
 	ctx := context.Background()
 	seedOrg(t, r, "o1", "acme")
+	seedOrg(t, r, "o2", "globex")
 	now := timestamppb.Now()
 
-	if err := r.AddPendingMembership(ctx, &framesv1.Membership{OrgId: "o1", Role: "viewer", Email: "boss@x.io", AddedAt: now}); err != nil {
-		t.Fatalf("first invite: %v", err)
-	}
-	// Permitted today because the unique index on (org_id, email) is
-	// case-sensitive; tracked in #65.
-	if err := r.AddPendingMembership(ctx, &framesv1.Membership{OrgId: "o1", Role: "publisher", Email: "Boss@X.io", AddedAt: now}); err != nil {
-		t.Fatalf("second invite: %v", err)
+	for _, org := range []string{"o1", "o2"} {
+		if err := r.AddPendingMembership(ctx, &framesv1.Membership{
+			OrgId: org, Role: "viewer", Email: "boss@x.io", AddedAt: now,
+		}); err != nil {
+			t.Fatalf("invite in %s: %v", org, err)
+		}
 	}
 
 	if err := r.ActivatePendingMembership(ctx, "boss@x.io", "s1"); err != nil {
 		t.Fatalf("activate: %v", err)
 	}
-	members, err := r.ListMembershipsByOrg(ctx, "o1")
-	if err != nil {
-		t.Fatalf("list: %v", err)
-	}
 	activated := 0
-	for _, m := range members {
-		if m.UserSub == "s1" {
-			activated++
+	for _, org := range []string{"o1", "o2"} {
+		members, err := r.ListMembershipsByOrg(ctx, org)
+		if err != nil {
+			t.Fatalf("list %s: %v", org, err)
+		}
+		for _, m := range members {
+			if m.UserSub == "s1" {
+				activated++
+			}
 		}
 	}
 	if activated != 1 {
-		t.Errorf("activated %d rows, want exactly 1: %+v", activated, members)
+		t.Errorf("activated %d rows, want exactly 1", activated)
 	}
+}
+
+// Emails are canonical at rest, and uniqueness ignores case: two invites for
+// the same person cannot coexist, so which one a login activates is never
+// arbitrary.
+func TestMembershipEmailsAreCanonical(t *testing.T) {
+	ctx := context.Background()
+	now := timestamppb.Now()
+
+	t.Run("a case variant invite conflicts with an existing one", func(t *testing.T) {
+		r := newRepo(t)
+		seedOrg(t, r, "o1", "acme")
+		if err := r.AddPendingMembership(ctx, &framesv1.Membership{OrgId: "o1", Role: "viewer", Email: "boss@x.io", AddedAt: now}); err != nil {
+			t.Fatalf("first invite: %v", err)
+		}
+		for _, variant := range []string{"Boss@X.io", "BOSS@X.IO", "  boss@x.io  "} {
+			err := r.AddPendingMembership(ctx, &framesv1.Membership{OrgId: "o1", Role: "admin", Email: variant, AddedAt: now})
+			if !errors.Is(err, store.ErrAlreadyExists) {
+				t.Errorf("AddPendingMembership(%q) err = %v, want ErrAlreadyExists", variant, err)
+			}
+		}
+	})
+
+	t.Run("addresses are stored folded and trimmed", func(t *testing.T) {
+		r := newRepo(t)
+		seedOrg(t, r, "o1", "acme")
+		if err := r.AddPendingMembership(ctx, &framesv1.Membership{OrgId: "o1", Role: "viewer", Email: "  Mixed@Case.IO ", AddedAt: now}); err != nil {
+			t.Fatalf("invite: %v", err)
+		}
+		members, err := r.ListMembershipsByOrg(ctx, "o1")
+		if err != nil {
+			t.Fatalf("list: %v", err)
+		}
+		if len(members) != 1 || members[0].Email != "mixed@case.io" {
+			t.Errorf("stored email = %q, want %q", members[0].Email, "mixed@case.io")
+		}
+	})
+
+	t.Run("an active membership is stored folded too", func(t *testing.T) {
+		r := newRepo(t)
+		seedOrg(t, r, "o1", "acme")
+		if err := r.UpsertMembership(ctx, &framesv1.Membership{OrgId: "o1", UserSub: "s1", Role: "viewer", Email: "Upper@Case.IO", AddedAt: now}); err != nil {
+			t.Fatalf("upsert: %v", err)
+		}
+		m, err := r.GetMembership(ctx, "s1")
+		if err != nil {
+			t.Fatalf("get: %v", err)
+		}
+		if m.Email != "upper@case.io" {
+			t.Errorf("stored email = %q, want folded", m.Email)
+		}
+	})
 }

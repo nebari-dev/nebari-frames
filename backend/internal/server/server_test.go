@@ -1,6 +1,7 @@
 package server_test
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"io"
@@ -271,5 +272,39 @@ func TestServer_Readyz(t *testing.T) {
 				t.Fatalf("/readyz = %d, want %d", resp.StatusCode, tc.wantCode)
 			}
 		})
+	}
+}
+
+// An authenticated caller with no write permission can still make the server
+// read a request body. Without a cap the whole thing is buffered before RBAC or
+// any content limit is consulted, so a single request can exhaust the memory of
+// a deployment that is pinned to one replica.
+func TestConnectRejectsOversizedRequestBody(t *testing.T) {
+	srv := server.New(frames.NewService(store.NewMemory()), nil, auth.Config{}, branding.Config{}, true, nil)
+	ts := httptest.NewServer(srv.Handler())
+	defer ts.Close()
+
+	// Valid JSON, so a rejection cannot be mistaken for a parse failure: without
+	// the cap this body is read in full and the request proceeds to auth.
+	padding := strings.Repeat("a", server.MaxRequestBytes+1024)
+	body := []byte(`{"changelog":"` + padding + `"}`)
+	req, err := http.NewRequest(http.MethodPost,
+		ts.URL+"/frames.v1.FrameService/PublishFrame", bytes.NewReader(body))
+	if err != nil {
+		t.Fatalf("request: %v", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("post: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	payload, _ := io.ReadAll(resp.Body)
+	// Connect reports an over-large message as resource_exhausted. Anything else
+	// (including a parse or auth error) means the body was read in full first.
+	if !strings.Contains(string(payload), "resource_exhausted") {
+		t.Fatalf("want resource_exhausted for an over-large body, got status %d body %s",
+			resp.StatusCode, string(payload)[:min(200, len(payload))])
 	}
 }

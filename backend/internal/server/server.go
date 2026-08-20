@@ -12,6 +12,14 @@ import (
 	webui "github.com/nebari-dev/nebari-frames/web"
 )
 
+// MaxRequestBytes caps a single request body. It is deliberately larger than
+// frames.MaxContentBytes so a publish at the content limit still fits with its
+// protocol framing, while bounding what an authenticated caller can make the
+// server buffer. Without it, a body is read in full before RBAC or any content
+// limit is consulted, so a caller with no write permission at all could exhaust
+// the memory of a deployment that is pinned to a single replica.
+const MaxRequestBytes = 8 << 20 // 8 MiB
+
 // Server wraps the combined HTTP mux that serves /healthz and the FrameService.
 type Server struct{ handler http.Handler }
 
@@ -52,6 +60,7 @@ func New(
 	path, handler := framesv1connect.NewFrameServiceHandler(
 		svc,
 		connect.WithInterceptors(interceptor),
+		connect.WithReadMaxBytes(MaxRequestBytes),
 	)
 	mux.Handle(path, handler)
 	if mcpMounter != nil {
