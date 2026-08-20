@@ -901,3 +901,94 @@ func TestService_PublishRejectsOversizedContent(t *testing.T) {
 		}
 	})
 }
+
+// latest_version must not move backwards. Publishing an older version would
+// otherwise make every default read - GetFrame, ListFrames, MCP get_frame, and
+// the merge base of the next update - resolve to the older document, quietly
+// unpublishing newer content.
+func TestService_PublishRejectsNonAdvancingVersion(t *testing.T) {
+	tests := []struct {
+		name     string
+		versions []string // published in order; the last one is the assertion
+		wantCode connect.Code
+	}{
+		{name: "advancing patch", versions: []string{"1.0.0", "1.0.1"}},
+		{name: "advancing minor", versions: []string{"1.0.0", "1.1.0"}},
+		{name: "advancing major", versions: []string{"1.9.9", "2.0.0"}},
+		{name: "double digits sort numerically", versions: []string{"1.9.0", "1.10.0"}},
+		{name: "going backwards is rejected", versions: []string{"2.0.0", "1.0.1"}, wantCode: connect.CodeInvalidArgument},
+		{name: "minor going backwards is rejected", versions: []string{"1.2.0", "1.1.9"}, wantCode: connect.CodeInvalidArgument},
+		{name: "republishing the same version is rejected", versions: []string{"1.0.0", "1.0.0"}, wantCode: connect.CodeAlreadyExists},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			repo := store.NewMemory()
+			ctx := seedOrg(t, repo, "pub", "publisher")
+			svc := frames.NewService(repo)
+			var err error
+			for i, v := range tt.versions {
+				intent := frames.PublishUpdate
+				if i == 0 {
+					intent = frames.PublishCreate
+				}
+				_, _, err = svc.PublishDoc(ctx, docFor("brand-voice", v, "r"), "", intent)
+				if i < len(tt.versions)-1 && err != nil {
+					t.Fatalf("seeding %s: %v", v, err)
+				}
+			}
+			if got := connect.CodeOf(err); tt.wantCode == 0 && err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			} else if tt.wantCode != 0 && got != tt.wantCode {
+				t.Fatalf("code = %v (err %v), want %v", got, err, tt.wantCode)
+			}
+		})
+	}
+}
+
+// Two callers that both read version 1.0.0 and then publish must not silently
+// lose one another's changes. The second publish is rejected because the Frame
+// moved on beneath it.
+func TestService_PublishDetectsAStaleBase(t *testing.T) {
+	repo := store.NewMemory()
+	ctx := seedOrg(t, repo, "pub", "publisher")
+	svc := frames.NewService(repo)
+	if _, _, err := svc.PublishDoc(ctx, docFor("brand-voice", "1.0.0", "original"), "", frames.PublishCreate); err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+
+	// Both callers read 1.0.0 as their base.
+	first := docFor("brand-voice", "1.1.0", "original", "from the first caller")
+	second := docFor("brand-voice", "1.2.0", "original", "from the second caller")
+
+	if _, _, err := svc.PublishDocFrom(ctx, first, "", frames.PublishUpdate, "1.0.0"); err != nil {
+		t.Fatalf("first publish: %v", err)
+	}
+	_, _, err := svc.PublishDocFrom(ctx, second, "", frames.PublishUpdate, "1.0.0")
+	if connect.CodeOf(err) != connect.CodeFailedPrecondition {
+		t.Fatalf("code = %v (err %v), want FailedPrecondition: the second caller's base was stale",
+			connect.CodeOf(err), err)
+	}
+
+	// The first caller's change survived.
+	doc, err := svc.SourceDoc(ctx, "brand-voice", "")
+	if err != nil {
+		t.Fatalf("source: %v", err)
+	}
+	if doc.Version != "1.1.0" {
+		t.Errorf("latest = %q, want 1.1.0", doc.Version)
+	}
+}
+
+// An empty base version means "I did not check", which keeps the Connect API's
+// existing behaviour rather than forcing every caller to supply one.
+func TestService_PublishWithoutABaseVersionIsUnchecked(t *testing.T) {
+	repo := store.NewMemory()
+	ctx := seedOrg(t, repo, "pub", "publisher")
+	svc := frames.NewService(repo)
+	if _, _, err := svc.PublishDoc(ctx, docFor("brand-voice", "1.0.0", "a"), "", frames.PublishCreate); err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+	if _, _, err := svc.PublishDoc(ctx, docFor("brand-voice", "1.1.0", "b"), "", frames.PublishUpdate); err != nil {
+		t.Errorf("unchecked publish should succeed: %v", err)
+	}
+}

@@ -27,8 +27,9 @@ type FrameSource interface {
 	// SourceDoc reads a frame's own unresolved document, for use as the merge
 	// base of an update. Distinct from ResolveDoc on purpose: see updateFrameTool.
 	SourceDoc(ctx context.Context, name, version string) (*frames.Doc, error)
-	// PublishDoc is the RBAC-enforcing write path shared with the Connect API.
-	PublishDoc(ctx context.Context, doc *frames.Doc, changelog string, intent frames.PublishIntent) (*framesv1.Frame, *framesv1.FrameVersion, error)
+	// PublishDocFrom is the RBAC-enforcing write path shared with the Connect
+	// API. The base version it takes is what makes concurrent updates safe.
+	PublishDocFrom(ctx context.Context, doc *frames.Doc, changelog string, intent frames.PublishIntent, baseVersion string) (*framesv1.Frame, *framesv1.FrameVersion, error)
 }
 
 type resourceServer struct {
@@ -103,7 +104,7 @@ func (rs *resourceServer) getServer(req *http.Request) *gomcp.Server {
 	}, rs.createFrameTool(claims))
 	gomcp.AddTool(srv, &gomcp.Tool{
 		Name:        "update_frame",
-		Description: "Publish a new version of an existing Frame, changing only the fields you supply. Anything you omit keeps its current value, so send just what changes; pass an empty list to clear a list. To modify a list or a text section, first read the current value with get_frame source=true - never with the default composed form, whose inherited content would be copied into this Frame and detach it from its parents. Fails if no Frame with that name exists, or if the user may not edit it.",
+		Description: "Publish a new version of an existing Frame, changing only the fields you supply. The version must be higher than the current one. Anything you omit keeps its current value, so send just what changes; pass an empty list to clear a list. To modify a list or a text section, first read the current value with get_frame source=true - never with the default composed form, whose inherited content would be copied into this Frame and detach it from its parents. Fails if no Frame with that name exists, or if the user may not edit it.",
 	}, rs.updateFrameTool(claims))
 
 	return srv

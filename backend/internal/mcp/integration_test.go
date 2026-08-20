@@ -585,3 +585,35 @@ func TestMCPReadModifyWriteDoesNotFlattenInheritance(t *testing.T) {
 		t.Errorf("extends = %+v, want the parent still pinned", doc.Extends)
 	}
 }
+
+// The SDK reads a request body in full before any tool handler runs, so the
+// body limit is the only thing standing between an authenticated caller and the
+// memory of a single-replica deployment. Dev mode is used because the point is
+// the body cap, not token validation.
+func TestMCPRejectsOversizedRequestBody(t *testing.T) {
+	mem := store.NewMemory()
+	seedOrgAndReadableFrame(t, mem)
+	comp := mcppkg.NewComponent(mcppkg.Config{DevMode: true, PublicURL: "https://frames.example.com"}, frames.NewService(mem), nil)
+	mux := http.NewServeMux()
+	comp.Mount(mux)
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+
+	body := `{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"padding":"` +
+		strings.Repeat("a", mcppkg.MaxRequestBytes+1024) + `"}}`
+	req, err := http.NewRequest(http.MethodPost, srv.URL+"/mcp", strings.NewReader(body))
+	if err != nil {
+		t.Fatalf("request: %v", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Accept", "application/json, text/event-stream")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		// A connection reset is an acceptable way to refuse an over-large body.
+		return
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode < 400 {
+		t.Errorf("status = %d, want a 4xx/5xx refusal for a body over the cap", resp.StatusCode)
+	}
+}

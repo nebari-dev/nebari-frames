@@ -126,7 +126,7 @@ func setString(dst *string, src *string) {
 func (rs *resourceServer) createFrameTool(claims *auth.Claims) gomcp.ToolHandlerFor[writeFrameInput, any] {
 	return func(ctx context.Context, _ *gomcp.CallToolRequest, in writeFrameInput) (*gomcp.CallToolResult, any, error) {
 		ctx = auth.WithClaims(ctx, claims)
-		return rs.publish(ctx, in, in.applyTo(&frames.Doc{}), frames.PublishCreate)
+		return rs.publish(ctx, in, in.applyTo(&frames.Doc{}), frames.PublishCreate, "")
 	}
 }
 
@@ -145,12 +145,16 @@ func (rs *resourceServer) updateFrameTool(claims *auth.Claims) gomcp.ToolHandler
 		if err != nil {
 			return errorResult(writeErrorText(err)), nil, nil
 		}
-		return rs.publish(ctx, in, in.applyTo(current), frames.PublishUpdate)
+		// The version just read is the base this merge is built on. Passing it
+		// back makes a concurrent update fail loudly instead of overwriting the
+		// other caller's change: both would otherwise merge onto the same base,
+		// pick different version strings, and both report success.
+		return rs.publish(ctx, in, in.applyTo(current), frames.PublishUpdate, current.Version)
 	}
 }
 
-func (rs *resourceServer) publish(ctx context.Context, in writeFrameInput, doc *frames.Doc, intent frames.PublishIntent) (*gomcp.CallToolResult, any, error) {
-	frame, version, err := rs.src.PublishDoc(ctx, doc, in.Changelog, intent)
+func (rs *resourceServer) publish(ctx context.Context, in writeFrameInput, doc *frames.Doc, intent frames.PublishIntent, baseVersion string) (*gomcp.CallToolResult, any, error) {
+	frame, version, err := rs.src.PublishDocFrom(ctx, doc, in.Changelog, intent, baseVersion)
 	if err != nil {
 		return errorResult(writeErrorText(err)), nil, nil
 	}
@@ -178,10 +182,9 @@ func writeErrorText(err error) string {
 	case connect.CodeUnauthenticated:
 		return "not authenticated: " + msg
 	case connect.CodeFailedPrecondition:
-		// Defensive. publish does not check acyclicity - version pinning makes a
-		// true cycle unreachable there - so this arm exists for the resolver
-		// errors a future change could surface, not because writes detect cycles.
-		return "invalid inheritance: " + msg
+		// A concurrent update moved the frame on after this one read it. The
+		// message names both versions, so a client can re-read and retry.
+		return "frame changed while you were editing it: " + msg
 	default:
 		// Internal faults must not leak storage or wiring detail to the client.
 		return "could not publish frame"

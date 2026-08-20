@@ -31,8 +31,8 @@ func (s stubSource) ListReadable(context.Context) ([]frames.ReadableFrame, error
 // read-path tests. Those tests never write, so reaching either is a bug in the
 // code under test rather than an expected error - panic so it cannot be mistaken
 // for a normal error result somewhere downstream.
-func (s stubSource) PublishDoc(context.Context, *frames.Doc, string, frames.PublishIntent) (*framesv1.Frame, *framesv1.FrameVersion, error) {
-	panic("stubSource: unexpected PublishDoc call from a read path")
+func (s stubSource) PublishDocFrom(context.Context, *frames.Doc, string, frames.PublishIntent, string) (*framesv1.Frame, *framesv1.FrameVersion, error) {
+	panic("stubSource: unexpected publish call from a read path")
 }
 
 func (s stubSource) SourceDoc(context.Context, string, string) (*frames.Doc, error) {
@@ -188,9 +188,10 @@ func TestGetFrameTool(t *testing.T) {
 // publishCall records what the stub was asked to publish so tests can assert the
 // adapter passed the caller's input through faithfully.
 type publishCall struct {
-	doc       *frames.Doc
-	changelog string
-	intent    frames.PublishIntent
+	doc         *frames.Doc
+	changelog   string
+	intent      frames.PublishIntent
+	baseVersion string
 }
 
 type stubWriter struct {
@@ -212,8 +213,8 @@ func (s *stubWriter) SourceDoc(context.Context, string, string) (*frames.Doc, er
 	return &frames.Doc{}, nil
 }
 
-func (s *stubWriter) PublishDoc(_ context.Context, doc *frames.Doc, changelog string, intent frames.PublishIntent) (*framesv1.Frame, *framesv1.FrameVersion, error) {
-	s.calls = append(s.calls, publishCall{doc: doc, changelog: changelog, intent: intent})
+func (s *stubWriter) PublishDocFrom(_ context.Context, doc *frames.Doc, changelog string, intent frames.PublishIntent, baseVersion string) (*framesv1.Frame, *framesv1.FrameVersion, error) {
+	s.calls = append(s.calls, publishCall{doc: doc, changelog: changelog, intent: intent, baseVersion: baseVersion})
 	if s.err != nil {
 		return nil, nil, s.err
 	}
@@ -529,5 +530,44 @@ func TestApplyToWiresEveryInputField(t *testing.T) {
 		if slotsV.Field(i).IsZero() {
 			t.Errorf("Slots.%s is zero after applyTo: the input field exists but is not wired in", slotsT.Field(i).Name)
 		}
+	}
+}
+
+// The concurrency guard only works if update_frame reports the version it
+// actually merged onto. Passing an empty base would leave the check inert while
+// still looking correct.
+func TestUpdateFrameSendsTheBaseVersionItRead(t *testing.T) {
+	src := &stubWriter{current: &frames.Doc{
+		Name: "brand-voice", Description: "d", Version: "3.4.5",
+		Slots: frames.Slots{Rules: []string{"existing"}},
+	}}
+	rs := &resourceServer{src: src, cfg: Config{DevMode: true}}
+	h := rs.updateFrameTool(auth.DevClaims())
+
+	if _, _, err := h(context.Background(), &gomcp.CallToolRequest{}, writeFrameInput{
+		Name: "brand-voice", Version: "3.5.0", Rules: []string{"existing", "new"},
+	}); err != nil {
+		t.Fatalf("update_frame: %v", err)
+	}
+	if len(src.calls) != 1 {
+		t.Fatalf("publish called %d times, want 1", len(src.calls))
+	}
+	if got := src.calls[0].baseVersion; got != "3.4.5" {
+		t.Errorf("baseVersion = %q, want %q (the version the merge base was read at)", got, "3.4.5")
+	}
+}
+
+// create_frame has nothing to be stale against, so it must not send a base.
+func TestCreateFrameSendsNoBaseVersion(t *testing.T) {
+	src := &stubWriter{}
+	rs := &resourceServer{src: src, cfg: Config{DevMode: true}}
+	h := rs.createFrameTool(auth.DevClaims())
+	if _, _, err := h(context.Background(), &gomcp.CallToolRequest{}, writeFrameInput{
+		Name: "n", Description: ptr("d"), Version: "1.0.0", Rules: []string{"r"},
+	}); err != nil {
+		t.Fatalf("create_frame: %v", err)
+	}
+	if got := src.calls[0].baseVersion; got != "" {
+		t.Errorf("baseVersion = %q, want empty for a create", got)
 	}
 }

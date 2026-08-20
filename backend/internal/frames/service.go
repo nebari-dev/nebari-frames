@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"strconv"
 	"strings"
 
 	"connectrpc.com/connect"
@@ -103,7 +104,7 @@ func (s *Service) PublishFrame(ctx context.Context, req *connect.Request[framesv
 	// The submitted bytes are stored verbatim rather than re-marshalled from
 	// doc: an author's comments and formatting survive, and the digest stays
 	// stable for a document that did not change.
-	frame, version, err := s.publish(ctx, caller, doc, req.Msg.Content, req.Msg.Changelog, PublishUpsert)
+	frame, version, err := s.publish(ctx, caller, doc, req.Msg.Content, req.Msg.Changelog, PublishUpsert, "")
 	if err != nil {
 		return nil, err
 	}
@@ -133,6 +134,19 @@ func (s *Service) authorizePublish(ctx context.Context) (rbac.Caller, error) {
 // translation: PermissionDenied, InvalidArgument (with field violations),
 // AlreadyExists, NotFound, Internal.
 func (s *Service) PublishDoc(ctx context.Context, doc *Doc, changelog string, intent PublishIntent) (*framesv1.Frame, *framesv1.FrameVersion, error) {
+	return s.PublishDocFrom(ctx, doc, changelog, intent, "")
+}
+
+// PublishDocFrom is PublishDoc with a concurrency check. baseVersion is the
+// version the caller read before composing doc; the publish is rejected with
+// CodeFailedPrecondition when the frame has moved on since. An empty
+// baseVersion means the caller did not check, which is the unguarded behaviour
+// the Connect RPC has always had.
+//
+// A read-modify-write without this check silently loses one of two concurrent
+// updates: both merge onto the same base, both pick different version strings
+// so nothing collides, and both report success.
+func (s *Service) PublishDocFrom(ctx context.Context, doc *Doc, changelog string, intent PublishIntent, baseVersion string) (*framesv1.Frame, *framesv1.FrameVersion, error) {
 	caller, err := s.authorizePublish(ctx)
 	if err != nil {
 		return nil, nil, err
@@ -141,14 +155,14 @@ func (s *Service) PublishDoc(ctx context.Context, doc *Doc, changelog string, in
 	if err != nil {
 		return nil, nil, connect.NewError(connect.CodeInternal, err)
 	}
-	return s.publish(ctx, caller, doc, content, changelog, intent)
+	return s.publish(ctx, caller, doc, content, changelog, intent, baseVersion)
 }
 
 // publish is the shared implementation, called only with a caller that
 // authorizePublish has already cleared. content is the canonical stored form of
 // doc; callers holding the author's original bytes pass those so they are not
 // normalized away.
-func (s *Service) publish(ctx context.Context, caller rbac.Caller, doc *Doc, content []byte, changelog string, intent PublishIntent) (*framesv1.Frame, *framesv1.FrameVersion, error) {
+func (s *Service) publish(ctx context.Context, caller rbac.Caller, doc *Doc, content []byte, changelog string, intent PublishIntent, baseVersion string) (*framesv1.Frame, *framesv1.FrameVersion, error) {
 	if verr := Validate(doc); verr != nil {
 		return nil, nil, violationErr(verr)
 	}
@@ -193,6 +207,22 @@ func (s *Service) publish(ctx context.Context, caller rbac.Caller, doc *Doc, con
 		}
 		if !allowed {
 			return nil, nil, connect.NewError(connect.CodePermissionDenied, errors.New("edit permission required"))
+		}
+		if baseVersion != "" && existing.LatestVersion != baseVersion {
+			return nil, nil, connect.NewError(connect.CodeFailedPrecondition, fmt.Errorf(
+				"frame %q has moved on: you based this change on %s but the latest is %s; re-read it and apply your change again",
+				doc.Name, baseVersion, existing.LatestVersion))
+		}
+		// latest_version must only move forward. Otherwise publishing an older
+		// version silently unpublishes newer content: every default read, and
+		// the merge base of the next update, resolves to whatever is "latest".
+		// Strictly below only: republishing the current version is a duplicate,
+		// which CreateFrameVersion reports as AlreadyExists - a more precise
+		// answer than "does not advance".
+		if cmp, ok := compareVersions(doc.Version, existing.LatestVersion); ok && cmp < 0 {
+			return nil, nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf(
+				"version %s does not advance the frame, whose latest is %s",
+				doc.Version, existing.LatestVersion))
 		}
 		frame = existing
 		frame.Description = doc.Description
@@ -650,4 +680,44 @@ func (s *Service) ConvertFrame(ctx context.Context, req *connect.Request[framesv
 		return nil, connect.NewError(connect.CodeInvalidArgument,
 			errors.New("exactly one of yaml or markdown must be set"))
 	}
+}
+
+// compareVersions orders two validated semantic versions, reporting false when
+// either cannot be parsed. Validate already enforces the shape, so a false here
+// means an unexpected form rather than user error - the caller lets it through
+// rather than rejecting a document it cannot reason about.
+func compareVersions(a, b string) (int, bool) {
+	pa, ok := parseVersion(a)
+	if !ok {
+		return 0, false
+	}
+	pb, ok := parseVersion(b)
+	if !ok {
+		return 0, false
+	}
+	for i := range pa {
+		if pa[i] != pb[i] {
+			if pa[i] < pb[i] {
+				return -1, true
+			}
+			return 1, true
+		}
+	}
+	return 0, true
+}
+
+func parseVersion(v string) ([3]int, bool) {
+	var out [3]int
+	parts := strings.Split(v, ".")
+	if len(parts) != 3 {
+		return out, false
+	}
+	for i, p := range parts {
+		n, err := strconv.Atoi(p)
+		if err != nil || n < 0 {
+			return out, false
+		}
+		out[i] = n
+	}
+	return out, true
 }
