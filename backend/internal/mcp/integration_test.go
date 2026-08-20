@@ -88,7 +88,7 @@ func seedOrgAndReadableFrame(t *testing.T, mem *store.Memory) {
 		},
 		Version: &framesv1.FrameVersion{
 			Version:     "1.0.0",
-			Content:     []byte("name: alpha\ndescription: Alpha frame\nversion: 1.0.0\nslots:\n  rules:\n    - r1\n"),
+			Content:     []byte("name: alpha\ndescription: Alpha frame\nversion: 1.0.0\nbody: |\n  r1\n"),
 			PublishedAt: timestamppb.Now(),
 		},
 		Grants:     []store.Grant{{SubjectType: "org", SubjectID: "o1", Permission: "read"}},

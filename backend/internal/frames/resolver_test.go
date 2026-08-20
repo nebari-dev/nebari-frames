@@ -32,46 +32,99 @@ func (f fakeFetcher) FetchParent(_ context.Context, ref, version string) (*frame
 	return d, d.Extends, d.Excludes, nil
 }
 
-func TestResolve_MergeOrderAndOverride(t *testing.T) {
-	parent := &frames.Doc{Name: "base", Version: "1.0.0"}
-	parent.Slots.Rules = []string{"rule-a", "shared"}
-	parent.Slots.Terminology = []frames.Term{{Term: "x", Definition: "from-parent"}}
-	parent.Slots.Goals = "parent goals"
+func TestResolve_BodiesConcatenateInMergeOrder(t *testing.T) {
+	grandparent := &frames.Doc{Name: "root", Version: "1.0.0", Body: "root guidance"}
+	parent := &frames.Doc{
+		Name: "base", Version: "1.0.0", Body: "base guidance",
+		Extends: []frames.ExtendRef{{Ref: "org/root", Version: "1.0.0"}},
+	}
+	child := &frames.Doc{
+		Name: "child", Version: "1.0.0", Body: "child guidance",
+		Extends: []frames.ExtendRef{{Ref: "org/base", Version: "1.0.0"}},
+	}
 
-	child := &frames.Doc{Name: "child", Version: "1.0.0", Extends: []frames.ExtendRef{{Ref: "org/base", Version: "1.0.0"}}}
-	child.Slots.Rules = []string{"shared", "rule-b"}
-	child.Slots.Terminology = []frames.Term{{Term: "x", Definition: "from-child"}}
+	f := newFakeFetcher(map[string]*frames.Doc{
+		"org/root@1.0.0": grandparent,
+		"org/base@1.0.0": parent,
+	})
+	got, err := frames.Resolve(context.Background(), f, child, child.Extends, child.Excludes)
+	if err != nil {
+		t.Fatalf("resolve: %v", err)
+	}
+	want := "root guidance\n\nbase guidance\n\nchild guidance"
+	if got.Body != want {
+		t.Errorf("body = %q, want %q", got.Body, want)
+	}
+}
 
+func TestResolve_EmptyBodiesAreSkipped(t *testing.T) {
+	parent := &frames.Doc{Name: "base", Version: "1.0.0", Body: "parent guidance"}
+	child := &frames.Doc{
+		Name: "child", Version: "1.0.0", Body: "",
+		Extends: []frames.ExtendRef{{Ref: "org/base", Version: "1.0.0"}},
+	}
 	f := newFakeFetcher(map[string]*frames.Doc{"org/base@1.0.0": parent})
 	got, err := frames.Resolve(context.Background(), f, child, child.Extends, child.Excludes)
 	if err != nil {
 		t.Fatalf("resolve: %v", err)
 	}
+	if got.Body != "parent guidance" {
+		t.Errorf("body = %q, want parent body only with no separator", got.Body)
+	}
+}
 
-	t.Run("rules dedupe keeping last occurrence", func(t *testing.T) {
-		// rules: concat parent then child, dedupe keeping last occurrence -> [rule-a, shared, rule-b]
-		want := []string{"rule-a", "shared", "rule-b"}
-		if len(got.Slots.Rules) != len(want) {
-			t.Fatalf("rules = %v, want %v", got.Slots.Rules, want)
-		}
-		for i := range want {
-			if got.Slots.Rules[i] != want[i] {
-				t.Fatalf("rules[%d] = %q, want %q (full: %v, want %v)", i, got.Slots.Rules[i], want[i], got.Slots.Rules, want)
-			}
-		}
+// A parent reachable through more than one path (a diamond) must contribute
+// its body exactly once.
+func TestResolve_DiamondParentMergedOnce(t *testing.T) {
+	shared := &frames.Doc{Name: "shared", Version: "1", Body: "shared guidance"}
+	left := &frames.Doc{
+		Name: "left", Version: "1", Body: "left guidance",
+		Extends: []frames.ExtendRef{{Ref: "org/shared", Version: "1"}},
+	}
+	right := &frames.Doc{
+		Name: "right", Version: "1", Body: "right guidance",
+		Extends: []frames.ExtendRef{{Ref: "org/shared", Version: "1"}},
+	}
+	child := &frames.Doc{
+		Name: "child", Version: "1", Body: "child guidance",
+		Extends: []frames.ExtendRef{
+			{Ref: "org/left", Version: "1"},
+			{Ref: "org/right", Version: "1"},
+		},
+	}
+	f := newFakeFetcher(map[string]*frames.Doc{
+		"org/shared@1": shared, "org/left@1": left, "org/right@1": right,
 	})
+	got, err := frames.Resolve(context.Background(), f, child, child.Extends, child.Excludes)
+	if err != nil {
+		t.Fatalf("resolve: %v", err)
+	}
+	want := "shared guidance\n\nleft guidance\n\nright guidance\n\nchild guidance"
+	if got.Body != want {
+		t.Errorf("body = %q, want %q", got.Body, want)
+	}
+}
 
-	t.Run("terminology child overrides parent", func(t *testing.T) {
-		if got.Slots.Terminology[0].Definition != "from-child" {
-			t.Fatalf("terminology override failed: %v", got.Slots.Terminology)
-		}
-	})
-
-	t.Run("prose flows through from parent when child has none", func(t *testing.T) {
-		if got.Slots.Goals != "parent goals" {
-			t.Fatalf("goals = %q, want parent goals", got.Slots.Goals)
-		}
-	})
+// Spec metadata describes the child itself and is never inherited.
+func TestResolve_MetadataCarriedFromChild(t *testing.T) {
+	parent := &frames.Doc{
+		Name: "base", Version: "9.9.9", Visibility: "public",
+		Scope: "company", Maintainer: "platform", Body: "parent guidance",
+	}
+	child := &frames.Doc{
+		Name: "child", Description: "child desc", Version: "1.0.0",
+		Visibility: "private", Scope: "project", Maintainer: "data science",
+		Extends: []frames.ExtendRef{{Ref: "org/base", Version: "9.9.9"}},
+	}
+	f := newFakeFetcher(map[string]*frames.Doc{"org/base@9.9.9": parent})
+	got, err := frames.Resolve(context.Background(), f, child, child.Extends, child.Excludes)
+	if err != nil {
+		t.Fatalf("resolve: %v", err)
+	}
+	if got.Name != "child" || got.Description != "child desc" || got.Version != "1.0.0" ||
+		got.Visibility != "private" || got.Scope != "project" || got.Maintainer != "data science" {
+		t.Errorf("child metadata not carried through: %+v", got)
+	}
 }
 
 func TestResolve_CycleDetected(t *testing.T) {
@@ -86,10 +139,9 @@ func TestResolve_CycleDetected(t *testing.T) {
 }
 
 func TestResolve_Excludes(t *testing.T) {
-	parent := &frames.Doc{Name: "base", Version: "1"}
-	parent.Slots.Rules = []string{"excluded-rule"}
+	parent := &frames.Doc{Name: "base", Version: "1", Body: "excluded guidance"}
 	child := &frames.Doc{
-		Name: "child", Version: "1",
+		Name: "child", Version: "1", Body: "child guidance",
 		Extends:  []frames.ExtendRef{{Ref: "org/base", Version: "1"}},
 		Excludes: []string{"org/base"},
 	}
@@ -98,8 +150,8 @@ func TestResolve_Excludes(t *testing.T) {
 	if err != nil {
 		t.Fatalf("resolve: %v", err)
 	}
-	if len(got.Slots.Rules) != 0 {
-		t.Fatalf("excluded parent rules leaked: %v", got.Slots.Rules)
+	if got.Body != "child guidance" {
+		t.Fatalf("excluded parent body leaked: %q", got.Body)
 	}
 }
 

@@ -19,7 +19,7 @@ export const file_frames_v1_frame_service: GenFile = /*@__PURE__*/
  */
 export type PublishFrameRequest = Message<"frames.v1.PublishFrameRequest"> & {
   /**
-   * full YAML; name/version/extends/excludes/slots parsed server-side
+   * full YAML; metadata/extends/excludes/body parsed server-side
    *
    * @generated from field: bytes content = 1;
    */
@@ -300,7 +300,7 @@ export const ListFrameVersionsResponseSchema: GenMessage<ListFrameVersionsRespon
 
 /**
  * FieldViolation is one validation failure at a specific field path
- * (e.g. "slots.terminology[2].definition", matching backend validate.go paths).
+ * (e.g. "extends[0].version", matching backend validate.go paths).
  *
  * @generated from message frames.v1.FieldViolation
  */
@@ -347,7 +347,7 @@ export const FieldViolationsSchema: GenMessage<FieldViolations> = /*@__PURE__*/
 
 /**
  * ConvertFrame translates between the two representations of the same frame:
- * the canonical slot YAML stored in frame_versions.content, and the single
+ * the canonical YAML stored in frame_versions.content, and the single
  * Markdown file with YAML frontmatter defined by Frame Spec v0.2. It backs the
  * web app's Markdown editor, .frame.md import, and .frame.md export.
  *
@@ -696,7 +696,7 @@ export const FrameService: GenService<{
     output: typeof DeleteFrameResponseSchema;
   },
   /**
-   * Pure conversion between the canonical slot YAML and the spec-conformant
+   * Pure conversion between the canonical YAML and the spec-conformant
    * .frame.md form. Stateless and unauthenticated beyond org membership.
    *
    * @generated from rpc frames.v1.FrameService.ConvertFrame

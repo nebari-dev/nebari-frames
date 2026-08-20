@@ -1,8 +1,17 @@
 import { useQuery } from "@connectrpc/connect-query";
 import { FrameService } from "@gen/frames/v1/frame_service_pb";
 import { parseFrameContent } from "@/lib/frame-yaml";
-import { FrameSlots } from "@/components/slots/FrameSlots";
-import { Dialog, DialogContent, DialogTitle, DialogClose } from "@/components/ui/dialog";
+import { MarkdownView } from "@/components/MarkdownView";
+import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogClose,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 
 export function ResolvedPreview({
   org,
@@ -35,18 +44,23 @@ export function ResolvedPreview({
 
   let body;
   if (isLoading) body = <p className="text-muted-foreground">Resolving...</p>;
-  else if (error || parseError) body = <p className="text-destructive">{parseError ? "Resolved content could not be displayed." : "Could not resolve this frame."}</p>;
-  else if (parsedDoc) body = <FrameSlots doc={parsedDoc} />;
+  else if (error || parseError) body = <p className="text-destructive-foreground">{parseError ? "Resolved content could not be displayed." : "Could not resolve this frame."}</p>;
+  else if (parsedDoc) body = <MarkdownView source={parsedDoc.body} />;
 
   return (
     <Dialog open={open} onOpenChange={(o) => { if (!o) onClose(); }}>
-      <DialogContent>
-        <DialogTitle>Preview (resolved Frame)</DialogTitle>
-        <p className="mb-3 text-xs text-muted-foreground">
-          Reflects inheritance from the saved parents; unpublished edits in the form are not included.
-        </p>
-        {body}
-        <div className="mt-4 flex justify-end"><DialogClose onClose={onClose} /></div>
+      <DialogContent className="max-w-2xl">
+        <DialogHeader>
+          <DialogTitle>Preview (resolved Frame)</DialogTitle>
+          <DialogDescription>
+            Reflects inheritance from the saved parents; unpublished edits in the form are
+            not included.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="min-h-0 overflow-y-auto">{body}</div>
+        <DialogFooter>
+          <DialogClose render={<Button variant="outline" />}>Close</DialogClose>
+        </DialogFooter>
       </DialogContent>
     </Dialog>
   );

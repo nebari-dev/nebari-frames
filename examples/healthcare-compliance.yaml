@@ -4,11 +4,16 @@ version: 1.0.0
 visibility: internal
 scope: department
 maintainer: legal
-slots:
-  rules:
+body: |-
+    ## Rules
+
     - Never state or imply HIPAA compliance without legal sign-off.
     - Do not include PHI in any generated artifact.
-  norms: |
+
+    ## Norms
+
     When uncertain about a regulatory claim, flag it for SME review rather than asserting it.
-  business_process: |
+
+    ## Business Process
+
     All externally-facing compliance statements route through the compliance officer before release.

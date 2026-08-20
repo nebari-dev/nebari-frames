@@ -1,29 +1,50 @@
-import { useState } from "react";
-import { useFormContext, useWatch } from "react-hook-form";
+import { useFormContext } from "react-hook-form";
 import { Textarea } from "@/components/ui/textarea";
-import { Button } from "@/components/ui/button";
-import { MarkdownView } from "@/components/MarkdownView";
+import { cn } from "@/lib/utils";
 import { FieldError, useFieldError, errorProps } from "./FieldError";
+import { fillTextareaSlot } from "./fill-height";
 
-export function MarkdownField({ name }: { name: `slots.${string}` }) {
-  const { register, control } = useFormContext();
-  const [preview, setPreview] = useState(false);
-  const value = useWatch({ control, name }) as string | undefined;
+// A markdown textarea wired to the form: the content is authored and read as
+// raw markdown, so there is no rendered-preview mode.
+export function MarkdownField({
+  name,
+  rows = 6,
+  placeholder,
+  ariaLabel,
+  className,
+  fill = false,
+}: {
+  name: string;
+  rows?: number;
+  placeholder?: string;
+  ariaLabel?: string;
+  className?: string;
+  /**
+   * Stretch the textarea to fill the height its flex parent offers, instead of
+   * sizing to `rows`. The nested selectors reach the wrapper `Textarea` renders
+   * around the control, which has to become the flex child for the control
+   * itself to stretch.
+   */
+  fill?: boolean;
+}) {
+  const { register } = useFormContext();
   const error = useFieldError(name);
   return (
-    <div className="space-y-1">
-      <div className="flex justify-end">
-        <Button type="button" variant="ghost" size="sm" onClick={() => setPreview((p) => !p)}>
-          {preview ? "Edit" : "Preview"}
-        </Button>
-      </div>
-      {preview ? (
-        <div className="rounded-md border border-border p-3">
-          <MarkdownView source={value ?? ""} />
-        </div>
-      ) : (
-        <Textarea rows={6} {...register(name)} {...errorProps(name, error)} />
+    <div
+      className={cn(
+        "space-y-1",
+        fill &&
+          cn("flex min-h-0 flex-1 flex-col space-y-0 gap-1", fillTextareaSlot),
       )}
+    >
+      <Textarea
+        rows={fill ? undefined : rows}
+        placeholder={placeholder}
+        aria-label={ariaLabel}
+        className={cn(fill && "flex-1", className)}
+        {...register(name)}
+        {...errorProps(name, error)}
+      />
       <FieldError name={name} />
     </div>
   );

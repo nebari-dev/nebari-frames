@@ -8,8 +8,6 @@ scope: company
 maintainer: marketing
 ---
 
-# brand-voice
-
 ## Terminology
 
 - **customer**: An enterprise organization that has deployed an Intelligence Hub.

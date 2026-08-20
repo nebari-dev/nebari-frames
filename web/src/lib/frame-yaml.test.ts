@@ -8,24 +8,19 @@ version: 1.0.0
 extends:
   - ref: openteams/company-frame
     version: 1.2.0
-slots:
-  terminology:
-    - term: customer
-      definition: An enterprise organization
-  rules:
-    - Never claim performance numbers without data
-  goals: |
-    Be helpful and on-brand.
+body: |
+  Be helpful and on-brand.
+
+  Never claim performance numbers without data.
 `;
 
 describe("parseFrameContent", () => {
-  it("parses metadata, extends, and slots", () => {
+  it("parses metadata, extends, and the body", () => {
     const doc = parseFrameContent(yamlDoc);
     expect(doc.name).toBe("brand-voice");
     expect(doc.extends?.[0]).toEqual({ ref: "openteams/company-frame", version: "1.2.0" });
-    expect(doc.slots.terminology?.[0].term).toBe("customer");
-    expect(doc.slots.rules).toEqual(["Never claim performance numbers without data"]);
-    expect(doc.slots.goals).toContain("on-brand");
+    expect(doc.body).toContain("on-brand");
+    expect(doc.body).toContain("Never claim performance numbers without data.");
   });
 
   it("accepts a Uint8Array (the content wire type)", () => {
@@ -36,31 +31,43 @@ describe("parseFrameContent", () => {
   it("throws on malformed yaml", () => {
     expect(() => parseFrameContent("name: [unclosed")).toThrow();
   });
-});
 
-describe("serializeFrameDoc", () => {
-  it("round-trips a full frame to an equal doc", () => {
-    const yaml = `name: brand-voice
+  // Versions published under the retired ten-slot schema must keep rendering:
+  // a legacy slots: block folds into the body as the old markdown sections.
+  it("folds legacy slots into the body", () => {
+    const legacy = `
+name: brand-voice
 description: OpenTeams brand voice
 version: 1.0.0
-extends:
-  - ref: openteams/company
-    version: 1.2.0
 slots:
   terminology:
     - term: customer
       definition: An enterprise organization
   rules:
-    - Cite benchmarks.
+    - Never claim performance numbers without data
   goals: |
-    Be clear.
+    Be helpful and on-brand.
 `;
-    const doc = parseFrameContent(yaml);
+    const doc = parseFrameContent(legacy);
+    expect(doc.body).toContain("## Terminology");
+    expect(doc.body).toContain("- **customer**: An enterprise organization");
+    expect(doc.body).toContain("## Rules");
+    expect(doc.body).toContain("- Never claim performance numbers without data");
+    expect(doc.body).toContain("## Goals");
+    expect(doc.body).toContain("Be helpful and on-brand.");
+    // The legacy shape is read-only: serialization emits body, never slots.
+    expect(serializeFrameDoc(doc)).not.toMatch(/slots:/);
+  });
+});
+
+describe("serializeFrameDoc", () => {
+  it("round-trips a full frame to an equal doc", () => {
+    const doc = parseFrameContent(yamlDoc);
     const round = parseFrameContent(serializeFrameDoc(doc));
     expect(round).toEqual(doc);
   });
 
-  it("omits empty slots, arrays, and strings", () => {
+  it("omits empty body, arrays, and strings", () => {
     const doc: FrameDoc = {
       name: "minimal",
       description: "d",
@@ -68,12 +75,12 @@ slots:
       visibility: "",
       scope: "",
       maintainer: "",
-      slots: { rules: [], goals: "", terminology: [] },
+      template: false,
+      body: "",
     };
     const out = serializeFrameDoc(doc);
-    expect(out).not.toMatch(/rules/);
-    expect(out).not.toMatch(/goals/);
-    expect(out).not.toMatch(/terminology/);
+    expect(out).not.toMatch(/body/);
+    expect(out).not.toMatch(/template/);
     expect(out).not.toMatch(/visibility/);
     expect(out).not.toMatch(/scope/);
     expect(out).not.toMatch(/maintainer/);

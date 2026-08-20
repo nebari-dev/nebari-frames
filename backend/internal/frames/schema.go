@@ -15,27 +15,11 @@ type ExtendRef struct {
 	Version string `yaml:"version"`
 }
 
-// Term is a single vocabulary entry in the terminology slot.
-type Term struct {
-	Term       string `yaml:"term"`
-	Definition string `yaml:"definition"`
-}
-
-// Slots holds the ten content slots defined by the Frame schema.
-type Slots struct {
-	Terminology     []Term   `yaml:"terminology,omitempty"`
-	Rules           []string `yaml:"rules,omitempty"`
-	Skills          []string `yaml:"skills,omitempty"`
-	Prompts         []string `yaml:"prompts,omitempty"`
-	ToolSpecs       string   `yaml:"tool_specs,omitempty"`
-	Goals           string   `yaml:"goals,omitempty"`
-	Style           string   `yaml:"style,omitempty"`
-	Norms           string   `yaml:"norms,omitempty"`
-	Architecture    string   `yaml:"architecture,omitempty"`
-	BusinessProcess string   `yaml:"business_process,omitempty"`
-}
-
 // Doc is the parsed representation of a Frame YAML document.
+//
+// The content of a Frame is a single free-form markdown Body, matching Frame
+// Spec v0.2: the spec requires four frontmatter fields and defines no body
+// structure at all.
 //
 // Visibility, Scope, and Maintainer carry the Frame Spec v0.2 metadata fields
 // through the canonical form so the .frame.md codec round-trips them. They are
@@ -51,19 +35,34 @@ type Doc struct {
 	Maintainer  string      `yaml:"maintainer,omitempty"`
 	Extends     []ExtendRef `yaml:"extends,omitempty"`
 	Excludes    []string    `yaml:"excludes,omitempty"`
-	Slots       Slots       `yaml:"slots"`
+	// Template marks this Frame as a starting point offered by the authoring
+	// UI's template picker. Registry metadata, not spec metadata: it exports
+	// as x-nebari-template in the .frame.md form.
+	Template bool   `yaml:"template,omitempty"`
+	Body     string `yaml:"body,omitempty"`
+}
+
+// docYAML is the on-disk decode shape. It accepts the legacy `slots:` key so
+// documents published before the free-form body still parse; see legacy.go.
+type docYAML struct {
+	Doc   `yaml:",inline"`
+	Slots *legacySlots `yaml:"slots,omitempty"`
 }
 
 // Parse decodes YAML content into a Doc. Unknown keys are rejected because the
-// Frame schema is fixed and not extensible.
+// Frame schema is fixed and not extensible. A legacy `slots:` block is folded
+// into Body so versions published under the slot schema remain readable.
 func Parse(content []byte) (*Doc, error) {
-	var d Doc
+	var d docYAML
 	dec := yaml.NewDecoder(newReader(content))
-	dec.KnownFields(true) // reject unknown top-level/slot keys: schema is fixed
+	dec.KnownFields(true) // reject unknown top-level keys: schema is fixed
 	if err := dec.Decode(&d); err != nil {
 		return nil, fmt.Errorf("parse frame yaml: %w", err)
 	}
-	return &d, nil
+	if d.Slots != nil && d.Body == "" {
+		d.Body = d.Slots.renderMarkdown()
+	}
+	return &d.Doc, nil
 }
 
 // Marshal encodes a Doc to YAML.

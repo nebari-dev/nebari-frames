@@ -213,6 +213,7 @@ func (s *Service) publish(ctx context.Context, caller rbac.Caller, doc *Doc, con
 		frame = &framesv1.Frame{
 			Id: newID(), OrgId: caller.OrgID, Name: doc.Name, Description: doc.Description,
 			OwnerSub: caller.Subject, LatestVersion: doc.Version, CreatedAt: now, UpdatedAt: now,
+			IsTemplate: doc.Template,
 		}
 	} else {
 		// editing an existing frame requires edit permission
@@ -248,6 +249,7 @@ func (s *Service) publish(ctx context.Context, caller rbac.Caller, doc *Doc, con
 		frame.Description = doc.Description
 		frame.LatestVersion = doc.Version
 		frame.UpdatedAt = now
+		frame.IsTemplate = doc.Template
 	}
 
 	edges, err := s.resolveEdges(ctx, caller, org.Slug, doc.Extends)
@@ -333,7 +335,7 @@ func (s *Service) ListFrames(ctx context.Context, _ *connect.Request[framesv1.Li
 		}
 		resp.Frames = append(resp.Frames, &framesv1.FrameSummary{
 			OrgSlug: org.Slug, Name: f.Name, Description: f.Description, OwnerSub: f.OwnerSub,
-			LatestVersion: f.LatestVersion, UpdatedAt: f.UpdatedAt,
+			LatestVersion: f.LatestVersion, UpdatedAt: f.UpdatedAt, IsTemplate: f.IsTemplate,
 			Permissions: &framesv1.Permissions{CanEdit: canEdit, CanDelete: canDelete},
 		})
 	}
@@ -641,8 +643,8 @@ func (f *readFetcher) FetchParent(ctx context.Context, ref, version string) (*Do
 // violationErr maps a *ValidationError onto an InvalidArgument Connect error
 // carrying FieldViolations, so a client can attach each failure to the input
 // that caused it. Shared by PublishFrame (value errors, paths like
-// "slots.terminology[2].definition") and ConvertFrame (markdown structure
-// errors, path "markdown").
+// "extends[0].version") and ConvertFrame (markdown structure errors, path
+// "markdown").
 func violationErr(err error) *connect.Error {
 	cerr := connect.NewError(connect.CodeInvalidArgument, err)
 	var ve *ValidationError
@@ -660,7 +662,7 @@ func violationErr(err error) *connect.Error {
 	return cerr
 }
 
-// ConvertFrame translates between the canonical slot YAML and the .frame.md
+// ConvertFrame translates between the canonical YAML and the .frame.md
 // interchange format defined by Frame Spec v0.2. It is a pure function of its
 // input - it touches no storage - so it requires only that the caller is a
 // member of an org. It backs the web app's markdown editor, import, and export.

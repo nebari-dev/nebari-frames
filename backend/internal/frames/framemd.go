@@ -12,14 +12,13 @@ import (
 // This file implements the .frame.md interchange format: the single-Markdown-
 // file-with-YAML-frontmatter shape defined by Frame Spec v0.2
 // (https://github.com/openteams-ai/frame-spec). The canonical stored form
-// remains the slot YAML in schema.go; this is a lossless codec on top of it.
+// remains the YAML in schema.go; this is a lossless codec on top of it.
 //
-// Parsing is strict about *structure* (frontmatter delimiters, unknown keys,
-// unknown section headings, malformed bullets) because guessing would silently
-// mangle an author's content. It is deliberately lenient about *values*:
-// an empty description or an unpinned `inherits` ref produces a Doc that
-// Validate then rejects, so the error lands on the relevant form field where it
-// can be fixed, rather than blocking the import outright.
+// The spec requires four frontmatter fields and leaves the body entirely
+// free-form, so the codec is simple: frontmatter maps to Doc metadata and
+// everything after the closing --- is the body, verbatim. Parsing is strict
+// about the frontmatter block (delimiters, unknown keys) because guessing
+// would silently mangle an author's metadata; the body is never rejected.
 
 // SpecVersion is the Frame Spec release this codec reads and writes.
 const SpecVersion = "0.2"
@@ -34,9 +33,6 @@ const DefaultVisibility = "internal"
 // (tools/validate_frames.py): `frame` or `frame [<major>.<minor>]`.
 var typeRe = regexp.MustCompile(`^frame(?: \[\d+\.\d+\])?$`)
 
-// termRe matches a rendered terminology bullet body: "**term**: definition".
-var termRe = regexp.MustCompile(`(?s)^\*\*(.+?)\*\*:[ \t]?(.*)$`)
-
 // unknownKeyRe extracts the offending key from a yaml.v3 KnownFields error.
 var unknownKeyRe = regexp.MustCompile(`line (\d+): field (\S+) not found`)
 
@@ -44,31 +40,8 @@ var unknownKeyRe = regexp.MustCompile(`line (\d+): field (\S+) not found`)
 // messages. Keep in sync with the frontmatter struct below.
 var frontmatterKeys = []string{
 	"type", "name", "description", "visibility",
-	"version", "scope", "maintainer", "inherits", "x-nebari-excludes",
-}
-
-// headingHints points common headings from frames authored elsewhere at the
-// closest slot. These only enrich the rejection message; nothing is ever mapped
-// automatically, because silently relocating an author's content is worse than
-// telling them where it belongs.
-var headingHints = map[string]string{
-	"ways of working": "Norms",
-	"how we work":     "Norms",
-	"conventions":     "Norms",
-	"constraints":     "Rules",
-	"guardrails":      "Rules",
-	"policies":        "Rules",
-	"vocabulary":      "Terminology",
-	"glossary":        "Terminology",
-	"definitions":     "Terminology",
-	"voice":           "Style",
-	"tone":            "Style",
-	"objectives":      "Goals",
-	"purpose":         "Goals",
-	"process":         "Business Process",
-	"workflow":        "Business Process",
-	"tools":           "Tool Specifications",
-	"tooling":         "Tool Specifications",
+	"version", "scope", "maintainer", "inherits",
+	"x-nebari-excludes", "x-nebari-template",
 }
 
 // stringOrSlice accepts either a scalar or a sequence, both of which Frame Spec
@@ -106,12 +79,15 @@ type frontmatter struct {
 	Scope       string        `yaml:"scope,omitempty"`
 	Maintainer  string        `yaml:"maintainer,omitempty"`
 	Inherits    stringOrSlice `yaml:"inherits,omitempty"`
-	// Excludes has no Frame Spec equivalent, so it lives in an `x-` namespace
-	// as the spec advises implementations to do for their own fields.
+	// Excludes and Template have no Frame Spec equivalent, so they live in an
+	// `x-` namespace as the spec advises implementations to do for their own
+	// fields.
 	Excludes stringOrSlice `yaml:"x-nebari-excludes,omitempty"`
+	Template bool          `yaml:"x-nebari-template,omitempty"`
 }
 
-// MarshalMarkdown renders a Doc as a spec-conformant .frame.md document.
+// MarshalMarkdown renders a Doc as a spec-conformant .frame.md document. The
+// body passes through verbatim, so export followed by import is lossless.
 func MarshalMarkdown(doc *Doc) ([]byte, error) {
 	fm := frontmatter{
 		Type:        MarkdownType,
@@ -122,6 +98,7 @@ func MarshalMarkdown(doc *Doc) ([]byte, error) {
 		Scope:       doc.Scope,
 		Maintainer:  doc.Maintainer,
 		Excludes:    doc.Excludes,
+		Template:    doc.Template,
 	}
 	if fm.Visibility == "" {
 		fm.Visibility = DefaultVisibility
@@ -142,62 +119,17 @@ func MarshalMarkdown(doc *Doc) ([]byte, error) {
 	var b strings.Builder
 	b.WriteString("---\n")
 	b.Write(head)
-	b.WriteString("---\n\n")
-	if doc.Name != "" {
-		fmt.Fprintf(&b, "# %s\n\n", doc.Name)
-	}
-	for _, d := range SlotTable {
-		writeSlot(&b, d, &doc.Slots)
-	}
-	return []byte(strings.TrimRight(b.String(), "\n") + "\n"), nil
-}
-
-func writeSlot(b *strings.Builder, d SlotDescriptor, s *Slots) {
-	switch d.Kind {
-	case SlotTerms:
-		if len(s.Terminology) == 0 {
-			return
-		}
-		fmt.Fprintf(b, "## %s\n\n", d.Heading)
-		for _, t := range s.Terminology {
-			WriteBullet(b, fmt.Sprintf("**%s**: %s", t.Term, t.Definition))
-		}
+	b.WriteString("---\n")
+	if body := strings.Trim(doc.Body, "\n"); body != "" {
 		b.WriteString("\n")
-	case SlotList:
-		items := s.List(d.Key)
-		if len(items) == 0 {
-			return
-		}
-		fmt.Fprintf(b, "## %s\n\n", d.Heading)
-		for _, it := range items {
-			WriteBullet(b, it)
-		}
+		b.WriteString(body)
 		b.WriteString("\n")
-	case SlotProse:
-		body := s.Prose(d.Key)
-		if strings.TrimSpace(body) == "" {
-			return
-		}
-		fmt.Fprintf(b, "## %s\n\n%s\n\n", d.Heading, strings.Trim(body, "\n"))
 	}
-}
-
-// WriteBullet renders one list item as a markdown bullet. Continuation lines
-// are indented two spaces so a multi-line item stays part of that item instead
-// of terminating the list, and so it round-trips back to the same string.
-func WriteBullet(b *strings.Builder, item string) {
-	lines := strings.Split(strings.Trim(item, "\n"), "\n")
-	fmt.Fprintf(b, "- %s\n", lines[0])
-	for _, l := range lines[1:] {
-		if strings.TrimSpace(l) == "" {
-			b.WriteString("\n")
-			continue
-		}
-		fmt.Fprintf(b, "  %s\n", l)
-	}
+	return []byte(b.String()), nil
 }
 
 // UnmarshalMarkdown parses a .frame.md document into a Doc. Structural problems
+// (all in the frontmatter block - the body is free-form and never rejected)
 // are returned as a *ValidationError whose paths are all "markdown" and whose
 // messages carry the 1-based line number, so the web editor can surface them
 // against the source. Value-level problems are left for Validate.
@@ -254,6 +186,9 @@ func UnmarshalMarkdown(content []byte) (*Doc, error) {
 	case !typeRe.MatchString(fm.Type):
 		add(start+1, "type must be \"frame\" or \"frame [<major>.<minor>]\" (for example %q), got %q", MarkdownType, fm.Type)
 	}
+	if len(errs) > 0 {
+		return nil, fail()
+	}
 
 	doc := &Doc{
 		Name:        fm.Name,
@@ -263,89 +198,11 @@ func UnmarshalMarkdown(content []byte) (*Doc, error) {
 		Scope:       fm.Scope,
 		Maintainer:  fm.Maintainer,
 		Excludes:    fm.Excludes,
+		Template:    fm.Template,
+		Body:        strings.Trim(strings.Join(lines[end+1:], "\n"), "\n"),
 	}
 	for _, ref := range fm.Inherits {
 		doc.Extends = append(doc.Extends, parseInherit(ref))
-	}
-
-	// --- body ---
-	body := lines[end+1:]
-	bodyOffset := end + 2 // 1-based file line number of body[0]
-
-	var heads []int
-	for idx, l := range body {
-		if strings.HasPrefix(l, "## ") {
-			heads = append(heads, idx)
-		}
-	}
-
-	preEnd := len(body)
-	if len(heads) > 0 {
-		preEnd = heads[0]
-	}
-	seenH1 := false
-	for idx := 0; idx < preEnd; idx++ {
-		t := strings.TrimSpace(body[idx])
-		if t == "" {
-			continue
-		}
-		if !seenH1 && strings.HasPrefix(t, "# ") {
-			seenH1 = true // the title heading; the name comes from frontmatter
-			continue
-		}
-		add(bodyOffset+idx, "content before the first section heading; frame body content must sit under a recognized \"## \" section")
-		break
-	}
-
-	seen := map[string]bool{}
-	for h, hi := range heads {
-		stop := len(body)
-		if h+1 < len(heads) {
-			stop = heads[h+1]
-		}
-		heading := strings.TrimSpace(strings.TrimPrefix(body[hi], "## "))
-		d, ok := SlotByHeading(heading)
-		if !ok {
-			add(bodyOffset+hi, "unknown section \"## %s\"%s — recognized sections are: %s",
-				heading, hint(heading), strings.Join(Headings(), ", "))
-			continue
-		}
-		if seen[d.Key] {
-			add(bodyOffset+hi, "duplicate section \"## %s\"", heading)
-			continue
-		}
-		seen[d.Key] = true
-
-		content := body[hi+1 : stop]
-		switch d.Kind {
-		case SlotTerms:
-			items, starts, stray := parseBullets(content, bodyOffset+hi+1)
-			for _, ln := range stray {
-				add(ln, "unexpected content in \"## %s\" — every entry must be a \"- **term**: definition\" bullet", heading)
-			}
-			for n, it := range items {
-				m := termRe.FindStringSubmatch(it)
-				if m == nil {
-					add(starts[n], "malformed terminology entry — expected \"- **term**: definition\"")
-					continue
-				}
-				doc.Slots.Terminology = append(doc.Slots.Terminology, Term{
-					Term: strings.TrimSpace(m[1]), Definition: strings.TrimSpace(m[2]),
-				})
-			}
-		case SlotList:
-			items, _, stray := parseBullets(content, bodyOffset+hi+1)
-			for _, ln := range stray {
-				add(ln, "unexpected content in \"## %s\" — every entry must be a \"- item\" bullet", heading)
-			}
-			doc.Slots.SetList(d.Key, items)
-		case SlotProse:
-			doc.Slots.SetProse(d.Key, strings.Trim(strings.Join(content, "\n"), "\n"))
-		}
-	}
-
-	if len(errs) > 0 {
-		return nil, fail()
 	}
 	return doc, nil
 }
@@ -358,51 +215,6 @@ func parseInherit(ref string) ExtendRef {
 		return ExtendRef{Ref: ref[:at], Version: ref[at+1:]}
 	}
 	return ExtendRef{Ref: ref}
-}
-
-// parseBullets splits a section body into list items. Lines indented two spaces
-// continue the preceding item (the inverse of WriteBullet). base is the 1-based
-// file line number of content[0]; stray holds lines that are neither.
-func parseBullets(content []string, base int) (items []string, starts, stray []int) {
-	var cur []string
-	flush := func() {
-		if cur != nil {
-			items = append(items, strings.Trim(strings.Join(cur, "\n"), "\n"))
-			cur = nil
-		}
-	}
-	for i, l := range content {
-		switch {
-		case strings.HasPrefix(l, "- "):
-			flush()
-			starts = append(starts, base+i)
-			cur = []string{strings.TrimPrefix(l, "- ")}
-		case strings.TrimSpace(l) == "":
-			if cur != nil {
-				cur = append(cur, "")
-			}
-		case strings.HasPrefix(l, "  ") && cur != nil:
-			cur = append(cur, strings.TrimPrefix(l, "  "))
-		default:
-			stray = append(stray, base+i)
-		}
-	}
-	flush()
-	return items, starts, stray
-}
-
-// hint suggests the closest recognized section for a rejected heading.
-func hint(heading string) string {
-	k := strings.ToLower(strings.TrimSpace(heading))
-	for _, d := range SlotTable {
-		if strings.EqualFold(d.Heading, k) {
-			return fmt.Sprintf(" — did you mean \"## %s\"?", d.Heading)
-		}
-	}
-	if h, ok := headingHints[k]; ok {
-		return fmt.Sprintf(" — did you mean \"## %s\"?", h)
-	}
-	return ""
 }
 
 // frontmatterErr turns a yaml.v3 decode failure into a message that names the

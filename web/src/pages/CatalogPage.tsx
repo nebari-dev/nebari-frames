@@ -7,6 +7,7 @@ import { filterFrames } from "@/lib/filter";
 import { FramesTable } from "@/components/frame/FramesTable";
 import { FrameHierarchyView } from "@/components/frame/FrameHierarchyView";
 import { useFrameHierarchy } from "./useFrameHierarchy";
+import { PageHeader } from "@/components/layout/PageHeader";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
@@ -15,19 +16,20 @@ import { cn } from "@/lib/utils";
 
 const CARD_GRID = "grid gap-4 [grid-template-columns:repeat(auto-fill,minmax(20rem,1fr))]";
 
-const VIEWS = ["cards", "table", "hierarchy"] as const;
+const VIEWS = ["table", "cards", "hierarchy"] as const;
 type View = (typeof VIEWS)[number];
 
+// Table is the primary view: it leads the toggle and is the URL-less default.
 const VIEW_META: { value: View; label: string; icon: typeof LayoutGrid }[] = [
-  { value: "cards", label: "Cards", icon: LayoutGrid },
   { value: "table", label: "Table", icon: Table2 },
+  { value: "cards", label: "Cards", icon: LayoutGrid },
   { value: "hierarchy", label: "Hierarchy", icon: GitFork },
 ];
 
 export function CatalogPage() {
   const [query, setQuery] = useState("");
   const [params, setParams] = useSearchParams();
-  const view: View = VIEWS.includes(params.get("view") as View) ? (params.get("view") as View) : "cards";
+  const view: View = VIEWS.includes(params.get("view") as View) ? (params.get("view") as View) : "table";
   const focus = params.get("focus") ?? "";
 
   const { data, isLoading, error } = useQuery(FrameService.method.listFrames, {});
@@ -36,7 +38,7 @@ export function CatalogPage() {
     setParams(
       (prev) => {
         const p = new URLSearchParams(prev);
-        if (next === "cards") p.delete("view");
+        if (next === "table") p.delete("view");
         else p.set("view", next);
         if (next !== "hierarchy") p.delete("focus");
         return p;
@@ -50,23 +52,21 @@ export function CatalogPage() {
 
   return (
     <div className="space-y-6 motion-safe:animate-fade-in">
-      <div className="space-y-1">
-        <h1 className="text-2xl font-semibold tracking-tight text-foreground">Frames</h1>
-        <p className="text-sm text-muted-foreground">
-          Browse, author, and connect your organization's Frames.
-        </p>
-      </div>
+      <PageHeader
+        title="Frames"
+        description="Browse, author, and connect your organization's Frames."
+      />
 
       <div className="flex flex-wrap items-center justify-between gap-4">
         {showSearch && (
           <div className="relative w-full max-w-[41rem]">
-            <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+            <Search className="pointer-events-none absolute left-3 top-1/2 z-10 size-4 -translate-y-1/2 text-muted-foreground" />
             <Input
               type="search"
               placeholder="Search frames…"
               value={query}
               onChange={(e) => setQuery(e.target.value)}
-              className="h-9 pl-9"
+              className="pl-9"
             />
           </div>
         )}
@@ -78,7 +78,7 @@ export function CatalogPage() {
                   frame, not a hidden alternative to starting from scratch. */}
               <Button variant="outline" render={<Link to="/frames/new?import=1" />}>
                 <Upload />
-                Import .frame.md
+                Import Frame
               </Button>
               <Button render={<Link to="/frames/new" />}>
                 <Plus />
@@ -96,7 +96,7 @@ export function CatalogPage() {
           {Array.from({ length: 6 }).map((_, i) => <Skeleton key={i} className="h-28" />)}
         </div>
       ) : error ? (
-        <p className="text-destructive">Could not load frames.</p>
+        <p className="text-destructive-foreground">Could not load frames.</p>
       ) : frames.length === 0 ? (
         <p className="text-muted-foreground">No frames found.</p>
       ) : view === "table" ? (
@@ -152,7 +152,7 @@ function HierarchyView({ focus }: { focus: string }) {
   const { graph, isLoading, error } = useFrameHierarchy();
 
   if (isLoading) return <Skeleton className="h-96 w-full" />;
-  if (error) return <p className="text-destructive">Could not load the frame hierarchy.</p>;
+  if (error) return <p className="text-destructive-foreground">Could not load the frame hierarchy.</p>;
   if (!graph || graph.nodes.length === 0) return <p className="text-muted-foreground">No frames found.</p>;
 
   return (

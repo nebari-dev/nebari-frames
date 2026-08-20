@@ -37,9 +37,8 @@ func seedSecondOrg(t *testing.T, repo *store.Memory, sub, role string) context.C
 const sampleFrame = `name: brand-voice
 description: OpenTeams brand voice
 version: 1.0.0
-slots:
-  rules:
-    - Cite benchmarks.
+body: |
+  Cite benchmarks.
 `
 
 func TestService_PublishThenGet(t *testing.T) {
@@ -58,6 +57,51 @@ func TestService_PublishThenGet(t *testing.T) {
 	}
 	if resp.Msg.Frame.Name != "brand-voice" || !resp.Msg.Permissions.CanEdit {
 		t.Fatalf("unexpected get response: %+v", resp.Msg)
+	}
+}
+
+// The doc's `template` field denormalizes onto the frame record at publish
+// time, in both directions, so template pickers can list without parsing
+// content blobs.
+func TestService_TemplateFlagDenormalized(t *testing.T) {
+	const asTemplate = `name: starter
+description: A starting point
+version: 1.0.0
+template: true
+body: |
+  Guidance.
+`
+	const notTemplate = `name: starter
+description: A starting point
+version: 1.1.0
+body: |
+  Guidance.
+`
+	repo := store.NewMemory()
+	pubCtx := seedOrg(t, repo, "pub", "publisher")
+	svc := frames.NewService(repo)
+
+	if _, err := svc.PublishFrame(pubCtx, connect.NewRequest(&framesv1.PublishFrameRequest{Content: []byte(asTemplate)})); err != nil {
+		t.Fatalf("publish: %v", err)
+	}
+	list, err := svc.ListFrames(pubCtx, connect.NewRequest(&framesv1.ListFramesRequest{}))
+	if err != nil {
+		t.Fatalf("list: %v", err)
+	}
+	if len(list.Msg.Frames) != 1 || !list.Msg.Frames[0].IsTemplate {
+		t.Fatalf("expected the frame to list as a template: %+v", list.Msg.Frames)
+	}
+
+	// Publishing a new version without the flag clears it.
+	if _, err := svc.PublishFrame(pubCtx, connect.NewRequest(&framesv1.PublishFrameRequest{Content: []byte(notTemplate)})); err != nil {
+		t.Fatalf("publish v1.1.0: %v", err)
+	}
+	got, err := svc.GetFrame(pubCtx, connect.NewRequest(&framesv1.GetFrameRequest{OrgSlug: "openteams", Name: "starter"}))
+	if err != nil {
+		t.Fatalf("get: %v", err)
+	}
+	if got.Msg.Frame.IsTemplate {
+		t.Error("template flag should clear when the latest version drops it")
 	}
 }
 
@@ -92,9 +136,8 @@ func TestService_CrossOrgGetIs404(t *testing.T) {
 const parentFrame = `name: base-voice
 description: Base voice frame
 version: 1.0.0
-slots:
-  rules:
-    - Always cite sources.
+body: |
+  Always cite sources.
 `
 
 const childWithSameOrgRef = `name: brand-voice
@@ -103,14 +146,13 @@ version: 1.0.0
 extends:
   - ref: openteams/base-voice
     version: 1.0.0
-slots:
-  rules:
-    - Cite benchmarks.
+body: |
+  Cite benchmarks.
 `
 
 // TestService_ResolveSameOrgParent verifies that a child frame extending a
 // same-org parent resolves successfully and pulls in the parent's contributed
-// slot content. The readFetcher resolves each parent ref against the caller's
+// body content. The readFetcher resolves each parent ref against the caller's
 // org slug (mirroring PublishFrame); previously it used an empty fallback org
 // slug, a latent break for any same-org ref that omits the slug prefix.
 //
@@ -135,13 +177,13 @@ func TestService_ResolveSameOrgParent(t *testing.T) {
 	if err != nil {
 		t.Fatalf("resolve: %v", err)
 	}
-	// The resolved YAML must include the parent's contributed rule.
+	// The resolved YAML must include the parent's contributed guidance.
 	if !bytes.Contains(resp.Msg.ResolvedContent, []byte("Always cite sources.")) {
-		t.Fatalf("resolved content missing parent rule; got:\n%s", resp.Msg.ResolvedContent)
+		t.Fatalf("resolved content missing parent guidance; got:\n%s", resp.Msg.ResolvedContent)
 	}
-	// And the child's own rule.
+	// And the child's own guidance.
 	if !bytes.Contains(resp.Msg.ResolvedContent, []byte("Cite benchmarks.")) {
-		t.Fatalf("resolved content missing child rule; got:\n%s", resp.Msg.ResolvedContent)
+		t.Fatalf("resolved content missing child guidance; got:\n%s", resp.Msg.ResolvedContent)
 	}
 }
 
@@ -154,9 +196,8 @@ func TestService_CrossOrgParentReadEnforcement(t *testing.T) {
 	const secretFrameYAML = `name: secret
 description: Secret frame for org B
 version: 1.0.0
-slots:
-  rules:
-    - Internal only.
+body: |
+  Internal only.
 `
 	// childExtending builds a publishable child frame YAML that extends the
 	// given fully-qualified ref (e.g. "acme/secret") at version 1.0.0.
@@ -167,9 +208,8 @@ version: 1.0.0
 extends:
   - ref: ` + ref + `
     version: 1.0.0
-slots:
-  rules:
-    - Some rule.
+body: |
+  Some rule.
 `)
 	}
 
@@ -218,17 +258,14 @@ func TestListFrameVersions(t *testing.T) {
 	const v1Frame = `name: brand-voice
 description: OpenTeams brand voice
 version: 1.0.0
-slots:
-  rules:
-    - Cite benchmarks.
+body: |
+  Cite benchmarks.
 `
 	const v2Frame = `name: brand-voice
 description: OpenTeams brand voice
 version: 1.1.0
-slots:
-  rules:
-    - Cite benchmarks.
-    - Use data.
+body: |
+  Cite benchmarks. Use data.
 `
 	tests := []struct {
 		name      string
@@ -294,13 +331,13 @@ func TestService_GetMeReportsRole(t *testing.T) {
 }
 
 func TestPublishFrame_ValidationErrorDetail(t *testing.T) {
-	// An invalid doc: bad name (uppercase), empty description, empty version.
+	// An invalid doc: bad name (uppercase), empty description, empty version,
+	// unpinned extends ref.
 	const badFrame = `name: Bad_Name
 description: ""
 version: ""
-slots:
-  rules:
-    - ""
+extends:
+  - ref: noslash
 `
 	tests := []struct {
 		name      string
@@ -309,7 +346,7 @@ slots:
 		{name: "bad name reported", wantField: "name"},
 		{name: "empty description reported", wantField: "description"},
 		{name: "empty version reported", wantField: "version"},
-		{name: "empty rule reported", wantField: "slots.rules[0]"},
+		{name: "bad extends ref reported", wantField: "extends[0].ref"},
 	}
 
 	repo := store.NewMemory()
@@ -365,7 +402,7 @@ func seedReadableFrameDirect(t *testing.T, repo *store.Memory, ctx context.Conte
 		},
 		Version: &framesv1.FrameVersion{
 			Version:     "1.0.0",
-			Content:     []byte("name: alpha\ndescription: A\nversion: 1.0.0\nslots:\n  rules:\n    - r1\n"),
+			Content:     []byte("name: alpha\ndescription: A\nversion: 1.0.0\nbody: |\n  r1\n"),
 			PublishedAt: timestamppb.Now(),
 		},
 		Grants:     []store.Grant{{SubjectType: "org", SubjectID: "o1", Permission: "read"}},
@@ -387,7 +424,7 @@ func seedUnreadableFrameDirect(t *testing.T, repo *store.Memory, ctx context.Con
 		},
 		Version: &framesv1.FrameVersion{
 			Version:     "1.0.0",
-			Content:     []byte("name: secret\ndescription: S\nversion: 1.0.0\nslots:\n  rules:\n    - hidden\n"),
+			Content:     []byte("name: secret\ndescription: S\nversion: 1.0.0\nbody: |\n  hidden\n"),
 			PublishedAt: timestamppb.Now(),
 		},
 		Grants:     []store.Grant{{SubjectType: "user", SubjectID: "someone-else", Permission: "read"}},
@@ -450,9 +487,10 @@ func TestConvertFrame_YamlToMarkdown(t *testing.T) {
 description: Voice guardrails.
 version: 1.0.0
 visibility: internal
-slots:
-  rules:
-    - Cite benchmarks.
+body: |
+  ## Rules
+
+  - Cite benchmarks.
 `
 	repo := store.NewMemory()
 	ctx := seedOrg(t, repo, "pub", "publisher")
@@ -520,11 +558,10 @@ type: frame [0.2]
 name: c
 description: d
 visibility: internal
+owner: bob
 ---
 
-## Ways of Working
-
-- something
+Some guidance.
 `
 	repo := store.NewMemory()
 	ctx := seedOrg(t, repo, "pub", "publisher")
@@ -554,7 +591,7 @@ visibility: internal
 			continue
 		}
 		for _, v := range fv.Violations {
-			if v.Field == "markdown" && strings.Contains(v.Message, "did you mean \"## Norms\"?") {
+			if v.Field == "markdown" && strings.Contains(v.Message, "unknown frontmatter key \"owner\"") {
 				found = true
 			}
 		}
@@ -570,7 +607,7 @@ func TestConvertFrame_RequiresMembership(t *testing.T) {
 	repo := store.NewMemory()
 	svc := frames.NewService(repo)
 	_, err := svc.ConvertFrame(context.Background(), connect.NewRequest(&framesv1.ConvertFrameRequest{
-		Source: &framesv1.ConvertFrameRequest_Yaml{Yaml: []byte("name: c\ndescription: d\nversion: 1.0.0\nslots: {}\n")},
+		Source: &framesv1.ConvertFrameRequest_Yaml{Yaml: []byte("name: c\ndescription: d\nversion: 1.0.0\nbody: text\n")},
 	}))
 	if err == nil {
 		t.Fatal("want error for a caller with no org membership")

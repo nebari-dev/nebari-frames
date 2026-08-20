@@ -176,6 +176,9 @@ type Frame struct {
 	LatestVersion string                 `protobuf:"bytes,6,opt,name=latest_version,json=latestVersion,proto3" json:"latest_version,omitempty"`
 	CreatedAt     *timestamppb.Timestamp `protobuf:"bytes,7,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
 	UpdatedAt     *timestamppb.Timestamp `protobuf:"bytes,8,opt,name=updated_at,json=updatedAt,proto3" json:"updated_at,omitempty"`
+	// Offered as a starting point in the "start from a template" picker.
+	// Denormalized from the latest version's `template` field at publish time.
+	IsTemplate    bool `protobuf:"varint,9,opt,name=is_template,json=isTemplate,proto3" json:"is_template,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -264,6 +267,13 @@ func (x *Frame) GetUpdatedAt() *timestamppb.Timestamp {
 		return x.UpdatedAt
 	}
 	return nil
+}
+
+func (x *Frame) GetIsTemplate() bool {
+	if x != nil {
+		return x.IsTemplate
+	}
+	return false
 }
 
 type ParentRef struct {
@@ -471,6 +481,7 @@ type FrameSummary struct {
 	LatestVersion string                 `protobuf:"bytes,5,opt,name=latest_version,json=latestVersion,proto3" json:"latest_version,omitempty"`
 	UpdatedAt     *timestamppb.Timestamp `protobuf:"bytes,6,opt,name=updated_at,json=updatedAt,proto3" json:"updated_at,omitempty"`
 	Permissions   *Permissions           `protobuf:"bytes,7,opt,name=permissions,proto3" json:"permissions,omitempty"`
+	IsTemplate    bool                   `protobuf:"varint,8,opt,name=is_template,json=isTemplate,proto3" json:"is_template,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -552,6 +563,13 @@ func (x *FrameSummary) GetPermissions() *Permissions {
 		return x.Permissions
 	}
 	return nil
+}
+
+func (x *FrameSummary) GetIsTemplate() bool {
+	if x != nil {
+		return x.IsTemplate
+	}
+	return false
 }
 
 type FrameVersionSummary struct {
@@ -639,7 +657,7 @@ const file_frames_v1_frame_proto_rawDesc = "" +
 	"\buser_sub\x18\x02 \x01(\tR\auserSub\x12\x12\n" +
 	"\x04role\x18\x03 \x01(\tR\x04role\x125\n" +
 	"\badded_at\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampR\aaddedAt\x12\x14\n" +
-	"\x05email\x18\x05 \x01(\tR\x05email\"\x9e\x02\n" +
+	"\x05email\x18\x05 \x01(\tR\x05email\"\xbf\x02\n" +
 	"\x05Frame\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x15\n" +
 	"\x06org_id\x18\x02 \x01(\tR\x05orgId\x12\x12\n" +
@@ -650,7 +668,9 @@ const file_frames_v1_frame_proto_rawDesc = "" +
 	"\n" +
 	"created_at\x18\a \x01(\v2\x1a.google.protobuf.TimestampR\tcreatedAt\x129\n" +
 	"\n" +
-	"updated_at\x18\b \x01(\v2\x1a.google.protobuf.TimestampR\tupdatedAt\"7\n" +
+	"updated_at\x18\b \x01(\v2\x1a.google.protobuf.TimestampR\tupdatedAt\x12\x1f\n" +
+	"\vis_template\x18\t \x01(\bR\n" +
+	"isTemplate\"7\n" +
 	"\tParentRef\x12\x10\n" +
 	"\x03ref\x18\x01 \x01(\tR\x03ref\x12\x18\n" +
 	"\aversion\x18\x02 \x01(\tR\aversion\"\xf9\x01\n" +
@@ -666,7 +686,7 @@ const file_frames_v1_frame_proto_rawDesc = "" +
 	"\vPermissions\x12\x19\n" +
 	"\bcan_edit\x18\x01 \x01(\bR\acanEdit\x12\x1d\n" +
 	"\n" +
-	"can_delete\x18\x02 \x01(\bR\tcanDelete\"\x98\x02\n" +
+	"can_delete\x18\x02 \x01(\bR\tcanDelete\"\xb9\x02\n" +
 	"\fFrameSummary\x12\x19\n" +
 	"\borg_slug\x18\x01 \x01(\tR\aorgSlug\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12 \n" +
@@ -675,7 +695,9 @@ const file_frames_v1_frame_proto_rawDesc = "" +
 	"\x0elatest_version\x18\x05 \x01(\tR\rlatestVersion\x129\n" +
 	"\n" +
 	"updated_at\x18\x06 \x01(\v2\x1a.google.protobuf.TimestampR\tupdatedAt\x128\n" +
-	"\vpermissions\x18\a \x01(\v2\x16.frames.v1.PermissionsR\vpermissions\"\xaf\x01\n" +
+	"\vpermissions\x18\a \x01(\v2\x16.frames.v1.PermissionsR\vpermissions\x12\x1f\n" +
+	"\vis_template\x18\b \x01(\bR\n" +
+	"isTemplate\"\xaf\x01\n" +
 	"\x13FrameVersionSummary\x12\x18\n" +
 	"\aversion\x18\x01 \x01(\tR\aversion\x12\x1c\n" +
 	"\tchangelog\x18\x02 \x01(\tR\tchangelog\x12!\n" +

@@ -10,8 +10,6 @@ inherits:
     - openteams/brand-voice@1.0.0
 ---
 
-# q4-sales-playbook
-
 ## Rules
 
 - Qualify on deployment ownership before discussing pricing.

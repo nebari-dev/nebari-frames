@@ -20,8 +20,11 @@ type ParentFetcher interface {
 	FetchParent(ctx context.Context, ref, version string) (doc *Doc, extends []ExtendRef, excludes []string, err error)
 }
 
-// Resolve merges the extends graph of doc (later parents win; doc wins last),
-// honoring excludes. It detects cycles and propagates unreadable-ancestor errors.
+// Resolve merges the extends graph of doc, honoring excludes. Bodies are
+// concatenated in merge order - ancestors first, the doc's own body last - so
+// the resolved body reads from the most general context to the most specific,
+// and later guidance naturally overrides earlier guidance for a reader. It
+// detects cycles and propagates unreadable-ancestor errors.
 func Resolve(ctx context.Context, fetcher ParentFetcher, doc *Doc, extends []ExtendRef, excludes []string) (*Doc, error) {
 	excludeSet := map[string]bool{}
 	for _, e := range excludes {
@@ -34,14 +37,15 @@ func Resolve(ctx context.Context, fetcher ParentFetcher, doc *Doc, extends []Ext
 		Visibility: doc.Visibility, Scope: doc.Scope, Maintainer: doc.Maintainer,
 	}
 	visiting := map[string]bool{}
-	if err := mergeParents(ctx, fetcher, extends, excludeSet, acc, visiting, []string{doc.Name}); err != nil {
+	merged := map[string]bool{}
+	if err := mergeParents(ctx, fetcher, extends, excludeSet, acc, visiting, merged, []string{doc.Name}); err != nil {
 		return nil, err
 	}
-	mergeInto(acc, doc) // doc's own slots override all parents
+	appendBody(acc, doc.Body) // doc's own body comes last
 	return acc, nil
 }
 
-func mergeParents(ctx context.Context, fetcher ParentFetcher, parents []ExtendRef, excludeSet map[string]bool, acc *Doc, visiting map[string]bool, path []string) error {
+func mergeParents(ctx context.Context, fetcher ParentFetcher, parents []ExtendRef, excludeSet map[string]bool, acc *Doc, visiting, merged map[string]bool, path []string) error {
 	for _, p := range parents {
 		if excludeSet[p.Ref] {
 			continue
@@ -62,67 +66,30 @@ func mergeParents(ctx context.Context, fetcher ParentFetcher, parents []ExtendRe
 		for _, e := range pexcludes {
 			childExcludes[e] = true
 		}
-		if err := mergeParents(ctx, fetcher, pextends, childExcludes, acc, visiting, append(path, p.Ref)); err != nil {
+		if err := mergeParents(ctx, fetcher, pextends, childExcludes, acc, visiting, merged, append(path, p.Ref)); err != nil {
 			return err
 		}
-		mergeInto(acc, pdoc)
+		// A parent reachable through more than one path (a diamond) contributes
+		// its body exactly once.
+		if !merged[key] {
+			merged[key] = true
+			appendBody(acc, pdoc.Body)
+		}
 		delete(visiting, key)
 	}
 	return nil
 }
 
-// mergeInto applies src's slots onto dst (src wins).
-func mergeInto(dst, src *Doc) {
-	dst.Slots.Terminology = mergeTerms(dst.Slots.Terminology, src.Slots.Terminology)
-	dst.Slots.Rules = mergeStrings(dst.Slots.Rules, src.Slots.Rules)
-	dst.Slots.Skills = mergeStrings(dst.Slots.Skills, src.Slots.Skills)
-	dst.Slots.Prompts = mergeStrings(dst.Slots.Prompts, src.Slots.Prompts)
-	dst.Slots.ToolSpecs = replaceIfSet(dst.Slots.ToolSpecs, src.Slots.ToolSpecs)
-	dst.Slots.Goals = replaceIfSet(dst.Slots.Goals, src.Slots.Goals)
-	dst.Slots.Style = replaceIfSet(dst.Slots.Style, src.Slots.Style)
-	dst.Slots.Norms = replaceIfSet(dst.Slots.Norms, src.Slots.Norms)
-	dst.Slots.Architecture = replaceIfSet(dst.Slots.Architecture, src.Slots.Architecture)
-	dst.Slots.BusinessProcess = replaceIfSet(dst.Slots.BusinessProcess, src.Slots.BusinessProcess)
-}
-
-// mergeTerms merges by term; src definition wins on collision; order = existing then new.
-func mergeTerms(existing, incoming []Term) []Term {
-	idx := map[string]int{}
-	out := make([]Term, 0, len(existing)+len(incoming))
-	for _, t := range existing {
-		idx[t.Term] = len(out)
-		out = append(out, t)
+// appendBody appends a contribution to the accumulated body, separated by a
+// blank line. Empty contributions are skipped.
+func appendBody(dst *Doc, body string) {
+	body = strings.Trim(body, "\n")
+	if strings.TrimSpace(body) == "" {
+		return
 	}
-	for _, t := range incoming {
-		if i, ok := idx[t.Term]; ok {
-			out[i].Definition = t.Definition
-			continue
-		}
-		idx[t.Term] = len(out)
-		out = append(out, t)
+	if dst.Body == "" {
+		dst.Body = body
+		return
 	}
-	return out
-}
-
-// mergeStrings concatenates then dedupes preserving the LAST occurrence.
-func mergeStrings(existing, incoming []string) []string {
-	combined := append(append([]string{}, existing...), incoming...)
-	lastIndex := map[string]int{}
-	for i, s := range combined {
-		lastIndex[s] = i
-	}
-	out := make([]string, 0, len(combined))
-	for i, s := range combined {
-		if lastIndex[s] == i {
-			out = append(out, s)
-		}
-	}
-	return out
-}
-
-func replaceIfSet(existing, incoming string) string {
-	if incoming != "" {
-		return incoming
-	}
-	return existing
+	dst.Body += "\n\n" + body
 }

@@ -53,7 +53,7 @@ func TestGetServer_DevModeBuildsServer(t *testing.T) {
 			{OrgSlug: "openteams", OrgDisplay: "OpenTeams", Name: "alpha", Version: "1.0.0", Description: "A"},
 		},
 		docs: map[string]*frames.Doc{
-			"openteams/alpha": {Name: "alpha", Description: "A", Version: "1.0.0", Slots: frames.Slots{Rules: []string{"r1"}}},
+			"openteams/alpha": {Name: "alpha", Description: "A", Version: "1.0.0", Body: "- r1"},
 		},
 	}
 	rs := &resourceServer{src: src, cfg: Config{DevMode: true}}
@@ -67,7 +67,7 @@ func TestGetServer_DevModeBuildsServer(t *testing.T) {
 func TestReadHandler(t *testing.T) {
 	src := stubSource{
 		docs: map[string]*frames.Doc{
-			"openteams/alpha": {Name: "alpha", Description: "A", Version: "1.0.0", Slots: frames.Slots{Rules: []string{"r1"}}},
+			"openteams/alpha": {Name: "alpha", Description: "A", Version: "1.0.0", Body: "- r1"},
 		},
 	}
 	rs := &resourceServer{src: src, cfg: Config{DevMode: true}}
@@ -156,7 +156,7 @@ func TestListFramesTool(t *testing.T) {
 func TestGetFrameTool(t *testing.T) {
 	src := stubSource{
 		readable: []frames.ReadableFrame{{OrgSlug: "openteams", OrgDisplay: "OpenTeams", Name: "alpha", Version: "1.0.0", Description: "A"}},
-		docs:     map[string]*frames.Doc{"openteams/alpha": {Name: "alpha", Description: "A", Version: "1.0.0", Slots: frames.Slots{Rules: []string{"r1"}}}},
+		docs:     map[string]*frames.Doc{"openteams/alpha": {Name: "alpha", Description: "A", Version: "1.0.0", Body: "- r1"}},
 	}
 	rs := &resourceServer{src: src, cfg: Config{DevMode: true}}
 	h := rs.getFrameTool(auth.DevClaims())

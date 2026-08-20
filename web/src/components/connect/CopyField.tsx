@@ -14,9 +14,11 @@ export function CopyField({
   const [copied, setCopied] = useState(false);
   return (
     <div className="space-y-2">
-      {label && <div className="font-medium">{label}</div>}
+      {label && <div className="text-sm font-medium text-foreground">{label}</div>}
       <div className="relative">
-        <code className="block break-all rounded bg-muted px-2 py-2.5 pr-9 text-xs">{value}</code>
+        <code className="block break-all rounded-md bg-muted px-2 py-2.5 pr-9 font-mono text-xs text-foreground">
+          {value}
+        </code>
         <Button
           size="icon-xs"
           variant="ghost"
@@ -29,7 +31,7 @@ export function CopyField({
             setTimeout(() => setCopied(false), 2000);
           }}
         >
-          {copied ? <Check className="text-green-600" /> : <Copy />}
+          {copied ? <Check className="text-success-foreground" /> : <Copy />}
         </Button>
       </div>
     </div>

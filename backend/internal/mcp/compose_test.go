@@ -16,11 +16,7 @@ func TestComposeMarkdown(t *testing.T) {
 		Description: "How we speak.",
 		Version:     "1.2.0",
 		Extends:     []frames.ExtendRef{{Ref: "openteams/base", Version: "1.0.0"}},
-		Slots: frames.Slots{
-			Terminology: []frames.Term{{Term: "Frame", Definition: "A context artifact."}},
-			Rules:       []string{"Be concise."},
-			Goals:       "Sound human.",
-		},
+		Body:        "Be concise.\n\n## House Style\n\nSound human.",
 	}
 
 	tests := []struct {
@@ -30,22 +26,17 @@ func TestComposeMarkdown(t *testing.T) {
 		mustNotHave []string
 	}{
 		{
-			name: "renders populated slots and inheritance header",
+			name: "renders body verbatim with inheritance header",
 			doc:  full,
 			mustContain: []string{
 				"# Frame: brand-voice",
 				"How we speak.",
 				"> Inherits from: openteams/base@1.0.0",
 				"> Resolved at: 2026-06-26T12:00:00Z",
-				"## Terminology",
-				"- **Frame**: A context artifact.",
-				"## Rules",
-				"- Be concise.",
-				"## Goals",
+				"Be concise.",
+				"## House Style",
 				"Sound human.",
 			},
-			// empty slots must be omitted entirely
-			mustNotHave: []string{"## Style", "## Norms", "## Skills", "## Prompts", "## Architecture", "## Business Process", "## Tool Specifications"},
 		},
 		{
 			name:        "no extends omits inherits header",

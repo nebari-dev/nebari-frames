@@ -8,8 +8,6 @@ scope: company
 maintainer: platform engineering
 ---
 
-# nebari-platform
-
 ## Terminology
 
 - **Nebari**: An open-source platform for deploying and operating data science and AI infrastructure on Kubernetes, inside the client's own cloud account or data center. Stewarded by OpenTeams and the nebari-dev community.

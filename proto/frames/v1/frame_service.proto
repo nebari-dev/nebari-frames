@@ -20,7 +20,7 @@ service FrameService {
   rpc ListFrameVersions(ListFrameVersionsRequest) returns (ListFrameVersionsResponse);
   // Write - delete a frame. Blocks if the frame is a parent unless force=true.
   rpc DeleteFrame(DeleteFrameRequest) returns (DeleteFrameResponse);
-  // Pure conversion between the canonical slot YAML and the spec-conformant
+  // Pure conversion between the canonical YAML and the spec-conformant
   // .frame.md form. Stateless and unauthenticated beyond org membership.
   rpc ConvertFrame(ConvertFrameRequest) returns (ConvertFrameResponse);
   // Admin only - list the caller's org members.
@@ -34,7 +34,7 @@ service FrameService {
 }
 
 message PublishFrameRequest {
-  bytes content = 1;   // full YAML; name/version/extends/excludes/slots parsed server-side
+  bytes content = 1;   // full YAML; metadata/extends/excludes/body parsed server-side
   string changelog = 2;
 }
 message PublishFrameResponse {
@@ -88,7 +88,7 @@ message ListFrameVersionsResponse {
 }
 
 // FieldViolation is one validation failure at a specific field path
-// (e.g. "slots.terminology[2].definition", matching backend validate.go paths).
+// (e.g. "extends[0].version", matching backend validate.go paths).
 message FieldViolation {
   string field = 1;
   string message = 2;
@@ -102,7 +102,7 @@ message FieldViolations {
 }
 
 // ConvertFrame translates between the two representations of the same frame:
-// the canonical slot YAML stored in frame_versions.content, and the single
+// the canonical YAML stored in frame_versions.content, and the single
 // Markdown file with YAML frontmatter defined by Frame Spec v0.2. It backs the
 // web app's Markdown editor, .frame.md import, and .frame.md export.
 message ConvertFrameRequest {

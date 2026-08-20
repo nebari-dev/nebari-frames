@@ -236,10 +236,10 @@ func (r *Repository) CreateFrameVersion(ctx context.Context, in store.CreateFram
 	now := f.UpdatedAt.AsTime().UTC().Format(time.RFC3339)
 	if in.IsNewFrame {
 		if _, err := tx.ExecContext(ctx,
-			`INSERT INTO frames (id, org_id, name, description, owner_sub, latest_version, created_at, updated_at)
-			 VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+			`INSERT INTO frames (id, org_id, name, description, owner_sub, latest_version, created_at, updated_at, is_template)
+			 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 			f.Id, f.OrgId, f.Name, f.Description, f.OwnerSub, f.LatestVersion,
-			f.CreatedAt.AsTime().UTC().Format(time.RFC3339), now); err != nil {
+			f.CreatedAt.AsTime().UTC().Format(time.RFC3339), now, f.IsTemplate); err != nil {
 			if isUnique(err) {
 				return store.ErrAlreadyExists
 			}
@@ -247,8 +247,8 @@ func (r *Repository) CreateFrameVersion(ctx context.Context, in store.CreateFram
 		}
 	} else {
 		if _, err := tx.ExecContext(ctx,
-			`UPDATE frames SET description=?, latest_version=?, updated_at=? WHERE id=?`,
-			f.Description, f.LatestVersion, now, f.Id); err != nil {
+			`UPDATE frames SET description=?, latest_version=?, updated_at=?, is_template=? WHERE id=?`,
+			f.Description, f.LatestVersion, now, f.IsTemplate, f.Id); err != nil {
 			return err
 		}
 	}
@@ -299,21 +299,21 @@ func (r *Repository) CreateFrameVersion(ctx context.Context, in store.CreateFram
 
 func (r *Repository) GetFrameBySlugName(ctx context.Context, orgSlug, name string) (*framesv1.Frame, error) {
 	return r.scanFrame(r.db.QueryRowContext(ctx,
-		`SELECT f.id, f.org_id, f.name, f.description, f.owner_sub, f.latest_version, f.created_at, f.updated_at
+		`SELECT f.id, f.org_id, f.name, f.description, f.owner_sub, f.latest_version, f.created_at, f.updated_at, f.is_template
 		   FROM frames f JOIN orgs o ON o.id = f.org_id
 		  WHERE o.slug = ? AND f.name = ?`, orgSlug, name))
 }
 
 func (r *Repository) GetFrameByID(ctx context.Context, id string) (*framesv1.Frame, error) {
 	return r.scanFrame(r.db.QueryRowContext(ctx,
-		`SELECT id, org_id, name, description, owner_sub, latest_version, created_at, updated_at
+		`SELECT id, org_id, name, description, owner_sub, latest_version, created_at, updated_at, is_template
 		   FROM frames WHERE id = ?`, id))
 }
 
 func (r *Repository) scanFrame(row *sql.Row) (*framesv1.Frame, error) {
 	var f framesv1.Frame
 	var created, updated string
-	if err := row.Scan(&f.Id, &f.OrgId, &f.Name, &f.Description, &f.OwnerSub, &f.LatestVersion, &created, &updated); err != nil {
+	if err := row.Scan(&f.Id, &f.OrgId, &f.Name, &f.Description, &f.OwnerSub, &f.LatestVersion, &created, &updated, &f.IsTemplate); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, store.ErrNotFound
 		}
@@ -405,7 +405,7 @@ func (r *Repository) ListFrameVersions(ctx context.Context, frameID string) ([]*
 
 func (r *Repository) ListFramesByOrg(ctx context.Context, orgID string) ([]*framesv1.Frame, error) {
 	rows, err := r.db.QueryContext(ctx,
-		`SELECT id, org_id, name, description, owner_sub, latest_version, created_at, updated_at
+		`SELECT id, org_id, name, description, owner_sub, latest_version, created_at, updated_at, is_template
 		   FROM frames WHERE org_id = ? ORDER BY updated_at DESC`, orgID)
 	if err != nil {
 		return nil, err
@@ -415,7 +415,7 @@ func (r *Repository) ListFramesByOrg(ctx context.Context, orgID string) ([]*fram
 	for rows.Next() {
 		var f framesv1.Frame
 		var created, updated string
-		if err := rows.Scan(&f.Id, &f.OrgId, &f.Name, &f.Description, &f.OwnerSub, &f.LatestVersion, &created, &updated); err != nil {
+		if err := rows.Scan(&f.Id, &f.OrgId, &f.Name, &f.Description, &f.OwnerSub, &f.LatestVersion, &created, &updated, &f.IsTemplate); err != nil {
 			return nil, err
 		}
 		f.CreatedAt, f.UpdatedAt = ts(created), ts(updated)
@@ -520,7 +520,7 @@ func (r *Repository) DeleteMembership(ctx context.Context, orgID, userSub, email
 
 func (r *Repository) FrameChildren(ctx context.Context, parentFrameID string) ([]*framesv1.Frame, error) {
 	rows, err := r.db.QueryContext(ctx,
-		`SELECT DISTINCT f.id, f.org_id, f.name, f.description, f.owner_sub, f.latest_version, f.created_at, f.updated_at
+		`SELECT DISTINCT f.id, f.org_id, f.name, f.description, f.owner_sub, f.latest_version, f.created_at, f.updated_at, f.is_template
 		   FROM frames f
 		   JOIN frame_extends fe ON fe.frame_id = f.id
 		  WHERE fe.parent_frame_id = ? AND f.id <> ?`, parentFrameID, parentFrameID)
@@ -532,7 +532,7 @@ func (r *Repository) FrameChildren(ctx context.Context, parentFrameID string) ([
 	for rows.Next() {
 		var f framesv1.Frame
 		var created, updated string
-		if err := rows.Scan(&f.Id, &f.OrgId, &f.Name, &f.Description, &f.OwnerSub, &f.LatestVersion, &created, &updated); err != nil {
+		if err := rows.Scan(&f.Id, &f.OrgId, &f.Name, &f.Description, &f.OwnerSub, &f.LatestVersion, &created, &updated, &f.IsTemplate); err != nil {
 			return nil, err
 		}
 		f.CreatedAt, f.UpdatedAt = ts(created), ts(updated)

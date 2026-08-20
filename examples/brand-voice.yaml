@@ -4,16 +4,21 @@ version: 1.0.0
 visibility: internal
 scope: company
 maintainer: marketing
-slots:
-  terminology:
-    - term: customer
-      definition: An enterprise organization that has deployed an Intelligence Hub.
-    - term: hub
-      definition: A deployed Nebari instance.
-  rules:
+body: |-
+    ## Terminology
+
+    - **customer**: An enterprise organization that has deployed an Intelligence Hub.
+    - **hub**: A deployed Nebari instance.
+
+    ## Rules
+
     - Never claim performance numbers without a benchmark citation.
     - Avoid the word "revolutionary" in customer-facing copy.
-  goals: |
+
+    ## Goals
+
     Communicate capability with precision and restraint.
-  style: |
+
+    ## Style
+
     Plain, direct, technically credible. Short sentences.

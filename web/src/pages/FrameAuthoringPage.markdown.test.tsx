@@ -1,4 +1,4 @@
-import { render, screen, waitFor, fireEvent } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router";
 import { expect, it, vi, beforeEach } from "vitest";
@@ -34,14 +34,6 @@ import { FrameAuthoringPage } from "./FrameAuthoringPage";
 
 const encode = (s: string) => new TextEncoder().encode(s);
 
-// Base UI menus do not open from userEvent.click under jsdom; drive them with
-// explicit pointer events (see Header.test.tsx).
-function pointerClick(el: Element) {
-  fireEvent.pointerDown(el);
-  fireEvent.pointerUp(el);
-  fireEvent.click(el);
-}
-
 beforeEach(() => {
   convertMock.mockReset();
   publishMock.mockReset();
@@ -51,18 +43,17 @@ function renderCreate() {
   return render(<MemoryRouter><FrameAuthoringPage mode="create" /></MemoryRouter>);
 }
 
-// Markdown is a secondary mode behind the overflow menu, not a header toggle.
+// Markdown mode is one visible header button away from the form editor.
 async function openMarkdownMode() {
-  pointerClick(screen.getByRole("button", { name: /more actions/i }));
-  pointerClick(await screen.findByRole("menuitem", { name: /edit as markdown/i }));
+  await userEvent.click(screen.getByRole("button", { name: /edit as markdown/i }));
 }
 
 it("Edit as Markdown converts the document and shows the .frame.md source", async () => {
-  const md = "---\ntype: frame [0.2]\nname: brand-voice\n---\n\n## Goals\n\n- Ship it.\n";
+  const md = "---\ntype: frame [0.2]\nname: brand-voice\n---\n\nShip it.\n";
   convertMock.mockImplementation((_req, opts) => opts.onSuccess({ markdown: encode(md) }));
 
   renderCreate();
-  await userEvent.type(screen.getByLabelText(/frame name/i), "brand-voice");
+  await userEvent.type(screen.getByLabelText(/^name$/i), "brand-voice");
   await openMarkdownMode();
 
   await waitFor(() => expect(convertMock).toHaveBeenCalled());
@@ -77,7 +68,7 @@ it("Edit as Markdown converts the document and shows the .frame.md source", asyn
 
 it("shows a structural error and stays in Markdown when the source will not parse", async () => {
   const fv = create(FieldViolationsSchema, {
-    violations: [{ field: "markdown", message: 'line 9: unknown section "## Ways of Working"' }],
+    violations: [{ field: "markdown", message: 'line 4: unknown frontmatter key "owner"' }],
   });
   const err = new ConnectError("invalid", Code.InvalidArgument, undefined, [
     { desc: FieldViolationsSchema, value: fv },
@@ -94,13 +85,13 @@ it("shows a structural error and stays in Markdown when the source will not pars
 
   await userEvent.click(screen.getByRole("button", { name: /back to editor/i }));
 
-  expect(await screen.findByText(/unknown section "## Ways of Working"/)).toBeInTheDocument();
+  expect(await screen.findByText(/unknown frontmatter key "owner"/)).toBeInTheDocument();
   // Still in Markdown: the parse must succeed before the document can take over.
   expect(screen.getByLabelText(/frame markdown source/i)).toBeInTheDocument();
 });
 
 it("publishing from Markdown converts first, then publishes the canonical YAML", async () => {
-  const yaml = "name: brand-voice\ndescription: d\nversion: 1.0.0\nvisibility: internal\nslots: {}\n";
+  const yaml = "name: brand-voice\ndescription: d\nversion: 1.0.0\nvisibility: internal\nbody: Ship it.\n";
   convertMock
     .mockImplementationOnce((_req, opts) => opts.onSuccess({ markdown: encode("---\n---\n") }))
     .mockImplementation((_req, opts) => opts.onSuccess({ yaml: encode(yaml) }));

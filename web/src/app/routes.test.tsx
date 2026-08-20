@@ -6,10 +6,15 @@ vi.mock("@/lib/auth/useAuth", () => ({
 
 // AppShell, RequireMembership, and RequireAdmin all call useQuery(getMe).
 // Use a vi.fn() so individual tests can control the returned role/error.
+// AdminMembersPage (the /admin index redirect target) additionally uses
+// useMutation, createConnectQueryKey, and the TanStack query client.
 const useQueryMock = vi.fn();
 vi.mock("@connectrpc/connect-query", () => ({
   useQuery: () => useQueryMock(),
+  useMutation: () => ({ mutate: vi.fn(), isPending: false }),
+  createConnectQueryKey: () => ["k"],
 }));
+vi.mock("@tanstack/react-query", () => ({ useQueryClient: () => ({ invalidateQueries: vi.fn() }) }));
 
 import { render, screen } from "@testing-library/react";
 import { MemoryRouter } from "react-router";
@@ -35,7 +40,7 @@ it("renders a Connect link in the header", () => {
   expect(link).toHaveAttribute("href", "/connect");
 });
 
-it("renders AdminHomePage at /admin for an admin user", () => {
+it("renders the admin section (redirected to Members) at /admin for an admin user", () => {
   useQueryMock.mockReturnValue({ data: { role: "admin" }, isLoading: false, error: null });
   render(
     <ThemeProvider>
