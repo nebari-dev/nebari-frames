@@ -305,7 +305,13 @@ func TestMCPWritesEnforceRBAC(t *testing.T) {
 		if _, isErr := callTool(t, cs, "create_frame", newFrame); isErr {
 			t.Fatal("first create should succeed")
 		}
-		text, isErr := callTool(t, cs, "create_frame", newFrame)
+		// A different version, so this can only be the create-intent check and
+		// not the version-uniqueness check.
+		second := map[string]any{
+			"name": "brand-voice", "description": "How we write", "version": "2.0.0",
+			"rules": []any{"Cite benchmarks."},
+		}
+		text, isErr := callTool(t, cs, "create_frame", second)
 		if !isErr {
 			t.Fatalf("second create succeeded: %q", text)
 		}
@@ -501,4 +507,81 @@ func mustFrameID(t *testing.T, mem *store.Memory, name string) string {
 		t.Fatalf("frame %q: %v", name, err)
 	}
 	return f.Id
+}
+
+// The most likely instruction this tool will ever get is "add a rule to X".
+// Doing that requires reading the Frame's current rules, and if the only read
+// available returns the inheritance-composed form, the model has no choice but
+// to send the parent's content back as the child's own - which validates, looks
+// identical when composed, and silently detaches the child from its parent's
+// future revisions.
+func TestMCPReadModifyWriteDoesNotFlattenInheritance(t *testing.T) {
+	cs, mem := newWriteTestSession(t, "publisher")
+	ctx := context.Background()
+
+	if _, isErr := callTool(t, cs, "create_frame", map[string]any{
+		"name": "company-base", "description": "Company", "version": "1.0.0",
+		"rules": []any{"Use inclusive language."},
+		"goals": "Grow the platform.",
+	}); isErr {
+		t.Fatal("create parent failed")
+	}
+	if _, isErr := callTool(t, cs, "create_frame", map[string]any{
+		"name": "team-api", "description": "API team", "version": "1.0.0",
+		"rules":   []any{"Version every endpoint."},
+		"extends": []any{map[string]any{"ref": "openteams/company-base", "version": "1.0.0"}},
+	}); isErr {
+		t.Fatal("create child failed")
+	}
+
+	// A source read must exist, and must return only the child's own content.
+	src, isErr := callTool(t, cs, "get_frame", map[string]any{"name": "team-api", "source": true})
+	if isErr {
+		t.Fatalf("get_frame source mode failed: %q", src)
+	}
+	if strings.Contains(src, "Use inclusive language.") {
+		t.Errorf("source read leaked inherited content, so a model editing it would copy the parent in:\n%s", src)
+	}
+	if !strings.Contains(src, "Version every endpoint.") {
+		t.Errorf("source read is missing the frame's own rule:\n%s", src)
+	}
+	if strings.Contains(src, "Grow the platform.") {
+		t.Errorf("source read leaked the parent's prose slot:\n%s", src)
+	}
+
+	// The default read stays composed, which is what a consumer wants.
+	composed, isErr := callTool(t, cs, "get_frame", map[string]any{"name": "team-api"})
+	if isErr {
+		t.Fatalf("get_frame failed: %q", composed)
+	}
+	if !strings.Contains(composed, "Use inclusive language.") {
+		t.Errorf("default read should still compose inherited content:\n%s", composed)
+	}
+
+	// Editing from the source read leaves inheritance intact and un-flattened.
+	if _, isErr := callTool(t, cs, "update_frame", map[string]any{
+		"name": "team-api", "version": "1.1.0",
+		"rules": []any{"Version every endpoint.", "Prefer cursor pagination."},
+	}); isErr {
+		t.Fatal("update failed")
+	}
+	v, _, _, err := mem.GetFrameVersion(ctx, mustFrameID(t, mem, "team-api"), "1.1.0")
+	if err != nil {
+		t.Fatalf("get version: %v", err)
+	}
+	doc, err := frames.Parse(v.Content)
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	for _, r := range doc.Slots.Rules {
+		if r == "Use inclusive language." {
+			t.Errorf("the parent's rule was copied into the child: %v", doc.Slots.Rules)
+		}
+	}
+	if doc.Slots.Goals != "" {
+		t.Errorf("goals = %q, want empty: the parent's prose must not be frozen into the child", doc.Slots.Goals)
+	}
+	if len(doc.Extends) != 1 {
+		t.Errorf("extends = %+v, want the parent still pinned", doc.Extends)
+	}
 }

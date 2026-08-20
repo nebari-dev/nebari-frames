@@ -856,15 +856,48 @@ func TestService_PublishRejectsOversizedContent(t *testing.T) {
 		}
 	})
 
-	t.Run("content at the limit is accepted", func(t *testing.T) {
+	// Pins the boundary exactly: content of precisely MaxContentBytes is allowed
+	// and one byte more is not, so the comparison cannot drift between > and >=.
+	t.Run("the boundary is inclusive", func(t *testing.T) {
+		// Binary-search the padding that makes the marshalled document land on
+		// exactly the limit; YAML framing makes the offset awkward to hardcode.
+		sizeFor := func(pad int) int {
+			d := docFor("ok", "1.0.0")
+			d.Slots.Goals = strings.Repeat("y", pad)
+			b, err := frames.Marshal(d)
+			if err != nil {
+				t.Fatalf("marshal: %v", err)
+			}
+			return len(b)
+		}
+		lo, hi := 0, frames.MaxContentBytes
+		for lo < hi {
+			mid := (lo + hi + 1) / 2
+			if sizeFor(mid) <= frames.MaxContentBytes {
+				lo = mid
+			} else {
+				hi = mid - 1
+			}
+		}
+		if got := sizeFor(lo); got != frames.MaxContentBytes {
+			t.Fatalf("could not construct content of exactly %d bytes (closest %d)", frames.MaxContentBytes, got)
+		}
+
+		atLimit := docFor("ok", "1.0.0")
+		atLimit.Slots.Goals = strings.Repeat("y", lo)
 		repo := store.NewMemory()
 		ctx := seedOrg(t, repo, "pub", "publisher")
-		svc := frames.NewService(repo)
-		doc := docFor("ok", "1.0.0")
-		// Leave room for the surrounding YAML keys.
-		doc.Slots.Goals = strings.Repeat("y", frames.MaxContentBytes-200)
-		if _, _, err := svc.PublishDoc(ctx, doc, "", frames.PublishCreate); err != nil {
-			t.Errorf("content just under the cap was rejected: %v", err)
+		if _, _, err := frames.NewService(repo).PublishDoc(ctx, atLimit, "", frames.PublishCreate); err != nil {
+			t.Errorf("content of exactly %d bytes was rejected: %v", frames.MaxContentBytes, err)
+		}
+
+		over := docFor("ok", "1.0.0")
+		over.Slots.Goals = strings.Repeat("y", lo+1)
+		repo2 := store.NewMemory()
+		ctx2 := seedOrg(t, repo2, "pub", "publisher")
+		_, _, err := frames.NewService(repo2).PublishDoc(ctx2, over, "", frames.PublishCreate)
+		if connect.CodeOf(err) != connect.CodeInvalidArgument {
+			t.Errorf("one byte over the limit: code = %v (err %v), want InvalidArgument", connect.CodeOf(err), err)
 		}
 	})
 }

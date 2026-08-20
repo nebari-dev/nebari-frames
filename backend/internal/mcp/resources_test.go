@@ -460,3 +460,74 @@ func TestGetServerAdvertisesWriteTools(t *testing.T) {
 		}
 	}
 }
+
+// Guards the remaining half of the drift problem: TestWriteFrameInputCoversDocFields
+// forces a new slot or document field to gain an input field, but nothing forced
+// that field to be wired into applyTo. An unwired field would leave the target
+// at its zero value, which a hand-written want literal cannot catch because it
+// is zero on both sides. This sets every input field to a distinct sentinel and
+// asserts nothing in the resulting document is still zero.
+func TestApplyToWiresEveryInputField(t *testing.T) {
+	in := writeFrameInput{}
+	v := reflect.ValueOf(&in).Elem()
+	inT := v.Type()
+
+	// Fill every field with a non-zero sentinel derived from its name.
+	for i := range inT.NumField() {
+		name := inT.Field(i).Name
+		f := v.Field(i)
+		switch f.Kind() {
+		case reflect.String:
+			f.SetString("sentinel-" + name)
+		case reflect.Pointer:
+			sv := reflect.New(f.Type().Elem())
+			sv.Elem().SetString("sentinel-" + name)
+			f.Set(sv)
+		case reflect.Bool:
+			f.SetBool(true)
+		case reflect.Slice:
+			elem := f.Type().Elem()
+			ev := reflect.New(elem).Elem()
+			switch elem.Kind() {
+			case reflect.String:
+				ev.SetString("sentinel-" + name)
+			case reflect.Struct:
+				for j := range elem.NumField() {
+					if ev.Field(j).Kind() == reflect.String {
+						ev.Field(j).SetString("sentinel-" + name)
+					}
+				}
+			default:
+				t.Fatalf("field %s: unhandled slice element kind %s", name, elem.Kind())
+			}
+			f.Set(reflect.Append(f, ev))
+		default:
+			t.Fatalf("field %s: unhandled kind %s; extend this test", name, f.Kind())
+		}
+	}
+	// Name and Version must look like a valid frame for nothing else to matter,
+	// but their values are irrelevant to the zero-check below.
+	in.Name, in.Version = "sentinel-name", "1.0.0"
+
+	got := in.applyTo(&frames.Doc{})
+
+	// Changelog is publish metadata, not part of the document.
+	docV := reflect.ValueOf(*got)
+	docT := docV.Type()
+	for i := range docT.NumField() {
+		name := docT.Field(i).Name
+		if name == "Slots" {
+			continue
+		}
+		if docV.Field(i).IsZero() {
+			t.Errorf("Doc.%s is zero after applyTo: the input field exists but is not wired in", name)
+		}
+	}
+	slotsV := reflect.ValueOf(got.Slots)
+	slotsT := slotsV.Type()
+	for i := range slotsT.NumField() {
+		if slotsV.Field(i).IsZero() {
+			t.Errorf("Slots.%s is zero after applyTo: the input field exists but is not wired in", slotsT.Field(i).Name)
+		}
+	}
+}

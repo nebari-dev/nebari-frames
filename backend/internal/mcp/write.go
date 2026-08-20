@@ -42,21 +42,21 @@ type writeFrameInput struct {
 	Version   string `json:"version" jsonschema:"semantic version for the new revision, e.g. 1.1.0; must not already exist"`
 	Changelog string `json:"changelog,omitempty" jsonschema:"optional note describing what changed in this version"`
 
-	Description *string `json:"description,omitempty" jsonschema:"one-line summary of what this Frame carries; omit to keep the current one"`
-	Visibility  *string `json:"visibility,omitempty" jsonschema:"declared intent, one of private, internal, shared, public; omit to keep the current one. Access is decided by registry permissions, not by this field"`
-	Scope       *string `json:"scope,omitempty" jsonschema:"who this Frame applies to, e.g. company or team-platform; omit to keep the current one"`
-	Maintainer  *string `json:"maintainer,omitempty" jsonschema:"who owns this Frame; omit to keep the current one"`
+	Description *string `json:"description,omitempty" jsonschema:"one-line summary of what this Frame carries. Required when creating; when updating, omit to keep the current one"`
+	Visibility  *string `json:"visibility,omitempty" jsonschema:"declared intent, one of private, internal, shared, public; omit to keep the current one, pass an empty string to clear it. Access is decided by registry permissions, not by this field"`
+	Scope       *string `json:"scope,omitempty" jsonschema:"who this Frame applies to, e.g. company or team-platform; omit to keep the current one, pass an empty string to clear it"`
+	Maintainer  *string `json:"maintainer,omitempty" jsonschema:"who owns this Frame; omit to keep the current one, pass an empty string to clear it"`
 
 	Terminology     []termInput `json:"terminology,omitempty" jsonschema:"named concepts and their definitions; omit to keep the current list, pass an empty list to clear it"`
 	Rules           []string    `json:"rules,omitempty" jsonschema:"constraints that must be followed; omit to keep the current list, pass an empty list to clear it"`
 	Skills          []string    `json:"skills,omitempty" jsonschema:"capabilities this Frame expects; omit to keep, empty list to clear"`
 	Prompts         []string    `json:"prompts,omitempty" jsonschema:"reusable prompts; omit to keep, empty list to clear"`
-	ToolSpecs       *string     `json:"tool_specs,omitempty" jsonschema:"tool specifications, as markdown; omit to keep the current text"`
-	Goals           *string     `json:"goals,omitempty" jsonschema:"what the organization is trying to achieve, as markdown; omit to keep the current text"`
-	Style           *string     `json:"style,omitempty" jsonschema:"voice and formatting conventions, as markdown; omit to keep the current text"`
-	Norms           *string     `json:"norms,omitempty" jsonschema:"team norms and expectations, as markdown; omit to keep the current text"`
-	Architecture    *string     `json:"architecture,omitempty" jsonschema:"system architecture context, as markdown; omit to keep the current text"`
-	BusinessProcess *string     `json:"business_process,omitempty" jsonschema:"business process context, as markdown; omit to keep the current text"`
+	ToolSpecs       *string     `json:"tool_specs,omitempty" jsonschema:"tool specifications, as markdown; omit to keep the current text, pass an empty string to clear it"`
+	Goals           *string     `json:"goals,omitempty" jsonschema:"what the organization is trying to achieve, as markdown; omit to keep the current text, pass an empty string to clear it"`
+	Style           *string     `json:"style,omitempty" jsonschema:"voice and formatting conventions, as markdown; omit to keep the current text, pass an empty string to clear it"`
+	Norms           *string     `json:"norms,omitempty" jsonschema:"team norms and expectations, as markdown; omit to keep the current text, pass an empty string to clear it"`
+	Architecture    *string     `json:"architecture,omitempty" jsonschema:"system architecture context, as markdown; omit to keep the current text, pass an empty string to clear it"`
+	BusinessProcess *string     `json:"business_process,omitempty" jsonschema:"business process context, as markdown; omit to keep the current text, pass an empty string to clear it"`
 
 	Extends  []extendInput `json:"extends,omitempty" jsonschema:"parent Frames this one inherits from, each pinned to a version; later parents win. Omit to keep the current inheritance, pass an empty list to remove all parents"`
 	Excludes []string      `json:"excludes,omitempty" jsonschema:"parent references to exclude from inheritance; omit to keep, empty list to clear"`
@@ -178,6 +178,9 @@ func writeErrorText(err error) string {
 	case connect.CodeUnauthenticated:
 		return "not authenticated: " + msg
 	case connect.CodeFailedPrecondition:
+		// Defensive. publish does not check acyclicity - version pinning makes a
+		// true cycle unreachable there - so this arm exists for the resolver
+		// errors a future change could surface, not because writes detect cycles.
 		return "invalid inheritance: " + msg
 	default:
 		// Internal faults must not leak storage or wiring detail to the client.
