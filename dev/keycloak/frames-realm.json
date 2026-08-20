@@ -41,6 +41,28 @@
       "credentials": [
         { "type": "password", "value": "dev", "temporary": false }
       ]
+    },
+    {
+      "username": "alice",
+      "email": "alice@localhost",
+      "emailVerified": true,
+      "enabled": true,
+      "firstName": "Alice",
+      "lastName": "Publisher",
+      "credentials": [
+        { "type": "password", "value": "alice", "temporary": false }
+      ]
+    },
+    {
+      "username": "bob",
+      "email": "bob@localhost",
+      "emailVerified": true,
+      "enabled": true,
+      "firstName": "Bob",
+      "lastName": "Viewer",
+      "credentials": [
+        { "type": "password", "value": "bob", "temporary": false }
+      ]
     }
   ]
 }
