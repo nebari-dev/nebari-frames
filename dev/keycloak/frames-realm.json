@@ -11,7 +11,7 @@
       "directAccessGrantsEnabled": false,
       "redirectUris": ["http://localhost:5173/*", "http://localhost:8080/*"],
       "webOrigins": ["http://localhost:5173", "http://localhost:8080"],
-      "defaultClientScopes": ["email", "profile", "roles", "web-origins"],
+      "defaultClientScopes": ["basic", "email", "profile", "roles", "web-origins"],
       "attributes": {
         "pkce.code.challenge.method": "S256",
         "post.logout.redirect.uris": "http://localhost:5173/*##http://localhost:8080/*"
