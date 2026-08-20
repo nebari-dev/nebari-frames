@@ -24,6 +24,11 @@ func composeMarkdown(doc *frames.Doc, resolvedAt time.Time) string {
 	if doc.Description != "" {
 		fmt.Fprintf(&b, "%s\n\n", doc.Description)
 	}
+	// The version is what update_frame's base_version must be set to, so it has
+	// to be visible to a client that intends to edit this frame.
+	if doc.Version != "" {
+		fmt.Fprintf(&b, "> Version: %s\n", doc.Version)
+	}
 	if len(doc.Extends) > 0 {
 		parts := make([]string, len(doc.Extends))
 		for i, e := range doc.Extends {

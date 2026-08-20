@@ -230,6 +230,8 @@ func TestWriteFrameTools(t *testing.T) {
 			Name:        "brand-voice",
 			Description: ptr("How we write"),
 			Version:     "1.0.0",
+			// Required by update_frame and ignored by create_frame.
+			BaseVersion: "0.9.0",
 			Rules:       []string{"Cite benchmarks."},
 		}
 	}
@@ -545,7 +547,8 @@ func TestUpdateFrameSendsTheBaseVersionItRead(t *testing.T) {
 	h := rs.updateFrameTool(auth.DevClaims())
 
 	if _, _, err := h(context.Background(), &gomcp.CallToolRequest{}, writeFrameInput{
-		Name: "brand-voice", Version: "3.5.0", Rules: []string{"existing", "new"},
+		Name: "brand-voice", Version: "3.5.0", BaseVersion: "3.4.5",
+		Rules: []string{"existing", "new"},
 	}); err != nil {
 		t.Fatalf("update_frame: %v", err)
 	}
@@ -553,7 +556,7 @@ func TestUpdateFrameSendsTheBaseVersionItRead(t *testing.T) {
 		t.Fatalf("publish called %d times, want 1", len(src.calls))
 	}
 	if got := src.calls[0].baseVersion; got != "3.4.5" {
-		t.Errorf("baseVersion = %q, want %q (the version the merge base was read at)", got, "3.4.5")
+		t.Errorf("baseVersion = %q, want the value the caller supplied, not one re-read server-side", got)
 	}
 }
 

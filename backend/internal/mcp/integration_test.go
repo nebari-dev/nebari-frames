@@ -326,11 +326,12 @@ func TestMCPWritesEnforceRBAC(t *testing.T) {
 			t.Fatal("create should succeed")
 		}
 		updated := map[string]any{
-			"name":        "brand-voice",
-			"description": "How we write, revised",
-			"version":     "1.1.0",
-			"rules":       []any{"Cite benchmarks.", "Avoid jargon."},
-			"changelog":   "added a rule",
+			"name":         "brand-voice",
+			"description":  "How we write, revised",
+			"version":      "1.1.0",
+			"base_version": "1.0.0",
+			"rules":        []any{"Cite benchmarks.", "Avoid jargon."},
+			"changelog":    "added a rule",
 		}
 		text, isErr := callTool(t, cs, "update_frame", updated)
 		if isErr {
@@ -349,10 +350,11 @@ func TestMCPWritesEnforceRBAC(t *testing.T) {
 		// alpha is seeded owned by "someone" with only an org-level read grant.
 		cs, _ := newWriteTestSession(t, "publisher")
 		text, isErr := callTool(t, cs, "update_frame", map[string]any{
-			"name":        "alpha",
-			"description": "hijacked",
-			"version":     "2.0.0",
-			"rules":       []any{"mine now"},
+			"name":         "alpha",
+			"description":  "hijacked",
+			"version":      "2.0.0",
+			"base_version": "1.0.0",
+			"rules":        []any{"mine now"},
 		})
 		if !isErr {
 			t.Fatalf("edit permission was bypassed: %q", text)
@@ -365,10 +367,9 @@ func TestMCPWritesEnforceRBAC(t *testing.T) {
 	t.Run("updating an unknown frame reports not found", func(t *testing.T) {
 		cs, _ := newWriteTestSession(t, "publisher")
 		text, isErr := callTool(t, cs, "update_frame", map[string]any{
-			"name":        "ghost",
-			"description": "x",
-			"version":     "1.0.0",
-			"rules":       []any{"r"},
+			"name": "ghost", "description": "x",
+			"version": "1.0.0", "base_version": "1.0.0",
+			"rules": []any{"r"},
 		})
 		if !isErr {
 			t.Fatalf("update of an unknown frame succeeded: %q", text)
@@ -427,7 +428,7 @@ func TestMCPUpdatePreservesOmittedFields(t *testing.T) {
 
 	// Update only the rules. Everything else must survive.
 	text, isErr := callTool(t, cs, "update_frame", map[string]any{
-		"name": "child", "version": "1.1.0",
+		"name": "child", "version": "1.1.0", "base_version": "1.0.0",
 		"rules": []any{"from child", "and another"},
 	})
 	if isErr {
@@ -473,7 +474,7 @@ func TestMCPUpdatePreservesOmittedFields(t *testing.T) {
 
 	t.Run("supplied fields replace, and an explicit empty list clears", func(t *testing.T) {
 		text, isErr := callTool(t, cs, "update_frame", map[string]any{
-			"name": "child", "version": "1.2.0",
+			"name": "child", "version": "1.2.0", "base_version": "1.1.0",
 			"maintainer": "data team",
 			"extends":    []any{},
 		})
@@ -560,7 +561,7 @@ func TestMCPReadModifyWriteDoesNotFlattenInheritance(t *testing.T) {
 
 	// Editing from the source read leaves inheritance intact and un-flattened.
 	if _, isErr := callTool(t, cs, "update_frame", map[string]any{
-		"name": "team-api", "version": "1.1.0",
+		"name": "team-api", "version": "1.1.0", "base_version": "1.0.0",
 		"rules": []any{"Version every endpoint.", "Prefer cursor pagination."},
 	}); isErr {
 		t.Fatal("update failed")
@@ -615,5 +616,90 @@ func TestMCPRejectsOversizedRequestBody(t *testing.T) {
 	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode < 400 {
 		t.Errorf("status = %d, want a 4xx/5xx refusal for a body over the cap", resp.StatusCode)
+	}
+}
+
+// The lost-update case, end to end: two clients read the same version, then
+// both publish. The second must be refused rather than silently discarding the
+// first one's change. Deriving the base server-side would make this pass
+// vacuously, so it is asserted through the tool exactly as a client calls it.
+func TestMCPConcurrentUpdatesDoNotLoseAChange(t *testing.T) {
+	cs, mem := newWriteTestSession(t, "publisher")
+	ctx := context.Background()
+
+	if _, isErr := callTool(t, cs, "create_frame", map[string]any{
+		"name": "race", "description": "d", "version": "1.0.0", "rules": []any{"base"},
+	}); isErr {
+		t.Fatal("create failed")
+	}
+
+	// Both callers read 1.0.0.
+	first, isErr := callTool(t, cs, "update_frame", map[string]any{
+		"name": "race", "version": "1.1.0", "base_version": "1.0.0",
+		"rules": []any{"base", "from A"},
+	})
+	if isErr {
+		t.Fatalf("first update should succeed: %q", first)
+	}
+	second, isErr := callTool(t, cs, "update_frame", map[string]any{
+		"name": "race", "version": "1.2.0", "base_version": "1.0.0",
+		"rules": []any{"base", "from B"},
+	})
+	if !isErr {
+		t.Fatalf("second update overwrote the first: %q", second)
+	}
+	if !strings.Contains(second, "changed while you were editing") {
+		t.Errorf("message = %q, want it to explain the frame moved on", second)
+	}
+
+	v, _, _, err := mem.GetFrameVersion(ctx, mustFrameID(t, mem, "race"), "1.1.0")
+	if err != nil {
+		t.Fatalf("get version: %v", err)
+	}
+	doc, err := frames.Parse(v.Content)
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	if len(doc.Slots.Rules) != 2 || doc.Slots.Rules[1] != "from A" {
+		t.Errorf("first caller's change was lost: %v", doc.Slots.Rules)
+	}
+}
+
+// A client that does not read first cannot write: without a base there is no
+// way to tell an intentional overwrite from an accidental one.
+func TestMCPUpdateRequiresABaseVersion(t *testing.T) {
+	cs, _ := newWriteTestSession(t, "publisher")
+	if _, isErr := callTool(t, cs, "create_frame", map[string]any{
+		"name": "needs-base", "description": "d", "version": "1.0.0", "rules": []any{"r"},
+	}); isErr {
+		t.Fatal("create failed")
+	}
+	text, isErr := callTool(t, cs, "update_frame", map[string]any{
+		"name": "needs-base", "version": "1.1.0", "rules": []any{"r", "s"},
+	})
+	if !isErr {
+		t.Fatalf("update without a base version succeeded: %q", text)
+	}
+	if !strings.Contains(text, "base_version is required") {
+		t.Errorf("message = %q, want it to name base_version", text)
+	}
+}
+
+// get_frame must show the version, or a client has no way to supply base_version.
+func TestMCPGetFrameShowsTheVersion(t *testing.T) {
+	cs, _ := newWriteTestSession(t, "publisher")
+	if _, isErr := callTool(t, cs, "create_frame", map[string]any{
+		"name": "shows-version", "description": "d", "version": "2.3.4", "rules": []any{"r"},
+	}); isErr {
+		t.Fatal("create failed")
+	}
+	for _, args := range []map[string]any{
+		{"name": "shows-version"},
+		{"name": "shows-version", "source": true},
+	} {
+		out, isErr := callTool(t, cs, "get_frame", args)
+		if isErr || !strings.Contains(out, "2.3.4") {
+			t.Errorf("get_frame(%v) does not report the version:\n%s", args, out)
+		}
 	}
 }

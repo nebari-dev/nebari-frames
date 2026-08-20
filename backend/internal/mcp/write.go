@@ -41,6 +41,10 @@ type writeFrameInput struct {
 	Name      string `json:"name" jsonschema:"Frame name: lowercase letters, digits and dashes, e.g. brand-voice"`
 	Version   string `json:"version" jsonschema:"semantic version for the new revision, e.g. 1.1.0; must not already exist"`
 	Changelog string `json:"changelog,omitempty" jsonschema:"optional note describing what changed in this version"`
+	// Required by update_frame. Inferring it server-side would defeat the
+	// purpose: the window that loses a change is between the client's read and
+	// its write, and only the client knows what it read.
+	BaseVersion string `json:"base_version,omitempty" jsonschema:"required for update_frame: the version shown by get_frame when you read this Frame. The update is refused if someone else has published since, so you can re-read and reapply instead of silently overwriting their change"`
 
 	Description *string `json:"description,omitempty" jsonschema:"one-line summary of what this Frame carries. Required when creating; when updating, omit to keep the current one"`
 	Visibility  *string `json:"visibility,omitempty" jsonschema:"declared intent, one of private, internal, shared, public; omit to keep the current one, pass an empty string to clear it. Access is decided by registry permissions, not by this field"`
@@ -141,15 +145,19 @@ func (rs *resourceServer) createFrameTool(claims *auth.Claims) gomcp.ToolHandler
 func (rs *resourceServer) updateFrameTool(claims *auth.Claims) gomcp.ToolHandlerFor[writeFrameInput, any] {
 	return func(ctx context.Context, _ *gomcp.CallToolRequest, in writeFrameInput) (*gomcp.CallToolResult, any, error) {
 		ctx = auth.WithClaims(ctx, claims)
+		if in.BaseVersion == "" {
+			return errorResult("base_version is required: read the Frame first with " +
+				"get_frame source=true and pass the version it reports, so a change " +
+				"published by someone else in the meantime is not silently overwritten"), nil, nil
+		}
 		current, err := rs.src.SourceDoc(ctx, in.Name, "")
 		if err != nil {
 			return errorResult(writeErrorText(err)), nil, nil
 		}
-		// The version just read is the base this merge is built on. Passing it
-		// back makes a concurrent update fail loudly instead of overwriting the
-		// other caller's change: both would otherwise merge onto the same base,
-		// pick different version strings, and both report success.
-		return rs.publish(ctx, in, in.applyTo(current), frames.PublishUpdate, current.Version)
+		// Merge onto the current document, but assert against the version the
+		// caller actually read. Deriving the base from this read instead would
+		// make the check vacuous - it would always match.
+		return rs.publish(ctx, in, in.applyTo(current), frames.PublishUpdate, in.BaseVersion)
 	}
 }
 

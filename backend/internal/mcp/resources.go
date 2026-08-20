@@ -104,7 +104,7 @@ func (rs *resourceServer) getServer(req *http.Request) *gomcp.Server {
 	}, rs.createFrameTool(claims))
 	gomcp.AddTool(srv, &gomcp.Tool{
 		Name:        "update_frame",
-		Description: "Publish a new version of an existing Frame, changing only the fields you supply. The version must be higher than the current one. Anything you omit keeps its current value, so send just what changes; pass an empty list to clear a list. To modify a list or a text section, first read the current value with get_frame source=true - never with the default composed form, whose inherited content would be copied into this Frame and detach it from its parents. Fails if no Frame with that name exists, or if the user may not edit it.",
+		Description: "Publish a new version of an existing Frame, changing only the fields you supply. Read it first with get_frame source=true and pass the version it reports as base_version; the update is refused if someone else published in the meantime. The new version must be higher than the current one. Anything you omit keeps its current value, so send just what changes; pass an empty list to clear a list. To modify a list or a text section, first read the current value with get_frame source=true - never with the default composed form, whose inherited content would be copied into this Frame and detach it from its parents. Fails if no Frame with that name exists, or if the user may not edit it.",
 	}, rs.updateFrameTool(claims))
 
 	return srv
