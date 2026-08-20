@@ -8,8 +8,6 @@ import (
 
 	"github.com/nebari-dev/nebari-frames/backend/internal/auth"
 	"github.com/nebari-dev/nebari-frames/backend/internal/branding"
-	"github.com/nebari-dev/nebari-frames/backend/internal/frames"
-	"github.com/nebari-dev/nebari-frames/backend/internal/store"
 	"github.com/nebari-dev/nebari-frames/gen/go/frames/v1/framesv1connect"
 	webui "github.com/nebari-dev/nebari-frames/web"
 )
@@ -30,8 +28,12 @@ type Mounter interface {
 // requests pass through with stub claims and /readyz always returns 200. Pass a
 // non-nil mcpMounter to also mount the MCP endpoint routes. A zero brandingCfg
 // serves an empty config document, leaving the SPA on its built-in defaults.
+//
+// The FrameService is injected rather than constructed here so that the Connect
+// and MCP endpoints share one instance: two separately built services could be
+// configured differently and disagree about who may do what.
 func New(
-	repo store.Repository,
+	svc framesv1connect.FrameServiceHandler,
 	validator auth.TokenValidator,
 	authCfg auth.Config,
 	brandingCfg branding.Config,
@@ -48,7 +50,7 @@ func New(
 	mux.HandleFunc("/config.json", handleBranding(brandingCfg))
 	interceptor := auth.NewInterceptor(validator, devMode)
 	path, handler := framesv1connect.NewFrameServiceHandler(
-		frames.NewService(repo),
+		svc,
 		connect.WithInterceptors(interceptor),
 	)
 	mux.Handle(path, handler)

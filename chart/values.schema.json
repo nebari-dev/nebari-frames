@@ -59,6 +59,7 @@
       "type": "object",
       "properties": {
         "devMode": { "type": "boolean" },
+        "defaultRole": { "type": "string", "enum": ["", "viewer", "publisher", "admin"] },
         "oidc": {
           "type": "object",
           "additionalProperties": false,

@@ -21,14 +21,29 @@ import (
 )
 
 type Service struct {
-	repo   store.Repository
-	lookup rbac.GrantLookup
+	repo              store.Repository
+	lookup            rbac.GrantLookup
+	defaultMembership orgs.DefaultMembership
+}
+
+// Option configures a Service. Options exist so that adding configuration does
+// not churn every NewService call site; the zero configuration is fail-closed.
+type Option func(*Service)
+
+// WithDefaultMembership grants authenticated callers with no stored membership
+// a baseline role in the named org. Omit it to deny such callers (the default).
+func WithDefaultMembership(def orgs.DefaultMembership) Option {
+	return func(s *Service) { s.defaultMembership = def }
 }
 
 var _ framesv1connect.FrameServiceHandler = (*Service)(nil)
 
-func NewService(repo store.Repository) *Service {
-	return &Service{repo: repo, lookup: grantLookup{repo}}
+func NewService(repo store.Repository, opts ...Option) *Service {
+	s := &Service{repo: repo, lookup: grantLookup{repo}}
+	for _, opt := range opts {
+		opt(s)
+	}
+	return s
 }
 
 // grantLookup adapts store grants to rbac.Grant.
@@ -351,7 +366,7 @@ func (s *Service) ResolveFrame(ctx context.Context, req *connect.Request[framesv
 // --- helpers ---
 
 func (s *Service) resolveCaller(ctx context.Context) (rbac.Caller, error) {
-	caller, err := orgs.ResolveCaller(ctx, s.repo)
+	caller, err := orgs.ResolveCaller(ctx, s.repo, s.defaultMembership)
 	if err != nil {
 		switch {
 		case errors.Is(err, orgs.ErrNoClaims):

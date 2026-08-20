@@ -20,6 +20,17 @@ const (
 	PermDelete Permission = "delete"
 )
 
+// ParseRole resolves a configured role name to a Role, reporting whether it is
+// one of the defined roles. Matching is exact: a typo in an operator's config
+// must fail loudly at startup rather than silently deny every request.
+func ParseRole(s string) (Role, bool) {
+	switch Role(s) {
+	case RoleViewer, RolePublisher, RoleAdmin:
+		return Role(s), true
+	}
+	return "", false
+}
+
 // Caller is the resolved identity + org membership of the requester.
 type Caller struct {
 	Subject string

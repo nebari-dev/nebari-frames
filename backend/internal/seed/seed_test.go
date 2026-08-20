@@ -176,3 +176,85 @@ func TestSeed_Run(t *testing.T) {
 		})
 	}
 }
+
+// With auth.defaultRole enabled, any user who has signed in already holds a
+// membership, which used to make the configured admin bootstrap a no-op: the
+// sub path saw an existing membership and returned, and the email path saw an
+// active member with that address and returned. An operator who enabled the
+// default role before configuring an admin could therefore end up with an org
+// that has no admin at all and no in-product way to create one.
+//
+// seed.Run now promotes the configured admin when the org has none, and leaves
+// roles alone when an admin already exists.
+func TestRun_PromotesConfiguredAdminWhenOrgHasNone(t *testing.T) {
+	tests := []struct {
+		name string
+		// existing memberships before seeding
+		seed    func(context.Context, *store.Memory)
+		cfg     seed.Config
+		wantSub string // membership to inspect afterwards
+		// expected role of wantSub after Run
+		wantRole string
+	}{
+		{
+			name: "a baseline-provisioned user configured as admin by sub is promoted",
+			seed: func(ctx context.Context, repo *store.Memory) {
+				_ = repo.UpsertMembership(ctx, &framesv1.Membership{OrgId: "o1", UserSub: "boss-sub", Role: "viewer", Email: "boss@x.io"})
+			},
+			cfg:      seed.Config{OrgSlug: "acme", AdminSub: "boss-sub"},
+			wantSub:  "boss-sub",
+			wantRole: "admin",
+		},
+		{
+			name: "a baseline-provisioned user configured as admin by email is promoted",
+			seed: func(ctx context.Context, repo *store.Memory) {
+				_ = repo.UpsertMembership(ctx, &framesv1.Membership{OrgId: "o1", UserSub: "boss-sub", Role: "viewer", Email: "boss@x.io"})
+			},
+			cfg:      seed.Config{OrgSlug: "acme", AdminEmail: "boss@x.io"},
+			wantSub:  "boss-sub",
+			wantRole: "admin",
+		},
+		{
+			name: "a deliberate demotion is left alone while another admin exists",
+			seed: func(ctx context.Context, repo *store.Memory) {
+				_ = repo.UpsertMembership(ctx, &framesv1.Membership{OrgId: "o1", UserSub: "boss-sub", Role: "viewer", Email: "boss@x.io"})
+				_ = repo.UpsertMembership(ctx, &framesv1.Membership{OrgId: "o1", UserSub: "other-admin", Role: "admin", Email: "other@x.io"})
+			},
+			cfg:      seed.Config{OrgSlug: "acme", AdminSub: "boss-sub"},
+			wantSub:  "boss-sub",
+			wantRole: "viewer",
+		},
+		{
+			name: "an existing admin is untouched",
+			seed: func(ctx context.Context, repo *store.Memory) {
+				_ = repo.UpsertMembership(ctx, &framesv1.Membership{OrgId: "o1", UserSub: "boss-sub", Role: "admin", Email: "boss@x.io"})
+			},
+			cfg:      seed.Config{OrgSlug: "acme", AdminSub: "boss-sub"},
+			wantSub:  "boss-sub",
+			wantRole: "admin",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ctx := context.Background()
+			repo := store.NewMemory()
+			if err := repo.CreateOrg(ctx, &framesv1.Org{Id: "o1", Slug: "acme", DisplayName: "Acme"}); err != nil {
+				t.Fatalf("create org: %v", err)
+			}
+			tt.seed(ctx, repo)
+
+			if err := seed.Run(ctx, repo, tt.cfg); err != nil {
+				t.Fatalf("run: %v", err)
+			}
+
+			m, err := repo.GetMembership(ctx, tt.wantSub)
+			if err != nil {
+				t.Fatalf("get membership %q: %v", tt.wantSub, err)
+			}
+			if m.Role != tt.wantRole {
+				t.Errorf("role = %q, want %q", m.Role, tt.wantRole)
+			}
+		})
+	}
+}

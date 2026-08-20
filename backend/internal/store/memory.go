@@ -108,7 +108,8 @@ func (m *Memory) GetPendingMembershipByEmail(_ context.Context, email string) (*
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 	for _, mem := range m.memberships {
-		if mem.UserSub == "" && mem.Email == email {
+		// Mirrors the SQLite COLLATE NOCASE lookup.
+		if mem.UserSub == "" && strings.EqualFold(mem.Email, email) {
 			return mem, nil
 		}
 	}
@@ -256,7 +257,7 @@ func (m *Memory) ActivatePendingMembership(_ context.Context, email, sub string)
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	for _, e := range m.memberships {
-		if e.UserSub == "" && e.Email == email {
+		if e.UserSub == "" && strings.EqualFold(e.Email, email) {
 			e.UserSub = sub
 			return nil
 		}

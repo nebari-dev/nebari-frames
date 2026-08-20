@@ -54,3 +54,31 @@ func TestCanPublish(t *testing.T) {
 		t.Fatal("admin must publish")
 	}
 }
+
+func TestParseRole(t *testing.T) {
+	tests := []struct {
+		name  string
+		in    string
+		want  rbac.Role
+		wantK bool
+	}{
+		{name: "viewer", in: "viewer", want: rbac.RoleViewer, wantK: true},
+		{name: "publisher", in: "publisher", want: rbac.RolePublisher, wantK: true},
+		{name: "admin", in: "admin", want: rbac.RoleAdmin, wantK: true},
+		{name: "empty is not a role", in: "", wantK: false},
+		{name: "unknown role", in: "superuser", wantK: false},
+		{name: "case sensitive", in: "Viewer", wantK: false},
+		{name: "surrounding whitespace is not trimmed", in: " viewer", wantK: false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, ok := rbac.ParseRole(tt.in)
+			if ok != tt.wantK {
+				t.Fatalf("ParseRole(%q) ok = %v, want %v", tt.in, ok, tt.wantK)
+			}
+			if ok && got != tt.want {
+				t.Errorf("ParseRole(%q) = %q, want %q", tt.in, got, tt.want)
+			}
+		})
+	}
+}

@@ -11,6 +11,7 @@ import (
 
 	"github.com/nebari-dev/nebari-frames/backend/internal/auth"
 	"github.com/nebari-dev/nebari-frames/backend/internal/branding"
+	"github.com/nebari-dev/nebari-frames/backend/internal/frames"
 	"github.com/nebari-dev/nebari-frames/backend/internal/server"
 	"github.com/nebari-dev/nebari-frames/backend/internal/store"
 )
@@ -38,7 +39,7 @@ func TestServer_Healthz(t *testing.T) {
 		},
 	}
 
-	srv := server.New(store.NewMemory(), nil, auth.Config{}, branding.Config{}, true, nil) // dev mode
+	srv := server.New(frames.NewService(store.NewMemory()), nil, auth.Config{}, branding.Config{}, true, nil) // dev mode
 	ts := httptest.NewServer(srv.Handler())
 	t.Cleanup(ts.Close)
 
@@ -84,7 +85,7 @@ func TestServer_AuthConfig(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			srv := server.New(store.NewMemory(), nil, tt.cfg, branding.Config{}, true, nil)
+			srv := server.New(frames.NewService(store.NewMemory()), nil, tt.cfg, branding.Config{}, true, nil)
 			ts := httptest.NewServer(srv.Handler())
 			t.Cleanup(ts.Close)
 			resp, err := http.Get(ts.URL + "/auth/config")
@@ -121,7 +122,7 @@ func TestServer_AuthConfig(t *testing.T) {
 }
 
 func TestServer_AuthConfig_MethodNotAllowed(t *testing.T) {
-	srv := server.New(store.NewMemory(), nil, auth.Config{IssuerURL: "https://oidc.example", ClientID: "web"}, branding.Config{}, true, nil)
+	srv := server.New(frames.NewService(store.NewMemory()), nil, auth.Config{IssuerURL: "https://oidc.example", ClientID: "web"}, branding.Config{}, true, nil)
 	ts := httptest.NewServer(srv.Handler())
 	t.Cleanup(ts.Close)
 
@@ -178,7 +179,7 @@ func TestServer_Branding(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			srv := server.New(store.NewMemory(), nil, auth.Config{}, tt.cfg, true, nil)
+			srv := server.New(frames.NewService(store.NewMemory()), nil, auth.Config{}, tt.cfg, true, nil)
 			ts := httptest.NewServer(srv.Handler())
 			t.Cleanup(ts.Close)
 
@@ -207,7 +208,7 @@ func TestServer_Branding(t *testing.T) {
 }
 
 func TestServer_Branding_MethodNotAllowed(t *testing.T) {
-	srv := server.New(store.NewMemory(), nil, auth.Config{}, branding.Config{}, true, nil)
+	srv := server.New(frames.NewService(store.NewMemory()), nil, auth.Config{}, branding.Config{}, true, nil)
 	ts := httptest.NewServer(srv.Handler())
 	t.Cleanup(ts.Close)
 
@@ -258,7 +259,7 @@ func TestServer_Readyz(t *testing.T) {
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			srv := server.New(store.NewMemory(), tc.validator, auth.Config{}, branding.Config{}, tc.devMode, nil)
+			srv := server.New(frames.NewService(store.NewMemory()), tc.validator, auth.Config{}, branding.Config{}, tc.devMode, nil)
 			ts := httptest.NewServer(srv.Handler())
 			t.Cleanup(ts.Close)
 			resp, err := http.Get(ts.URL + "/readyz")

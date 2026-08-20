@@ -190,7 +190,10 @@ func (r *Repository) GetPendingMembershipByEmail(ctx context.Context, email stri
 	var added string
 	var e sql.NullString
 	err := r.db.QueryRowContext(ctx,
-		`SELECT org_id, user_sub, role, added_at, email FROM org_memberships WHERE email = ? AND user_sub = '' LIMIT 1`, email).
+		// COLLATE NOCASE: identity providers do not guarantee the case of the
+		// email claim and invites are typed by hand, so a case difference must
+		// not cause the invite to be missed.
+		`SELECT org_id, user_sub, role, added_at, email FROM org_memberships WHERE email = ? COLLATE NOCASE AND user_sub = '' LIMIT 1`, email).
 		Scan(&m.OrgId, &m.UserSub, &m.Role, &added, &e)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, store.ErrNotFound
@@ -445,7 +448,7 @@ func (r *Repository) AddPendingMembership(ctx context.Context, m *framesv1.Membe
 
 func (r *Repository) ActivatePendingMembership(ctx context.Context, email, sub string) error {
 	res, err := r.db.ExecContext(ctx,
-		`UPDATE org_memberships SET user_sub = ? WHERE email = ? AND user_sub = ''`, sub, email)
+		`UPDATE org_memberships SET user_sub = ? WHERE email = ? COLLATE NOCASE AND user_sub = ''`, sub, email)
 	if err != nil {
 		return err
 	}

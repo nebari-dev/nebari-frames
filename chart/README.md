@@ -111,6 +111,7 @@ The server writes structured JSON logs to stdout, ready for collection by the pl
 | `seed.orgDisplayName` | Display name for the seeded organization. |
 | `seed.adminEmail` | Email of the first admin (reconciled to the OIDC subject on first login). |
 | `auth.devMode` | When `true` (and NebariApp auth is off), disables auth and uses a fixed dev identity. Local use only. |
+| `auth.defaultRole` | Baseline role for an authenticated user with no membership: `""` (deny, the default), `viewer`, `publisher`, or `admin`. Requires `seed.orgSlug` (the install fails without it). Enabling it makes the identity provider the access boundary, turns member removal into a demotion rather than a revocation, and makes "Add member" fail for users who have already signed in. Configure `seed.adminEmail` too: the server promotes the configured admin when the org has none, which is the only recovery path if every admin is lost. |
 | `auth.oidc.issuerUrl` | OIDC issuer URL for self-managed auth (used when NebariApp is off and dev mode is off). |
 | `auth.oidc.clientId` | OIDC client id for the SPA. |
 | `auth.oidc.deviceClientId` | OIDC client id for the device-code flow (CLI login). |

@@ -3,6 +3,9 @@ package main
 import (
 	"strings"
 	"testing"
+
+	"github.com/nebari-dev/nebari-frames/backend/internal/orgs"
+	"github.com/nebari-dev/nebari-frames/backend/internal/rbac"
 )
 
 func TestSelectAuthMode(t *testing.T) {
@@ -42,6 +45,83 @@ func TestSelectAuthMode(t *testing.T) {
 			}
 			if dev != tc.wantDev {
 				t.Fatalf("devMode = %v, want %v", dev, tc.wantDev)
+			}
+		})
+	}
+}
+
+func TestSelectDefaultMembership(t *testing.T) {
+	tests := []struct {
+		name     string
+		roleEnv  string
+		orgSlug  string
+		want     orgs.DefaultMembership
+		wantErr  bool
+		errNames string // substring the error must mention
+	}{
+		{
+			name:    "unset denies, which is the fail-closed default",
+			roleEnv: "",
+			orgSlug: "acme",
+			want:    orgs.DefaultMembership{},
+		},
+		{
+			name:    "unset with no org is also fine",
+			roleEnv: "",
+			orgSlug: "",
+			want:    orgs.DefaultMembership{},
+		},
+		{
+			name:    "viewer resolves against the seeded org",
+			roleEnv: "viewer",
+			orgSlug: "acme",
+			want:    orgs.DefaultMembership{Role: rbac.RoleViewer, OrgSlug: "acme"},
+		},
+		{
+			name:    "surrounding whitespace is tolerated",
+			roleEnv: "  viewer\n",
+			orgSlug: "acme",
+			want:    orgs.DefaultMembership{Role: rbac.RoleViewer, OrgSlug: "acme"},
+		},
+		{
+			name:    "admin is accepted, however unwise",
+			roleEnv: "admin",
+			orgSlug: "acme",
+			want:    orgs.DefaultMembership{Role: rbac.RoleAdmin, OrgSlug: "acme"},
+		},
+		{
+			name:     "an unknown role fails fast",
+			roleEnv:  "superuser",
+			orgSlug:  "acme",
+			wantErr:  true,
+			errNames: "FRAMES_DEFAULT_ROLE",
+		},
+		{
+			name:     "a role with no seeded org fails fast rather than silently denying",
+			roleEnv:  "viewer",
+			orgSlug:  "",
+			wantErr:  true,
+			errNames: "SEED_ORG_SLUG",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := selectDefaultMembership(tt.roleEnv, tt.orgSlug)
+			if tt.wantErr {
+				if err == nil {
+					t.Fatalf("want error, got config %+v", got)
+				}
+				if !strings.Contains(err.Error(), tt.errNames) {
+					t.Errorf("error %q should name %q", err, tt.errNames)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if got != tt.want {
+				t.Errorf("got %+v, want %+v", got, tt.want)
 			}
 		})
 	}
