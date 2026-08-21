@@ -211,6 +211,73 @@ jobs:
         # cluster-name output (its kubectl context is `kind-<cluster-name>`).
         run: kind load docker-image nebari-frames:e2e --name ${{ steps.sandbox.outputs.cluster-name }}
 
+      - name: Make *.nebari.local resolve inside the cluster
+        env:
+          KUBECONFIG: ${{ steps.sandbox.outputs.kubeconfig }}
+          GATEWAY_IP: ${{ steps.sandbox.outputs.gateway-ip }}
+          DOMAIN: nebari.local
+        run: |
+          # The sandbox action's own in-cluster DNS step is a no-op on kind. It
+          # writes a `coredns-custom` ConfigMap, which is a k3s convention (k3s
+          # CoreDNS mounts it and does `import /etc/coredns/custom/*.server`);
+          # kind's CoreDNS comes from kubeadm with a plain `.:53` Corefile and
+          # no such import, so the ConfigMap is never read and pods get SERVFAIL
+          # for nebari.local. The action still logs "In-cluster DNS ready".
+          # Upstream: nebari-dev/action-nebari-sandbox#104.
+          #
+          # Keycloak advertises the external issuer in its discovery document,
+          # so the frames pod has to resolve keycloak.nebari.local to complete
+          # OIDC discovery. Add the zone to the Corefile that kind actually
+          # reads. Remove this once the action handles kind.
+          [ -n "${GATEWAY_IP}" ] || { echo "::error::gateway-ip is empty"; exit 1; }
+          CORE=$(kubectl -n kube-system get configmap coredns -o jsonpath='{.data.Corefile}')
+          [ -n "${CORE}" ] || { echo "::error::could not read kind's coredns Corefile"; exit 1; }
+
+          # Merge-patch only the Corefile key so nothing else in the ConfigMap
+          # is disturbed, and skip if the zone is already there so a re-run is
+          # not additive.
+          PATCH=$(COREFILE="${CORE}" python3 <<'PY'
+          import json, os
+          domain, ip, core = os.environ["DOMAIN"], os.environ["GATEWAY_IP"], os.environ["COREFILE"]
+          if f"{domain}:53" in core:
+              block = ""
+          else:
+              # `template` is the only stock plugin that answers a wildcard, and
+              # AAAA/ANY return empty NOERROR so dual-stack resolvers do not
+              # stall and other qtypes do not SERVFAIL in an authoritative zone.
+              block = (
+                  f"{domain}:53 {{\n"
+                  "    errors\n"
+                  f"    template IN A {domain} {{\n"
+                  '        answer "{{ .Name }} 60 IN A ' + ip + '"\n'
+                  "    }\n"
+                  f"    template IN AAAA {domain} {{\n"
+                  "        rcode NOERROR\n"
+                  "    }\n"
+                  f"    template IN ANY {domain} {{\n"
+                  "        rcode NOERROR\n"
+                  "    }\n"
+                  "}\n\n"
+              )
+          print(json.dumps({"data": {"Corefile": block + core}}))
+          PY
+          )
+          kubectl -n kube-system patch configmap coredns --type merge --patch "${PATCH}"
+          kubectl -n kube-system rollout restart deployment/coredns
+          kubectl -n kube-system rollout status deployment/coredns --timeout=120s
+
+          # Prove it from inside the cluster. Without this the failure surfaces
+          # 15 minutes later as an unexplained unhealthy Application, which is
+          # how the upstream no-op went unnoticed in the first place.
+          kubectl delete pod dns-probe --ignore-not-found >/dev/null
+          OUT=$(kubectl run dns-probe --image=busybox:1.36 --restart=Never \
+            --attach --rm --quiet --image-pull-policy=IfNotPresent \
+            --command -- nslookup "keycloak.${DOMAIN}" 2>&1) || true
+          echo "${OUT}"
+          echo "${OUT}" | grep -qF "${GATEWAY_IP}" \
+            || { echo "::error::keycloak.${DOMAIN} does not resolve to ${GATEWAY_IP} from inside the cluster"; exit 1; }
+          echo "OK: keycloak.${DOMAIN} resolves to ${GATEWAY_IP} for pods"
+
       - name: Provision the sandbox CA for the frames pod
         env:
           KUBECONFIG: ${{ steps.sandbox.outputs.kubeconfig }}
