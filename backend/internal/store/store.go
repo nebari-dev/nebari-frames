@@ -61,6 +61,12 @@ type Repository interface {
 	GetOrgBySlug(ctx context.Context, slug string) (*framesv1.Org, error)
 	GetMembership(ctx context.Context, userSub string) (*framesv1.Membership, error)
 	UpsertMembership(ctx context.Context, m *framesv1.Membership) error
+	// CreateMembership inserts a membership and never updates one. It returns
+	// ErrAlreadyExists when the subject or the (org, email) pair is taken.
+	// Provisioning must not use UpsertMembership: that is UPDATE-first, so a
+	// caller acting on a stale "no membership" read would rewrite a role another
+	// request had just established.
+	CreateMembership(ctx context.Context, m *framesv1.Membership) error
 	ListMembershipsByOrg(ctx context.Context, orgID string) ([]*framesv1.Membership, error)
 	GetPendingMembershipByEmail(ctx context.Context, email string) (*framesv1.Membership, error)
 	CountAdmins(ctx context.Context, orgID string) (int, error)

@@ -93,6 +93,28 @@ func (m *Memory) UpsertMembership(_ context.Context, mem *framesv1.Membership) e
 	return nil
 }
 
+func (m *Memory) CreateMembership(_ context.Context, mem *framesv1.Membership) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	email := CanonicalEmail(mem.Email)
+	for _, existing := range m.memberships {
+		if existing.UserSub == mem.UserSub && mem.UserSub != "" {
+			return ErrAlreadyExists
+		}
+		if email != "" && existing.OrgId == mem.OrgId && CanonicalEmail(existing.Email) == email {
+			return ErrAlreadyExists
+		}
+	}
+	m.memberships = append(m.memberships, &framesv1.Membership{
+		OrgId:   mem.OrgId,
+		UserSub: mem.UserSub,
+		Role:    mem.Role,
+		Email:   email,
+		AddedAt: mem.AddedAt,
+	})
+	return nil
+}
+
 func (m *Memory) ListMembershipsByOrg(_ context.Context, orgID string) ([]*framesv1.Membership, error) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()

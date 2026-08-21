@@ -151,6 +151,18 @@ func (r *Repository) UpsertMembership(ctx context.Context, m *framesv1.Membershi
 	return err
 }
 
+// CreateMembership inserts a membership, never updating an existing row. Both
+// unique indexes (user_sub, and org_id+email) surface as ErrAlreadyExists.
+func (r *Repository) CreateMembership(ctx context.Context, m *framesv1.Membership) error {
+	_, err := r.db.ExecContext(ctx,
+		`INSERT INTO org_memberships (org_id, user_sub, role, added_at, email) VALUES (?, ?, ?, ?, ?)`,
+		m.OrgId, m.UserSub, m.Role, m.AddedAt.AsTime().UTC().Format(time.RFC3339), nullStr(store.CanonicalEmail(m.Email)))
+	if isUnique(err) {
+		return store.ErrAlreadyExists
+	}
+	return err
+}
+
 // nullStr maps "" to SQL NULL so the partial unique email index ignores it.
 func nullStr(s string) any {
 	if s == "" {

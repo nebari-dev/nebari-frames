@@ -126,18 +126,21 @@ func provisionDefault(ctx context.Context, repo store.Repository, claims *auth.C
 		Email:   store.CanonicalEmail(claims.Email),
 		AddedAt: timestamppb.Now(),
 	}
-	if err := repo.UpsertMembership(ctx, m); err != nil {
+	// Insert-only. UpsertMembership is UPDATE-first, so using it here would let
+	// a caller acting on a stale "no membership" read rewrite a row that another
+	// request established in the meantime - turning an activated invite's role
+	// into the baseline, permanently.
+	if err := repo.CreateMembership(ctx, m); err != nil {
 		if !errors.Is(err, store.ErrAlreadyExists) {
 			return nil, err
 		}
-		// Two ways to land here. Either a concurrent first request won the
-		// insert, in which case re-reading finds the winner's row and it is
-		// authoritative - not our assumed role. Or the store already holds a
-		// membership for this email under a different subject, which is what a
-		// deleted-and-recreated identity-provider account looks like: the store
-		// keeps one membership per (org, email), so the stale row blocks the new
-		// one. That is a denial, not a server fault, so it must not escape as a
-		// raw store error and become a 500.
+		// Something else holds this slot. Either a concurrent request already
+		// wrote a membership for this subject - possibly by activating an invite,
+		// so its role outranks the baseline we assumed - or the (org, email) pair
+		// belongs to a different subject, which is what a deleted-and-recreated
+		// identity-provider account looks like. Re-reading distinguishes them:
+		// a row for our subject is authoritative, and no row means the address is
+		// taken, which is a denial rather than a server fault.
 		existing, rerr := repo.GetMembership(ctx, claims.Subject)
 		if rerr == nil {
 			return existing, nil
