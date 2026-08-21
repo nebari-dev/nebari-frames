@@ -116,13 +116,75 @@ jobs:
       - name: Build frames image
         run: docker build --platform=linux/amd64 -t nebari-frames:e2e .
 
-      - uses: nebari-dev/action-nebari-sandbox@v2
+      - name: Pin MetalLB's pool to the kind Docker network
+        id: metallb
+        run: |
+          # NIC is supposed to derive MetalLB's IPAddressPool from the kind
+          # Docker network, but the derived value is cached on the provider
+          # instance during Deploy and is not what the IPAddressPool ends up
+          # with: the pool gets NIC's unroutable 192.168.1.100-110 fallback
+          # instead, so the gateway LoadBalancer IP has no route from the
+          # runner and every request to it times out. An explicitly configured
+          # pool takes precedence over both, so pin it ourselves.
+          #
+          # Derive it from the network kind will actually use rather than
+          # hardcoding a range, so this self-corrects if Docker picks a
+          # different subnet. kind reuses a bridge network named `kind` when one
+          # already exists, so creating it up front fixes the subnet without
+          # fighting kind for it.
+          docker network create --driver bridge --subnet 172.18.0.0/16 kind 2>/dev/null \
+            || echo "network 'kind' already exists; using its subnet as-is"
+          SUBNET=$(docker network inspect kind --format '{{ (index .IPAM.Config 0).Subnet }}')
+          # Mirrors NIC's own formula: the .100-.110 range of the subnet's last
+          # /24 block (172.18.0.0/16 -> 172.18.255.100-172.18.255.110).
+          POOL=$(python3 -c '
+          import ipaddress, sys
+          net = ipaddress.ip_network(sys.argv[1])
+          if net.prefixlen > 24:
+              raise SystemExit(f"kind network {net} is smaller than a /24")
+          last = ipaddress.ip_network(f"{net.broadcast_address}/24", strict=False)
+          print(f"{last[100]}-{last[110]}")
+          ' "${SUBNET}")
+          echo "kind network ${SUBNET} -> MetalLB pool ${POOL}"
+          echo "pool=${POOL}" >> "$GITHUB_OUTPUT"
+
+      - name: Write the NIC config
+        run: |
+          # Supplying a config means the action skips its own template, so this
+          # has to restate the platform defaults it would otherwise set.
+          # `project_name` MUST equal the sandbox `cluster-name` below, and the
+          # providers must both be `local`, or the action's outputs do not
+          # resolve.
+          cat > /tmp/nic-config.yaml <<EOF
+          project_name: nebari-test
+          domain: nebari.local
+          certificate:
+            type: selfsigned
+          cluster:
+            local:
+              metallb:
+                address_pool: ${{ steps.metallb.outputs.pool }}
+          repository:
+            local: {}
+          EOF
+          cat /tmp/nic-config.yaml
+
+      - uses: nebari-dev/action-nebari-sandbox@v3
         id: sandbox
         with:
-          profile: platform
+          # Pinned rather than tracking `latest`, so a NIC release cannot turn
+          # this job red without a deliberate bump. v3 requires NIC >= v0.13.0
+          # (the local/kind cluster + local repository providers).
+          nic-version: v0.13.0
+          nic-config: /tmp/nic-config.yaml
+          # Must match `project_name` in the config above.
+          cluster-name: nebari-test
 
       - name: Import image into the sandbox cluster
-        run: k3d image import nebari-frames:e2e -c ${{ steps.sandbox.outputs.cluster-name }}
+        # v3 deploys via NIC's local provider, which is kind, not k3d. `kind` is
+        # preinstalled on ubuntu-latest; the kind cluster name is the action's
+        # cluster-name output (its kubectl context is `kind-<cluster-name>`).
+        run: kind load docker-image nebari-frames:e2e --name ${{ steps.sandbox.outputs.cluster-name }}
 
       - name: Deploy frames via GitOps
         env:
@@ -136,7 +198,11 @@ jobs:
             name: nebari-frames
             namespace: argocd
           spec:
-            project: default
+            # Consumer apps must use the `nebari-apps` project. NIC locks the
+            # `default` project down to an empty sourceRepos/destinations
+            # deny-all, so an Application in it is rejected with
+            # InvalidSpecError and never syncs.
+            project: nebari-apps
             source:
               repoURL: "file://${GITOPS_DIR}"
               targetRevision: HEAD
@@ -147,12 +213,16 @@ jobs:
                   image:
                     repository: nebari-frames
                     tag: e2e
-                  # Auth runs in dev mode: the app's OIDC readiness check needs
-                  # to reach the issuer (https://keycloak.nebari.local) from
-                  # inside the pod, but the sandbox has no in-cluster DNS for
-                  # *.nebari.local and its CA is self-signed, so /readyz stays
-                  # 503 forever with real auth. Routing, TLS, and the gateway
-                  # path are still fully exercised via the NebariApp.
+                  # Auth runs in dev mode: the app's OIDC readiness check
+                  # needs to reach the issuer (https://keycloak.nebari.local)
+                  # from inside the pod. The sandbox now resolves
+                  # *.nebari.local in-cluster, but its gateway CA is
+                  # self-signed and the pod does not trust it, so /readyz
+                  # stays 503 forever with real auth. Enabling real auth means
+                  # mounting the sandbox CA into the pod (the action exposes
+                  # it as ConfigMap `nebari-sandbox-ca` in `kube-public`).
+                  # Routing, TLS, and the gateway path are still fully
+                  # exercised via the NebariApp.
                   nebariapp:
                     enabled: true
                     hostname: frames.nebari.local
@@ -257,7 +327,3 @@ jobs:
             200|302|303|307) echo "endpoint OK" ;;
             *) echo "::error::unexpected HTTP ${CODE}"; exit 1 ;;
           esac
-
-      - name: Cleanup
-        if: always()
-        run: k3d cluster delete ${{ steps.sandbox.outputs.cluster-name }} || true
