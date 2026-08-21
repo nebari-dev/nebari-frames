@@ -117,15 +117,15 @@ store.Repository**.
 ## Conventions
 
 - Table-driven Go tests. Tests sit beside the code they cover, including in `web/` (`*.test.tsx`).
+- Never bump `chart/Chart.yaml`'s `version`/`appVersion` by hand: the release job stamps them from
+  the git tag (`version` = tag without `v`, `appVersion` = the literal tag).
+- The SPA ships inside the image, not the chart. A frontend change reaches a cluster only through a
+  new image tag.
 - A test that asserts only "this was rejected" usually proves nothing: an unrelated 401, or a parse
   failure, satisfies it just as well. Assert the specific code or message, and pair a rejection with
   a control that must succeed. Reflective guards in `backend/internal/mcp/resources_test.go` walk
   `frames.SlotTable` and `frames.Doc`, so adding a slot without wiring it through the MCP input
   fails rather than silently dropping data.
-- Never bump `chart/Chart.yaml`'s `version`/`appVersion` by hand: the release job stamps them from
-  the git tag (`version` = tag without `v`, `appVersion` = the literal tag).
-- The SPA ships inside the image, not the chart. A frontend change reaches a cluster only through a
-  new image tag.
 - Comments in this repo explain *why* a constraint exists (pinned CI versions, fail-closed
   readiness, the vite `@bufbuild/protobuf` aliases). Preserve that rationale when editing near it,
   and keep new comments in the same register.
