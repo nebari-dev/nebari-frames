@@ -88,12 +88,34 @@ jobs:
         run: |
           helm template frames chart/ --set auth.devMode=true \
             > /tmp/render-devmode.yaml
+      - name: Template renders (trust bundle)
+        run: |
+          helm template frames chart/ --set auth.devMode=true \
+            --set trustBundle.configMapName=nebari-trust-bundle \
+            > /tmp/render-trustbundle.yaml
+          # Assert on content, not just that it rendered: the whole point of
+          # the block is the mount and the env var, and a silently-empty
+          # render would still pass kubeconform below.
+          for want in \
+            'name: SSL_CERT_FILE' \
+            'value: "/etc/ssl/nebari/ca-certificates.crt"' \
+            'mountPath: "/etc/ssl/nebari"' \
+            'name: "nebari-trust-bundle"'; do
+            grep -qF "${want}" /tmp/render-trustbundle.yaml \
+              || { echo "::error::trust-bundle render is missing: ${want}"; exit 1; }
+          done
+          # ...and that it stays opt-in: no trust-bundle wiring by default.
+          if grep -q 'SSL_CERT_FILE' /tmp/render-devmode.yaml; then
+            echo "::error::SSL_CERT_FILE rendered without trustBundle.configMapName set"
+            exit 1
+          fi
       - name: Validate rendered manifests (kubeconform)
         run: |
           # -ignore-missing-schemas is required because the NebariApp CRD has
           # no published JSON schema anywhere; do not remove this flag without
           # publishing one first.
-          for f in /tmp/render-nebariapp.yaml /tmp/render-devmode.yaml; do
+          for f in /tmp/render-nebariapp.yaml /tmp/render-devmode.yaml \
+                   /tmp/render-trustbundle.yaml; do
             echo "::group::kubeconform ${f}"
             # Pinned for the same reason golangci-lint is: a new release must
             # not change gate behavior without a deliberate bump. v0.8+ needs
@@ -125,7 +147,10 @@ jobs:
           # with: the pool gets NIC's unroutable 192.168.1.100-110 fallback
           # instead, so the gateway LoadBalancer IP has no route from the
           # runner and every request to it times out. An explicitly configured
-          # pool takes precedence over both, so pin it ourselves.
+          # pool takes precedence over both, so pin it ourselves. Upstream:
+          # nebari-dev/nebari-infrastructure-core#612. Once that is fixed and
+          # released, this step and the nic-config below can both be dropped in
+          # favour of the action's own config template.
           #
           # Derive it from the network kind will actually use rather than
           # hardcoding a range, so this self-corrects if Docker picks a
@@ -186,6 +211,104 @@ jobs:
         # cluster-name output (its kubectl context is `kind-<cluster-name>`).
         run: kind load docker-image nebari-frames:e2e --name ${{ steps.sandbox.outputs.cluster-name }}
 
+      - name: Make *.nebari.local resolve inside the cluster
+        env:
+          KUBECONFIG: ${{ steps.sandbox.outputs.kubeconfig }}
+          GATEWAY_IP: ${{ steps.sandbox.outputs.gateway-ip }}
+          DOMAIN: nebari.local
+        run: |
+          # The sandbox action's own in-cluster DNS step is a no-op on kind. It
+          # writes a `coredns-custom` ConfigMap, which is a k3s convention (k3s
+          # CoreDNS mounts it and does `import /etc/coredns/custom/*.server`);
+          # kind's CoreDNS comes from kubeadm with a plain `.:53` Corefile and
+          # no such import, so the ConfigMap is never read and pods get SERVFAIL
+          # for nebari.local. The action still logs "In-cluster DNS ready".
+          # Upstream: nebari-dev/action-nebari-sandbox#104.
+          #
+          # Keycloak advertises the external issuer in its discovery document,
+          # so the frames pod has to resolve keycloak.nebari.local to complete
+          # OIDC discovery. Add the zone to the Corefile that kind actually
+          # reads. Remove this once the action handles kind.
+          [ -n "${GATEWAY_IP}" ] || { echo "::error::gateway-ip is empty"; exit 1; }
+          CORE=$(kubectl -n kube-system get configmap coredns -o jsonpath='{.data.Corefile}')
+          [ -n "${CORE}" ] || { echo "::error::could not read kind's coredns Corefile"; exit 1; }
+
+          # Merge-patch only the Corefile key so nothing else in the ConfigMap
+          # is disturbed, and skip if the zone is already there so a re-run is
+          # not additive.
+          PATCH=$(COREFILE="${CORE}" python3 <<'PY'
+          import json, os
+          domain, ip, core = os.environ["DOMAIN"], os.environ["GATEWAY_IP"], os.environ["COREFILE"]
+          if f"{domain}:53" in core:
+              block = ""
+          else:
+              # `template` is the only stock plugin that answers a wildcard, and
+              # AAAA/ANY return empty NOERROR so dual-stack resolvers do not
+              # stall and other qtypes do not SERVFAIL in an authoritative zone.
+              block = (
+                  f"{domain}:53 {{\n"
+                  "    errors\n"
+                  f"    template IN A {domain} {{\n"
+                  '        answer "{{ .Name }} 60 IN A ' + ip + '"\n'
+                  "    }\n"
+                  f"    template IN AAAA {domain} {{\n"
+                  "        rcode NOERROR\n"
+                  "    }\n"
+                  f"    template IN ANY {domain} {{\n"
+                  "        rcode NOERROR\n"
+                  "    }\n"
+                  "}\n\n"
+              )
+          print(json.dumps({"data": {"Corefile": block + core}}))
+          PY
+          )
+          kubectl -n kube-system patch configmap coredns --type merge --patch "${PATCH}"
+          kubectl -n kube-system rollout restart deployment/coredns
+          kubectl -n kube-system rollout status deployment/coredns --timeout=120s
+
+          # Prove it from inside the cluster. Without this the failure surfaces
+          # 15 minutes later as an unexplained unhealthy Application, which is
+          # how the upstream no-op went unnoticed in the first place.
+          kubectl delete pod dns-probe --ignore-not-found >/dev/null
+          OUT=$(kubectl run dns-probe --image=busybox:1.36 --restart=Never \
+            --attach --rm --quiet --image-pull-policy=IfNotPresent \
+            --command -- nslookup "keycloak.${DOMAIN}" 2>&1) || true
+          echo "${OUT}"
+          echo "${OUT}" | grep -qF "${GATEWAY_IP}" \
+            || { echo "::error::keycloak.${DOMAIN} does not resolve to ${GATEWAY_IP} from inside the cluster"; exit 1; }
+          echo "OK: keycloak.${DOMAIN} resolves to ${GATEWAY_IP} for pods"
+
+      - name: Provision the sandbox CA for the frames pod
+        env:
+          KUBECONFIG: ${{ steps.sandbox.outputs.kubeconfig }}
+          CA_CERT_PATH: ${{ steps.sandbox.outputs.ca-cert-path }}
+        run: |
+          # Real auth needs the pod to trust the sandbox's self-signed gateway
+          # CA, or OIDC discovery against https://keycloak.nebari.local fails
+          # and /readyz never turns 200. The action hands us the CA as a file on
+          # the runner, so build the ConfigMap from that rather than copying the
+          # in-cluster `nebari-sandbox-ca` out of kube-public (a ConfigMap
+          # cannot be mounted across namespaces).
+          [ -s "${CA_CERT_PATH}" ] \
+            || { echo "::error::sandbox ca-cert-path is empty or missing: '${CA_CERT_PATH}'"; exit 1; }
+
+          # Create the namespace up front, carrying the opt-in label the
+          # operator requires. ArgoCD's CreateNamespace=true tolerates an
+          # existing namespace, and the ConfigMap is untracked by ArgoCD so
+          # `prune: true` leaves it alone.
+          kubectl create namespace nebari-frames --dry-run=client -o yaml \
+            | kubectl apply -f -
+          kubectl label namespace nebari-frames nebari.dev/managed=true --overwrite
+
+          # NOTE: this is the gateway CA alone, not public roots + CA as the
+          # chart's trustBundle contract asks for. Fine here (frames only talks
+          # to in-cluster Keycloak), but it means SSL_CERT_FILE narrows the
+          # pod's trust to this one CA, so the job does not exercise the
+          # complete-bundle case a production cluster would use.
+          kubectl create configmap nebari-sandbox-ca \
+            --from-file=ca-certificates.crt="${CA_CERT_PATH}" \
+            -n nebari-frames --dry-run=client -o yaml | kubectl apply -f -
+
       - name: Deploy frames via GitOps
         env:
           GITOPS_DIR: ${{ steps.sandbox.outputs.gitops-dir }}
@@ -213,23 +336,21 @@ jobs:
                   image:
                     repository: nebari-frames
                     tag: e2e
-                  # Auth runs in dev mode: the app's OIDC readiness check
-                  # needs to reach the issuer (https://keycloak.nebari.local)
-                  # from inside the pod. The sandbox now resolves
-                  # *.nebari.local in-cluster, but its gateway CA is
-                  # self-signed and the pod does not trust it, so /readyz
-                  # stays 503 forever with real auth. Enabling real auth means
-                  # mounting the sandbox CA into the pod (the action exposes
-                  # it as ConfigMap `nebari-sandbox-ca` in `kube-public`).
-                  # Routing, TLS, and the gateway path are still fully
-                  # exercised via the NebariApp.
+                  # Real auth, not dev mode. The operator provisions the
+                  # OIDC clients and the pod must complete discovery against
+                  # https://keycloak.nebari.local before /readyz turns 200, so
+                  # the Synced/Healthy wait below is itself the assertion that
+                  # in-cluster DNS, CA trust, and client provisioning all work.
                   nebariapp:
                     enabled: true
                     hostname: frames.nebari.local
                     auth:
-                      enabled: false
-                  auth:
-                    devMode: true
+                      enabled: true
+                  # Trust the sandbox gateway CA staged into the namespace by
+                  # the step above; without it discovery fails on an unknown
+                  # authority.
+                  trustBundle:
+                    configMapName: nebari-sandbox-ca
                   seed:
                     orgSlug: e2e-org
                     orgDisplayName: E2E Org
@@ -312,6 +433,37 @@ jobs:
             || kubectl -n nebari-operator-system logs --tail=150 deploy/nebari-operator-controller-manager 2>/dev/null \
             || true
           exit 1
+
+      - name: Auth is really on (not silently dev mode)
+        env:
+          KUBECONFIG: ${{ steps.sandbox.outputs.kubeconfig }}
+        run: |
+          # Guard against a vacuous pass. Healthy above proves /readyz is 200,
+          # but dev mode also reports ready - so without this, a chart change
+          # that quietly fell back to devMode would still look green and the
+          # OIDC path would go untested. (Exactly how the sandbox action's
+          # gateway-ip check passed for months without connecting to anything:
+          # nebari-dev/action-nebari-sandbox#103.)
+          ENV_JSON=$(kubectl -n nebari-frames get deploy nebari-frames-nebari-frames \
+            -o jsonpath='{.spec.template.spec.containers[0].env}')
+          echo "container env: ${ENV_JSON}"
+          case "${ENV_JSON}" in
+            *FRAMES_DEV_MODE*)
+              echo "::error::FRAMES_DEV_MODE is set - the pod is in dev mode, so real auth was not exercised"
+              exit 1 ;;
+          esac
+          case "${ENV_JSON}" in
+            *OIDC_ISSUER_URL*) ;;
+            *) echo "::error::OIDC_ISSUER_URL is absent - auth is not wired at all"; exit 1 ;;
+          esac
+          # Readiness proves discovery succeeded; this proves it succeeded via
+          # the mounted bundle rather than by some other route, so a silently
+          # dropped volume shows up here instead of passing unnoticed.
+          kubectl -n nebari-frames get deploy nebari-frames-nebari-frames \
+            -o jsonpath='{.spec.template.spec.containers[0].env[?(@.name=="SSL_CERT_FILE")].value}' \
+            | grep -qF '/etc/ssl/nebari/ca-certificates.crt' \
+            || { echo "::error::SSL_CERT_FILE is not pointing at the mounted trust bundle"; exit 1; }
+          echo "OK: real auth, OIDC wired, trust bundle mounted"
 
       - name: Endpoint answers through the gateway
         env:

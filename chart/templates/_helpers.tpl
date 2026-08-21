@@ -82,3 +82,28 @@ NebariApp hostname. Empty string when neither is available (endpoint stays off).
 {{- printf "https://%s" (required "nebariapp.hostname is required when mcp.enabled and mcp.publicUrl is unset" .Values.nebariapp.hostname) -}}
 {{- end -}}
 {{- end -}}
+
+{{/*
+Mount path and file for the trust bundle. Consumers point SSL_CERT_FILE at the
+file, which REPLACES Go's default CA pool rather than extending it, so the
+ConfigMap must carry a complete bundle (public roots plus the private CA).
+*/}}
+{{- define "nebari-frames.trustBundleMountPath" -}}
+/etc/ssl/nebari
+{{- end -}}
+
+{{- define "nebari-frames.trustBundleFilePath" -}}
+{{- printf "%s/%s" (include "nebari-frames.trustBundleMountPath" .) .Values.trustBundle.key -}}
+{{- end -}}
+
+{{/*
+"true" when the pod needs a volumes/volumeMounts block at all, empty otherwise.
+Three independent features contribute volumes now, and the gate is repeated for
+volumeMounts and volumes, so the condition lives here rather than being spelled
+out twice.
+*/}}
+{{- define "nebari-frames.hasVolumes" -}}
+{{- if or .Values.persistence.enabled (include "nebari-frames.hasBranding" .) .Values.trustBundle.configMapName -}}
+true
+{{- end -}}
+{{- end -}}

@@ -99,6 +99,10 @@ spec:
               value: {{ .Values.auth.oidc.deviceClientId | quote }}
             {{- end }}
             {{- end }}
+            {{- if .Values.trustBundle.configMapName }}
+            - name: SSL_CERT_FILE
+              value: {{ include "nebari-frames.trustBundleFilePath" . | quote }}
+            {{- end }}
           livenessProbe:
             httpGet:
               path: /healthz
@@ -116,7 +120,7 @@ spec:
               path: /readyz
               port: http
             periodSeconds: 10
-          {{- if or .Values.persistence.enabled (include "nebari-frames.hasBranding" .) }}
+          {{- if include "nebari-frames.hasVolumes" . }}
           volumeMounts:
             {{- if .Values.persistence.enabled }}
             - name: data
@@ -127,10 +131,15 @@ spec:
               mountPath: {{ include "nebari-frames.configMountPath" . | quote }}
               readOnly: true
             {{- end }}
+            {{- if .Values.trustBundle.configMapName }}
+            - name: trust-bundle
+              mountPath: {{ include "nebari-frames.trustBundleMountPath" . | quote }}
+              readOnly: true
+            {{- end }}
           {{- end }}
           resources:
             {{- toYaml .Values.resources | nindent 12 }}
-      {{- if or .Values.persistence.enabled (include "nebari-frames.hasBranding" .) }}
+      {{- if include "nebari-frames.hasVolumes" . }}
       volumes:
         {{- if .Values.persistence.enabled }}
         - name: data
@@ -141,5 +150,15 @@ spec:
         - name: config
           configMap:
             name: {{ include "nebari-frames.configMapName" . }}
+        {{- end }}
+        {{- if .Values.trustBundle.configMapName }}
+        - name: trust-bundle
+          configMap:
+            name: {{ .Values.trustBundle.configMapName | quote }}
+            {{- /* Project only the configured key, so an unrelated entry in
+                   the ConfigMap cannot appear alongside the bundle. */}}
+            items:
+              - key: {{ .Values.trustBundle.key | quote }}
+                path: {{ .Values.trustBundle.key | quote }}
         {{- end }}
       {{- end }}

@@ -78,6 +78,32 @@ The chart renders these into the `<release>-nebari-frames-config` ConfigMap, mou
 
 Every field is optional and falls back to its built-in Nebari default, so an unbranded install renders exactly the manifests it did before - no ConfigMap, no volume, no env var. Overriding `theme.*.primary` also rebrands button hover states and focus rings, which are derived from it. See [Configuration → Branding](https://nebari-dev.github.io/nebari-frames/configuration/#branding) for the full token list, the `BRANDING_*` environment variables used outside Kubernetes, and the value validation rules.
 
+## Private CA trust
+
+When the OIDC issuer's certificate is signed by a private CA, the pod has to
+trust that CA or startup OIDC discovery fails and `/readyz` stays `503`. Point
+`trustBundle.configMapName` at a ConfigMap holding the bundle:
+
+```yaml
+trustBundle:
+  configMapName: nebari-trust-bundle
+  key: ca-certificates.crt
+```
+
+The chart mounts that key read-only at `/etc/ssl/nebari` and sets
+`SSL_CERT_FILE` to it.
+
+**The ConfigMap must contain a complete bundle - public roots plus the private
+CA, not the CA alone.** `SSL_CERT_FILE` *replaces* Go's default CA pool rather
+than extending it, so a CA-only file leaves the pod unable to reach anything
+publicly signed.
+
+On a Nebari cluster with `trust_bundle` configured, NIC does this for you: it
+projects a ready-made `nebari-trust-bundle` ConfigMap - public roots included -
+into every namespace via trust-manager, so the snippet above is all you need. On
+a cluster without `trust_bundle` configured that ConfigMap does not exist, and
+you supply your own.
+
 ## Telemetry
 
 The server writes structured JSON logs to stdout, ready for collection by the platform's log stack (e.g. the LGTM stack on Nebari). There is no `ServiceMonitor` in this chart because the server does not expose a metrics endpoint yet. When metrics land, the chart will grow a `ServiceMonitor` gated behind a `metrics.enabled` value so clusters without the Prometheus operator are unaffected.
@@ -102,6 +128,8 @@ The server writes structured JSON logs to stdout, ready for collection by the pl
 | `persistence.size` | PVC size. Defaults to `1Gi`. |
 | `persistence.storageClass` | StorageClass for the PVC. Defaults to `""`, which uses the cluster default class. Set this explicitly in production so you control which class backs the volume. |
 | `persistence.accessMode` | PVC access mode. Defaults to `ReadWriteOnce`. |
+| `trustBundle.configMapName` | ConfigMap holding a CA bundle to trust for outbound TLS, e.g. an OIDC issuer signed by a private CA. Empty (the default) uses the image's own trust store. See [Private CA trust](#private-ca-trust). |
+| `trustBundle.key` | Key within that ConfigMap. Defaults to `ca-certificates.crt`, which is what NIC's `nebari-trust-bundle` uses. |
 | `branding.title` | Browser-tab title (also the logo's alt text). Empty keeps `Nebari Frames`. |
 | `branding.logoUrl` | Header and sign-in logo (light mode / default). Empty keeps the built-in Nebari wordmark. |
 | `branding.logoUrlDark` | Dark-mode logo. Empty falls back to `branding.logoUrl`, then the built-in dark wordmark. |

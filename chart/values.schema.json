@@ -28,6 +28,14 @@
         "accessMode": { "type": "string", "enum": ["ReadWriteOnce", "ReadWriteOncePod"] }
       }
     },
+    "trustBundle": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "configMapName": { "type": "string" },
+        "key": { "type": "string", "minLength": 1 }
+      }
+    },
     "branding": {
       "type": "object",
       "additionalProperties": false,
