@@ -116,6 +116,59 @@ jobs:
       - name: Build frames image
         run: docker build --platform=linux/amd64 -t nebari-frames:e2e .
 
+      - name: Pin MetalLB's pool to the kind Docker network
+        id: metallb
+        run: |
+          # NIC is supposed to derive MetalLB's IPAddressPool from the kind
+          # Docker network, but the derived value is cached on the provider
+          # instance during Deploy and is not what the IPAddressPool ends up
+          # with: the pool gets NIC's unroutable 192.168.1.100-110 fallback
+          # instead, so the gateway LoadBalancer IP has no route from the
+          # runner and every request to it times out. An explicitly configured
+          # pool takes precedence over both, so pin it ourselves.
+          #
+          # Derive it from the network kind will actually use rather than
+          # hardcoding a range, so this self-corrects if Docker picks a
+          # different subnet. kind reuses a bridge network named `kind` when one
+          # already exists, so creating it up front fixes the subnet without
+          # fighting kind for it.
+          docker network create --driver bridge --subnet 172.18.0.0/16 kind 2>/dev/null \
+            || echo "network 'kind' already exists; using its subnet as-is"
+          SUBNET=$(docker network inspect kind --format '{{ (index .IPAM.Config 0).Subnet }}')
+          # Mirrors NIC's own formula: the .100-.110 range of the subnet's last
+          # /24 block (172.18.0.0/16 -> 172.18.255.100-172.18.255.110).
+          POOL=$(python3 -c '
+          import ipaddress, sys
+          net = ipaddress.ip_network(sys.argv[1])
+          if net.prefixlen > 24:
+              raise SystemExit(f"kind network {net} is smaller than a /24")
+          last = ipaddress.ip_network(f"{net.broadcast_address}/24", strict=False)
+          print(f"{last[100]}-{last[110]}")
+          ' "${SUBNET}")
+          echo "kind network ${SUBNET} -> MetalLB pool ${POOL}"
+          echo "pool=${POOL}" >> "$GITHUB_OUTPUT"
+
+      - name: Write the NIC config
+        run: |
+          # Supplying a config means the action skips its own template, so this
+          # has to restate the platform defaults it would otherwise set.
+          # `project_name` MUST equal the sandbox `cluster-name` below, and the
+          # providers must both be `local`, or the action's outputs do not
+          # resolve.
+          cat > /tmp/nic-config.yaml <<EOF
+          project_name: nebari-test
+          domain: nebari.local
+          certificate:
+            type: selfsigned
+          cluster:
+            local:
+              metallb:
+                address_pool: ${{ steps.metallb.outputs.pool }}
+          repository:
+            local: {}
+          EOF
+          cat /tmp/nic-config.yaml
+
       - uses: nebari-dev/action-nebari-sandbox@v3
         id: sandbox
         with:
@@ -123,6 +176,9 @@ jobs:
           # this job red without a deliberate bump. v3 requires NIC >= v0.13.0
           # (the local/kind cluster + local repository providers).
           nic-version: v0.13.0
+          nic-config: /tmp/nic-config.yaml
+          # Must match `project_name` in the config above.
+          cluster-name: nebari-test
 
       - name: Import image into the sandbox cluster
         # v3 deploys via NIC's local provider, which is kind, not k3d. `kind` is
