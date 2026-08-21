@@ -125,7 +125,10 @@ jobs:
           # with: the pool gets NIC's unroutable 192.168.1.100-110 fallback
           # instead, so the gateway LoadBalancer IP has no route from the
           # runner and every request to it times out. An explicitly configured
-          # pool takes precedence over both, so pin it ourselves.
+          # pool takes precedence over both, so pin it ourselves. Upstream:
+          # nebari-dev/nebari-infrastructure-core#612. Once that is fixed and
+          # released, this step and the nic-config below can both be dropped in
+          # favour of the action's own config template.
           #
           # Derive it from the network kind will actually use rather than
           # hardcoding a range, so this self-corrects if Docker picks a
