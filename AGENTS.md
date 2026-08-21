@@ -81,13 +81,27 @@ store.Repository**.
   - `resolver.go` - inheritance merge over `extends`/`excludes`. Later parents win, the child's own
     slots win last, cycles produce `CycleError`, and an unreadable ancestor propagates
     `ErrParentUnreadable` rather than silently dropping content.
+  - `service.go` - `publish` is the single write path behind both front doors. It authorizes before
+    parsing caller-supplied content, enforces `MaxContentBytes` on the stored document, refuses a
+    version that does not advance `latest_version`, and refuses a write whose declared base version
+    is no longer current. The Connect RPC stores the author's exact bytes; `PublishDoc` marshals the
+    document instead, so comments and formatting survive a CLI or web publish.
 - `backend/internal/store` defines `Repository` plus an in-memory implementation used by tests;
   `store/sqlite` is the real one, with goose migrations in `store/sqlite/migrations`. Publishes go
   through `CreateFrameVersion`, which inserts the frame row, version, inheritance edges, and grants
   atomically. **SQLite is single-writer, so the deployment is pinned to one replica.**
 - `backend/internal/mcp` is a thin protocol adapter over `frames.Service`, exposing frames as MCP
   resources under `nebari-frame://<org>/<name>[@<version>]` plus RFC 9728 metadata at
-  `/.well-known/oauth-protected-resource`. URI parsing rejects anything structurally off (extra path
+  `/.well-known/oauth-protected-resource`. It is also a write surface: `create_frame` and
+  `update_frame` go through `frames.Service.PublishDocFrom`, the same RBAC-enforcing path the
+  Connect API uses, so the adapter itself performs no permission or validation logic. Two rules
+  matter when changing it. `update_frame` merges onto the frame's own document from `SourceDoc` and
+  never onto the composed form `get_frame` returns by default - merging onto a resolved document
+  would copy every parent's slots into the child and drop its `extends` edges. And the base version
+  it asserts against comes from the caller (`base_version`, read via `get_frame source=true`), never
+  from a fresh server-side read, which would always match and make the check inert. Request bodies
+  are capped at `mcp.MaxRequestBytes`; the cap must wrap the outermost handler, since the bearer
+  middleware is only installed when auth is on. URI parsing rejects anything structurally off (extra path
   segments, `.`/`..`) instead of misrouting it.
 - `web/` is the SPA. `web/embed.go` embeds `web/dist` into the Go binary and serves it with an
   index.html fallback and a CSP assembled from the OIDC issuer origin and branded image origins.
@@ -103,6 +117,11 @@ store.Repository**.
 ## Conventions
 
 - Table-driven Go tests. Tests sit beside the code they cover, including in `web/` (`*.test.tsx`).
+- A test that asserts only "this was rejected" usually proves nothing: an unrelated 401, or a parse
+  failure, satisfies it just as well. Assert the specific code or message, and pair a rejection with
+  a control that must succeed. Reflective guards in `backend/internal/mcp/resources_test.go` walk
+  `frames.SlotTable` and `frames.Doc`, so adding a slot without wiring it through the MCP input
+  fails rather than silently dropping data.
 - Never bump `chart/Chart.yaml`'s `version`/`appVersion` by hand: the release job stamps them from
   the git tag (`version` = tag without `v`, `appVersion` = the literal tag).
 - The SPA ships inside the image, not the chart. A frontend change reaches a cluster only through a
