@@ -14,9 +14,14 @@
 
 DROP INDEX idx_membership_email;
 
--- Collapse rows that are about to become identical. Keeping the oldest (lowest
--- rowid), but preferring an activated membership over a pending invite, so a
--- real member is never discarded in favour of an unclaimed invitation.
+-- Collapse rows that are about to become identical.
+--
+-- An activated membership always outranks a pending invite, so a real member is
+-- never discarded in favour of an unclaimed invitation. Among activated rows the
+-- oldest wins: it is the longer-standing membership. Among pending invites the
+-- newest wins, because a second invite for the same person is the admin saying
+-- what they want now - keeping the older one would silently reinstate a role
+-- they had already replaced.
 DELETE FROM org_memberships
  WHERE email IS NOT NULL
    AND rowid NOT IN (
@@ -24,7 +29,9 @@ DELETE FROM org_memberships
            SELECT rowid,
                   ROW_NUMBER() OVER (
                       PARTITION BY org_id, lower(trim(email))
-                      ORDER BY CASE WHEN user_sub <> '' THEN 0 ELSE 1 END, rowid
+                      ORDER BY
+                          CASE WHEN user_sub <> '' THEN 0 ELSE 1 END,
+                          CASE WHEN user_sub <> '' THEN rowid ELSE -rowid END
                   ) AS rn
              FROM org_memberships
             WHERE email IS NOT NULL

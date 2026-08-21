@@ -32,8 +32,14 @@ func TestRunOnCaseVariantLegacyData(t *testing.T) {
 		`CREATE UNIQUE INDEX idx_membership_sub ON org_memberships(user_sub) WHERE user_sub <> ''`,
 		`CREATE UNIQUE INDEX idx_membership_email ON org_memberships(org_id, email) WHERE email IS NOT NULL`,
 		`INSERT INTO orgs VALUES ('o1','acme','Acme','2026-01-01T00:00:00Z')`,
+		// An activated membership alongside a pending invite for the same person.
 		`INSERT INTO org_memberships (org_id,user_sub,email,role,added_at) VALUES ('o1','','boss@x.io','viewer','2026-01-01T00:00:00Z')`,
 		`INSERT INTO org_memberships (org_id,user_sub,email,role,added_at) VALUES ('o1','s2','Boss@X.io','admin','2026-01-02T00:00:00Z')`,
+		// Two pending invites for the same person, the later one at a different role.
+		`INSERT INTO org_memberships (org_id,user_sub,email,role,added_at) VALUES ('o1','','carol@x.io','viewer','2026-01-03T00:00:00Z')`,
+		`INSERT INTO org_memberships (org_id,user_sub,email,role,added_at) VALUES ('o1','','CAROL@X.IO','publisher','2026-01-04T00:00:00Z')`,
+		// Stray whitespace, no collision.
+		`INSERT INTO org_memberships (org_id,user_sub,email,role,added_at) VALUES ('o1','','  dave@x.io  ','viewer','2026-01-05T00:00:00Z')`,
 	}
 	for _, q := range stmts {
 		if _, err := db.ExecContext(ctx, q); err != nil {
@@ -63,14 +69,28 @@ func TestRunOnCaseVariantLegacyData(t *testing.T) {
 		t.Fatalf("rows: %v", err)
 	}
 
-	// One row survives per (org, folded address). The activated membership is
-	// kept over the pending invite, so the real member is not replaced by an
-	// invitation that nobody has claimed.
-	if len(got) != 1 {
-		t.Fatalf("got %d rows, want 1: %+v", len(got), got)
+	// One row survives per (org, folded address), and every address is folded.
+	if len(got) != 3 {
+		t.Fatalf("got %d rows, want 3: %+v", len(got), got)
 	}
-	if got[0].sub != "s2" || got[0].email != "boss@x.io" || got[0].role != "admin" {
-		t.Errorf("surviving row = %+v, want the activated admin membership with a folded address", got[0])
+	by := map[string]row{}
+	for _, r := range got {
+		by[r.email] = r
+	}
+
+	// An activated membership outranks a pending invite: the real member is not
+	// replaced by an invitation nobody has claimed.
+	if b := by["boss@x.io"]; b.sub != "s2" || b.role != "admin" {
+		t.Errorf("boss = %+v, want the activated admin membership", b)
+	}
+	// Between two pending invites the later one wins: it is what the admin most
+	// recently asked for, and keeping the earlier would reinstate a role they had
+	// already replaced.
+	if c := by["carol@x.io"]; c.sub != "" || c.role != "publisher" {
+		t.Errorf("carol = %+v, want the later pending invite (publisher)", c)
+	}
+	if d := by["dave@x.io"]; d.role != "viewer" {
+		t.Errorf("dave = %+v, want the trimmed address to survive", d)
 	}
 
 	// The new index must reject a case variant rather than storing both.
