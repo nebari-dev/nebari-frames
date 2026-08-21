@@ -44,8 +44,9 @@ go run ./tools/docs-gen
 CI (`.github/workflows/ci.yml`) gates on five jobs: `proto` (buf lint plus a stale-codegen check on
 `gen/`), `go` (golangci-lint pinned to v2.12 plus race tests), `web` (lint, typecheck, vitest),
 `chart` (helm lint, template renders, kubeconform pinned to v0.7.0), and `e2e-sandbox` (deploys the
-built image onto a k3d Nebari sandbox via ArgoCD). `docs.yml` also fails if the generated CLI
-reference is stale. Run the local equivalents before pushing.
+built image onto a kind Nebari sandbox via ArgoCD and exercises real Keycloak auth through the
+gateway). `docs.yml` also fails if the generated CLI reference is stale. Run the local
+equivalents before pushing.
 
 **Generated code is checked in.** After touching `proto/frames/v1/*.proto`, run `make proto` and
 commit `gen/`. After touching `cli/cmd/*`, run `go run ./tools/docs-gen` and commit

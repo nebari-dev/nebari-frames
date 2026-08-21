@@ -88,12 +88,34 @@ jobs:
         run: |
           helm template frames chart/ --set auth.devMode=true \
             > /tmp/render-devmode.yaml
+      - name: Template renders (trust bundle)
+        run: |
+          helm template frames chart/ --set auth.devMode=true \
+            --set trustBundle.configMapName=nebari-trust-bundle \
+            > /tmp/render-trustbundle.yaml
+          # Assert on content, not just that it rendered: the whole point of
+          # the block is the mount and the env var, and a silently-empty
+          # render would still pass kubeconform below.
+          for want in \
+            'name: SSL_CERT_FILE' \
+            'value: "/etc/ssl/nebari/ca-certificates.crt"' \
+            'mountPath: "/etc/ssl/nebari"' \
+            'name: "nebari-trust-bundle"'; do
+            grep -qF "${want}" /tmp/render-trustbundle.yaml \
+              || { echo "::error::trust-bundle render is missing: ${want}"; exit 1; }
+          done
+          # ...and that it stays opt-in: no trust-bundle wiring by default.
+          if grep -q 'SSL_CERT_FILE' /tmp/render-devmode.yaml; then
+            echo "::error::SSL_CERT_FILE rendered without trustBundle.configMapName set"
+            exit 1
+          fi
       - name: Validate rendered manifests (kubeconform)
         run: |
           # -ignore-missing-schemas is required because the NebariApp CRD has
           # no published JSON schema anywhere; do not remove this flag without
           # publishing one first.
-          for f in /tmp/render-nebariapp.yaml /tmp/render-devmode.yaml; do
+          for f in /tmp/render-nebariapp.yaml /tmp/render-devmode.yaml \
+                   /tmp/render-trustbundle.yaml; do
             echo "::group::kubeconform ${f}"
             # Pinned for the same reason golangci-lint is: a new release must
             # not change gate behavior without a deliberate bump. v0.8+ needs
@@ -189,6 +211,37 @@ jobs:
         # cluster-name output (its kubectl context is `kind-<cluster-name>`).
         run: kind load docker-image nebari-frames:e2e --name ${{ steps.sandbox.outputs.cluster-name }}
 
+      - name: Provision the sandbox CA for the frames pod
+        env:
+          KUBECONFIG: ${{ steps.sandbox.outputs.kubeconfig }}
+          CA_CERT_PATH: ${{ steps.sandbox.outputs.ca-cert-path }}
+        run: |
+          # Real auth needs the pod to trust the sandbox's self-signed gateway
+          # CA, or OIDC discovery against https://keycloak.nebari.local fails
+          # and /readyz never turns 200. The action hands us the CA as a file on
+          # the runner, so build the ConfigMap from that rather than copying the
+          # in-cluster `nebari-sandbox-ca` out of kube-public (a ConfigMap
+          # cannot be mounted across namespaces).
+          [ -s "${CA_CERT_PATH}" ] \
+            || { echo "::error::sandbox ca-cert-path is empty or missing: '${CA_CERT_PATH}'"; exit 1; }
+
+          # Create the namespace up front, carrying the opt-in label the
+          # operator requires. ArgoCD's CreateNamespace=true tolerates an
+          # existing namespace, and the ConfigMap is untracked by ArgoCD so
+          # `prune: true` leaves it alone.
+          kubectl create namespace nebari-frames --dry-run=client -o yaml \
+            | kubectl apply -f -
+          kubectl label namespace nebari-frames nebari.dev/managed=true --overwrite
+
+          # NOTE: this is the gateway CA alone, not public roots + CA as the
+          # chart's trustBundle contract asks for. Fine here (frames only talks
+          # to in-cluster Keycloak), but it means SSL_CERT_FILE narrows the
+          # pod's trust to this one CA, so the job does not exercise the
+          # complete-bundle case a production cluster would use.
+          kubectl create configmap nebari-sandbox-ca \
+            --from-file=ca-certificates.crt="${CA_CERT_PATH}" \
+            -n nebari-frames --dry-run=client -o yaml | kubectl apply -f -
+
       - name: Deploy frames via GitOps
         env:
           GITOPS_DIR: ${{ steps.sandbox.outputs.gitops-dir }}
@@ -216,23 +269,21 @@ jobs:
                   image:
                     repository: nebari-frames
                     tag: e2e
-                  # Auth runs in dev mode: the app's OIDC readiness check
-                  # needs to reach the issuer (https://keycloak.nebari.local)
-                  # from inside the pod. The sandbox now resolves
-                  # *.nebari.local in-cluster, but its gateway CA is
-                  # self-signed and the pod does not trust it, so /readyz
-                  # stays 503 forever with real auth. Enabling real auth means
-                  # mounting the sandbox CA into the pod (the action exposes
-                  # it as ConfigMap `nebari-sandbox-ca` in `kube-public`).
-                  # Routing, TLS, and the gateway path are still fully
-                  # exercised via the NebariApp.
+                  # Real auth, not dev mode. The operator provisions the
+                  # OIDC clients and the pod must complete discovery against
+                  # https://keycloak.nebari.local before /readyz turns 200, so
+                  # the Synced/Healthy wait below is itself the assertion that
+                  # in-cluster DNS, CA trust, and client provisioning all work.
                   nebariapp:
                     enabled: true
                     hostname: frames.nebari.local
                     auth:
-                      enabled: false
-                  auth:
-                    devMode: true
+                      enabled: true
+                  # Trust the sandbox gateway CA staged into the namespace by
+                  # the step above; without it discovery fails on an unknown
+                  # authority.
+                  trustBundle:
+                    configMapName: nebari-sandbox-ca
                   seed:
                     orgSlug: e2e-org
                     orgDisplayName: E2E Org
@@ -315,6 +366,37 @@ jobs:
             || kubectl -n nebari-operator-system logs --tail=150 deploy/nebari-operator-controller-manager 2>/dev/null \
             || true
           exit 1
+
+      - name: Auth is really on (not silently dev mode)
+        env:
+          KUBECONFIG: ${{ steps.sandbox.outputs.kubeconfig }}
+        run: |
+          # Guard against a vacuous pass. Healthy above proves /readyz is 200,
+          # but dev mode also reports ready - so without this, a chart change
+          # that quietly fell back to devMode would still look green and the
+          # OIDC path would go untested. (Exactly how the sandbox action's
+          # gateway-ip check passed for months without connecting to anything:
+          # nebari-dev/action-nebari-sandbox#103.)
+          ENV_JSON=$(kubectl -n nebari-frames get deploy nebari-frames-nebari-frames \
+            -o jsonpath='{.spec.template.spec.containers[0].env}')
+          echo "container env: ${ENV_JSON}"
+          case "${ENV_JSON}" in
+            *FRAMES_DEV_MODE*)
+              echo "::error::FRAMES_DEV_MODE is set - the pod is in dev mode, so real auth was not exercised"
+              exit 1 ;;
+          esac
+          case "${ENV_JSON}" in
+            *OIDC_ISSUER_URL*) ;;
+            *) echo "::error::OIDC_ISSUER_URL is absent - auth is not wired at all"; exit 1 ;;
+          esac
+          # Readiness proves discovery succeeded; this proves it succeeded via
+          # the mounted bundle rather than by some other route, so a silently
+          # dropped volume shows up here instead of passing unnoticed.
+          kubectl -n nebari-frames get deploy nebari-frames-nebari-frames \
+            -o jsonpath='{.spec.template.spec.containers[0].env[?(@.name=="SSL_CERT_FILE")].value}' \
+            | grep -qF '/etc/ssl/nebari/ca-certificates.crt' \
+            || { echo "::error::SSL_CERT_FILE is not pointing at the mounted trust bundle"; exit 1; }
+          echo "OK: real auth, OIDC wired, trust bundle mounted"
 
       - name: Endpoint answers through the gateway
         env:

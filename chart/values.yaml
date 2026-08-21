@@ -118,6 +118,20 @@ nebariapp:
       - profile
       - email
 
+# CA bundle for outbound TLS, e.g. an OIDC issuer whose certificate is signed by
+# a private CA. Leave configMapName empty (the default) to use the image's own
+# trust store, which renders exactly as it did before this block existed.
+#
+# The ConfigMap must carry a COMPLETE bundle - public roots plus the private CA.
+# The pod consumes it via SSL_CERT_FILE, which REPLACES Go's default CA pool
+# rather than extending it, so a CA-only file breaks TLS to anything publicly
+# signed. On a Nebari cluster with `trust_bundle` configured, NIC projects a
+# ready-made `nebari-trust-bundle` ConfigMap (key `ca-certificates.crt`,
+# public roots included) into every namespace - point this at that.
+trustBundle:
+  configMapName: ""
+  key: ca-certificates.crt
+
 # MCP endpoint. Enabled by default; mounts only when a public URL is derivable
 # (mcp.publicUrl, else https://<nebariapp.hostname> when nebariapp.enabled).
 mcp:
