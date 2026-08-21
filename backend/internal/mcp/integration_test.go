@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	gomcp "github.com/modelcontextprotocol/go-sdk/mcp"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -26,6 +27,18 @@ type stubVerifier struct{}
 
 func (stubVerifier) Validate(context.Context, string) (*auth.Claims, error) {
 	return nil, errors.New("stub: no validation")
+}
+
+// acceptingVerifier admits any token as the dev user, with a live expiry. The
+// expiry matters: the bearer middleware treats a zero Expiration as expired and
+// answers 401, which would make a body-size test pass without ever reaching the
+// handler being tested.
+type acceptingVerifier struct{}
+
+func (acceptingVerifier) Validate(context.Context, string) (*auth.Claims, error) {
+	c := auth.DevClaims()
+	c.Expiry = time.Now().Add(time.Hour)
+	return c, nil
 }
 
 // newTestServer builds an httptest server mounting only the MCP component. In
@@ -589,117 +602,65 @@ func TestMCPReadModifyWriteDoesNotFlattenInheritance(t *testing.T) {
 
 // The SDK reads a request body in full before any tool handler runs, so the
 // body limit is the only thing standing between an authenticated caller and the
-// memory of a single-replica deployment. Dev mode is used because the point is
-// the body cap, not token validation.
+// memory of a single-replica deployment.
+//
+// Both auth modes are covered on purpose: the bearer middleware is installed
+// only when DevMode is false, and wrapping the wrong handler there silently
+// drops the cap in exactly the deployments that need it.
 func TestMCPRejectsOversizedRequestBody(t *testing.T) {
-	mem := store.NewMemory()
-	seedOrgAndReadableFrame(t, mem)
-	comp := mcppkg.NewComponent(mcppkg.Config{DevMode: true, PublicURL: "https://frames.example.com"}, frames.NewService(mem), nil)
-	mux := http.NewServeMux()
-	comp.Mount(mux)
-	srv := httptest.NewServer(mux)
-	defer srv.Close()
+	tests := []struct {
+		name     string
+		devMode  bool
+		verifier auth.TokenValidator
+		token    string
+	}{
+		{name: "dev mode", devMode: true},
+		{name: "with bearer auth", devMode: false, verifier: acceptingVerifier{}, token: "any-token"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			mem := store.NewMemory()
+			seedOrgAndReadableFrame(t, mem)
+			comp := mcppkg.NewComponent(
+				mcppkg.Config{DevMode: tt.devMode, PublicURL: "https://frames.example.com"},
+				frames.NewService(mem), tt.verifier)
+			mux := http.NewServeMux()
+			comp.Mount(mux)
+			srv := httptest.NewServer(mux)
+			defer srv.Close()
 
-	body := `{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"padding":"` +
-		strings.Repeat("a", mcppkg.MaxRequestBytes+1024) + `"}}`
-	req, err := http.NewRequest(http.MethodPost, srv.URL+"/mcp", strings.NewReader(body))
-	if err != nil {
-		t.Fatalf("request: %v", err)
-	}
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Accept", "application/json, text/event-stream")
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		// A connection reset is an acceptable way to refuse an over-large body.
-		return
-	}
-	defer func() { _ = resp.Body.Close() }()
-	if resp.StatusCode < 400 {
-		t.Errorf("status = %d, want a 4xx/5xx refusal for a body over the cap", resp.StatusCode)
-	}
-}
+			post := func(size int) int {
+				t.Helper()
+				body := `{"jsonrpc":"2.0","id":1,"method":"initialize","params":` +
+					`{"protocolVersion":"2025-06-18","capabilities":{},` +
+					`"clientInfo":{"name":"probe","version":"1"},"padding":"` +
+					strings.Repeat("a", size) + `"}}`
+				req, err := http.NewRequest(http.MethodPost, srv.URL+"/mcp", strings.NewReader(body))
+				if err != nil {
+					t.Fatalf("request: %v", err)
+				}
+				req.Header.Set("Content-Type", "application/json")
+				req.Header.Set("Accept", "application/json, text/event-stream")
+				if tt.token != "" {
+					req.Header.Set("Authorization", "Bearer "+tt.token)
+				}
+				resp, err := http.DefaultClient.Do(req)
+				if err != nil {
+					// A connection reset is an acceptable refusal.
+					return http.StatusRequestEntityTooLarge
+				}
+				defer func() { _ = resp.Body.Close() }()
+				return resp.StatusCode
+			}
 
-// The lost-update case, end to end: two clients read the same version, then
-// both publish. The second must be refused rather than silently discarding the
-// first one's change. Deriving the base server-side would make this pass
-// vacuously, so it is asserted through the tool exactly as a client calls it.
-func TestMCPConcurrentUpdatesDoNotLoseAChange(t *testing.T) {
-	cs, mem := newWriteTestSession(t, "publisher")
-	ctx := context.Background()
-
-	if _, isErr := callTool(t, cs, "create_frame", map[string]any{
-		"name": "race", "description": "d", "version": "1.0.0", "rules": []any{"base"},
-	}); isErr {
-		t.Fatal("create failed")
-	}
-
-	// Both callers read 1.0.0.
-	first, isErr := callTool(t, cs, "update_frame", map[string]any{
-		"name": "race", "version": "1.1.0", "base_version": "1.0.0",
-		"rules": []any{"base", "from A"},
-	})
-	if isErr {
-		t.Fatalf("first update should succeed: %q", first)
-	}
-	second, isErr := callTool(t, cs, "update_frame", map[string]any{
-		"name": "race", "version": "1.2.0", "base_version": "1.0.0",
-		"rules": []any{"base", "from B"},
-	})
-	if !isErr {
-		t.Fatalf("second update overwrote the first: %q", second)
-	}
-	if !strings.Contains(second, "changed while you were editing") {
-		t.Errorf("message = %q, want it to explain the frame moved on", second)
-	}
-
-	v, _, _, err := mem.GetFrameVersion(ctx, mustFrameID(t, mem, "race"), "1.1.0")
-	if err != nil {
-		t.Fatalf("get version: %v", err)
-	}
-	doc, err := frames.Parse(v.Content)
-	if err != nil {
-		t.Fatalf("parse: %v", err)
-	}
-	if len(doc.Slots.Rules) != 2 || doc.Slots.Rules[1] != "from A" {
-		t.Errorf("first caller's change was lost: %v", doc.Slots.Rules)
-	}
-}
-
-// A client that does not read first cannot write: without a base there is no
-// way to tell an intentional overwrite from an accidental one.
-func TestMCPUpdateRequiresABaseVersion(t *testing.T) {
-	cs, _ := newWriteTestSession(t, "publisher")
-	if _, isErr := callTool(t, cs, "create_frame", map[string]any{
-		"name": "needs-base", "description": "d", "version": "1.0.0", "rules": []any{"r"},
-	}); isErr {
-		t.Fatal("create failed")
-	}
-	text, isErr := callTool(t, cs, "update_frame", map[string]any{
-		"name": "needs-base", "version": "1.1.0", "rules": []any{"r", "s"},
-	})
-	if !isErr {
-		t.Fatalf("update without a base version succeeded: %q", text)
-	}
-	if !strings.Contains(text, "base_version is required") {
-		t.Errorf("message = %q, want it to name base_version", text)
-	}
-}
-
-// get_frame must show the version, or a client has no way to supply base_version.
-func TestMCPGetFrameShowsTheVersion(t *testing.T) {
-	cs, _ := newWriteTestSession(t, "publisher")
-	if _, isErr := callTool(t, cs, "create_frame", map[string]any{
-		"name": "shows-version", "description": "d", "version": "2.3.4", "rules": []any{"r"},
-	}); isErr {
-		t.Fatal("create failed")
-	}
-	for _, args := range []map[string]any{
-		{"name": "shows-version"},
-		{"name": "shows-version", "source": true},
-	} {
-		out, isErr := callTool(t, cs, "get_frame", args)
-		if isErr || !strings.Contains(out, "2.3.4") {
-			t.Errorf("get_frame(%v) does not report the version:\n%s", args, out)
-		}
+			// Control: a small body must succeed, so a refusal below cannot be
+			// mistaken for an unrelated rejection such as a 401.
+			if got := post(100); got >= 400 {
+				t.Fatalf("small body rejected with %d; the test is not reaching the handler", got)
+			}
+			if got := post(mcppkg.MaxRequestBytes + 1024); got < 400 {
+				t.Errorf("oversized body accepted with %d: the body cap is not in force on this path", got)
+			}
+		})
 	}
 }

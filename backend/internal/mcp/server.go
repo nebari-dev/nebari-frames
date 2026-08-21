@@ -62,7 +62,9 @@ func (c *Component) Mount(mux *http.ServeMux) {
 		middleware := mcpauth.RequireBearerToken(verifier, &mcpauth.RequireBearerTokenOptions{
 			ResourceMetadataURL: c.cfg.metadataURL(),
 		})
-		handler = middleware(mcpHandler)
+		// Wraps handler, not mcpHandler: wrapping the latter would discard the
+		// body cap in exactly the deployments that have authentication on.
+		handler = middleware(handler)
 	}
 
 	mux.Handle("/mcp", handler)
