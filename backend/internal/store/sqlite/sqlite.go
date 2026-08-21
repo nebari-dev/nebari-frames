@@ -135,7 +135,7 @@ func (r *Repository) GetMembership(ctx context.Context, userSub string) (*frames
 func (r *Repository) UpsertMembership(ctx context.Context, m *framesv1.Membership) error {
 	res, err := r.db.ExecContext(ctx,
 		`UPDATE org_memberships SET org_id=?, role=?, email=? WHERE user_sub=? AND user_sub <> ''`,
-		m.OrgId, m.Role, nullStr(m.Email), m.UserSub)
+		m.OrgId, m.Role, nullStr(store.CanonicalEmail(m.Email)), m.UserSub)
 	if err != nil {
 		return err
 	}
@@ -144,7 +144,19 @@ func (r *Repository) UpsertMembership(ctx context.Context, m *framesv1.Membershi
 	}
 	_, err = r.db.ExecContext(ctx,
 		`INSERT INTO org_memberships (org_id, user_sub, role, added_at, email) VALUES (?, ?, ?, ?, ?)`,
-		m.OrgId, m.UserSub, m.Role, m.AddedAt.AsTime().UTC().Format(time.RFC3339), nullStr(m.Email))
+		m.OrgId, m.UserSub, m.Role, m.AddedAt.AsTime().UTC().Format(time.RFC3339), nullStr(store.CanonicalEmail(m.Email)))
+	if isUnique(err) {
+		return store.ErrAlreadyExists
+	}
+	return err
+}
+
+// CreateMembership inserts a membership, never updating an existing row. Both
+// unique indexes (user_sub, and org_id+email) surface as ErrAlreadyExists.
+func (r *Repository) CreateMembership(ctx context.Context, m *framesv1.Membership) error {
+	_, err := r.db.ExecContext(ctx,
+		`INSERT INTO org_memberships (org_id, user_sub, role, added_at, email) VALUES (?, ?, ?, ?, ?)`,
+		m.OrgId, m.UserSub, m.Role, m.AddedAt.AsTime().UTC().Format(time.RFC3339), nullStr(store.CanonicalEmail(m.Email)))
 	if isUnique(err) {
 		return store.ErrAlreadyExists
 	}
@@ -190,7 +202,10 @@ func (r *Repository) GetPendingMembershipByEmail(ctx context.Context, email stri
 	var added string
 	var e sql.NullString
 	err := r.db.QueryRowContext(ctx,
-		`SELECT org_id, user_sub, role, added_at, email FROM org_memberships WHERE email = ? AND user_sub = '' LIMIT 1`, email).
+		// COLLATE NOCASE: identity providers do not guarantee the case of the
+		// email claim and invites are typed by hand, so a case difference must
+		// not cause the invite to be missed.
+		`SELECT org_id, user_sub, role, added_at, email FROM org_memberships WHERE email = ? COLLATE NOCASE AND user_sub = '' LIMIT 1`, store.CanonicalEmail(email)).
 		Scan(&m.OrgId, &m.UserSub, &m.Role, &added, &e)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, store.ErrNotFound
@@ -436,7 +451,7 @@ func (r *Repository) FrameGrants(ctx context.Context, frameID string) ([]store.G
 func (r *Repository) AddPendingMembership(ctx context.Context, m *framesv1.Membership) error {
 	_, err := r.db.ExecContext(ctx,
 		`INSERT INTO org_memberships (org_id, user_sub, role, added_at, email) VALUES (?, '', ?, ?, ?)`,
-		m.OrgId, m.Role, m.AddedAt.AsTime().UTC().Format(time.RFC3339), nullStr(m.Email))
+		m.OrgId, m.Role, m.AddedAt.AsTime().UTC().Format(time.RFC3339), nullStr(store.CanonicalEmail(m.Email)))
 	if isUnique(err) {
 		return store.ErrAlreadyExists
 	}
@@ -444,8 +459,18 @@ func (r *Repository) AddPendingMembership(ctx context.Context, m *framesv1.Membe
 }
 
 func (r *Repository) ActivatePendingMembership(ctx context.Context, email, sub string) error {
+	// Scoped to a single row by rowid. The email is the address the lookup
+	// returned, so an exact match is right here - and case-variant invites can
+	// coexist (#65), so an unscoped predicate could match several rows and try to
+	// give them all the same user_sub, violating the unique index on user_sub and
+	// rolling back the whole statement.
 	res, err := r.db.ExecContext(ctx,
-		`UPDATE org_memberships SET user_sub = ? WHERE email = ? AND user_sub = ''`, sub, email)
+		`UPDATE org_memberships SET user_sub = ?
+		 WHERE rowid = (
+		     SELECT rowid FROM org_memberships
+		     WHERE email = ? AND user_sub = ''
+		     ORDER BY rowid LIMIT 1
+		 )`, sub, store.CanonicalEmail(email))
 	if err != nil {
 		return err
 	}
@@ -463,7 +488,7 @@ func (r *Repository) UpdateMembershipRole(ctx context.Context, orgID, userSub, e
 			`UPDATE org_memberships SET role = ? WHERE org_id = ? AND user_sub = ?`, role, orgID, userSub)
 	} else {
 		res, err = r.db.ExecContext(ctx,
-			`UPDATE org_memberships SET role = ? WHERE org_id = ? AND email = ? AND user_sub = ''`, role, orgID, email)
+			`UPDATE org_memberships SET role = ? WHERE org_id = ? AND email = ? AND user_sub = ''`, role, orgID, store.CanonicalEmail(email))
 	}
 	if err != nil {
 		return err
@@ -482,7 +507,7 @@ func (r *Repository) DeleteMembership(ctx context.Context, orgID, userSub, email
 			`DELETE FROM org_memberships WHERE org_id = ? AND user_sub = ?`, orgID, userSub)
 	} else {
 		res, err = r.db.ExecContext(ctx,
-			`DELETE FROM org_memberships WHERE org_id = ? AND email = ? AND user_sub = ''`, orgID, email)
+			`DELETE FROM org_memberships WHERE org_id = ? AND email = ? AND user_sub = ''`, orgID, store.CanonicalEmail(email))
 	}
 	if err != nil {
 		return err

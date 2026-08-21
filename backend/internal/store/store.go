@@ -6,6 +6,7 @@ package store
 import (
 	"context"
 	"errors"
+	"strings"
 
 	framesv1 "github.com/nebari-dev/nebari-frames/gen/go/frames/v1"
 )
@@ -14,6 +15,18 @@ var (
 	ErrNotFound      = errors.New("not found")
 	ErrAlreadyExists = errors.New("already exists")
 )
+
+// CanonicalEmail normalizes an address for storage and comparison. Identity
+// providers do not guarantee the case or surrounding whitespace of an email
+// claim, and invites are typed by hand, so an address has to be reduced to one
+// form before it can be compared or constrained.
+//
+// Applied to rows this package writes. Rows written before it existed are not
+// retrofitted, and the SQLite unique index on (org_id, email) is still
+// case-sensitive; both are tracked in #65.
+func CanonicalEmail(email string) string {
+	return strings.ToLower(strings.TrimSpace(email))
+}
 
 // Grant is a permission grant on a frame (whole-frame only in MVP).
 type Grant struct {
@@ -48,6 +61,12 @@ type Repository interface {
 	GetOrgBySlug(ctx context.Context, slug string) (*framesv1.Org, error)
 	GetMembership(ctx context.Context, userSub string) (*framesv1.Membership, error)
 	UpsertMembership(ctx context.Context, m *framesv1.Membership) error
+	// CreateMembership inserts a membership and never updates one. It returns
+	// ErrAlreadyExists when the subject or the (org, email) pair is taken.
+	// Provisioning must not use UpsertMembership: that is UPDATE-first, so a
+	// caller acting on a stale "no membership" read would rewrite a role another
+	// request had just established.
+	CreateMembership(ctx context.Context, m *framesv1.Membership) error
 	ListMembershipsByOrg(ctx context.Context, orgID string) ([]*framesv1.Membership, error)
 	GetPendingMembershipByEmail(ctx context.Context, email string) (*framesv1.Membership, error)
 	CountAdmins(ctx context.Context, orgID string) (int, error)

@@ -16,6 +16,8 @@ import (
 	"github.com/nebari-dev/nebari-frames/backend/internal/devfixture"
 	"github.com/nebari-dev/nebari-frames/backend/internal/frames"
 	mcppkg "github.com/nebari-dev/nebari-frames/backend/internal/mcp"
+	"github.com/nebari-dev/nebari-frames/backend/internal/orgs"
+	"github.com/nebari-dev/nebari-frames/backend/internal/rbac"
 	"github.com/nebari-dev/nebari-frames/backend/internal/seed"
 	"github.com/nebari-dev/nebari-frames/backend/internal/server"
 	sqlitestore "github.com/nebari-dev/nebari-frames/backend/internal/store/sqlite"
@@ -71,6 +73,17 @@ func main() {
 		slog.Error("invalid auth configuration", "error", err)
 		os.Exit(1)
 	}
+	defaultMembership, err := selectDefaultMembership(os.Getenv("FRAMES_DEFAULT_ROLE"), os.Getenv("SEED_ORG_SLUG"))
+	if err != nil {
+		slog.Error("invalid default role configuration", "error", err)
+		os.Exit(1)
+	}
+	if defaultMembership.Role != "" {
+		slog.Warn("FRAMES_DEFAULT_ROLE is set - every authenticated user gets this role in the org, "+
+			"and removing a member only demotes them to it; revoke access in the identity provider instead",
+			"role", string(defaultMembership.Role), "org", defaultMembership.OrgSlug)
+	}
+
 	var validator auth.TokenValidator
 	if devMode {
 		slog.Warn("FRAMES_DEV_MODE=true - authentication DISABLED; injecting fixed dev-user identity")
@@ -94,9 +107,9 @@ func main() {
 	}
 	// Kept as a server.Mounter (interface) so a disabled endpoint is a nil
 	// interface, not a typed-nil *Component that would satisfy a != nil check.
+	framesService := frames.NewService(repo, frames.WithDefaultMembership(defaultMembership))
 	var mcpMounter server.Mounter
 	if mcpCfg.PublicURL != "" || devMode {
-		framesService := frames.NewService(repo)
 		mcpMounter = mcppkg.NewComponent(mcpCfg, framesService, mcpValidator)
 	}
 
@@ -109,7 +122,7 @@ func main() {
 
 	srv := &http.Server{
 		Addr:              ":" + port,
-		Handler:           server.New(repo, validator, authCfg, brandingCfg, devMode, mcpMounter).Handler(),
+		Handler:           server.New(framesService, validator, authCfg, brandingCfg, devMode, mcpMounter).Handler(),
 		ReadHeaderTimeout: 10 * time.Second,
 		ReadTimeout:       30 * time.Second,
 		WriteTimeout:      60 * time.Second,
@@ -127,6 +140,33 @@ func envOr(key, fallback string) string {
 		return v
 	}
 	return fallback
+}
+
+// selectDefaultMembership resolves FRAMES_DEFAULT_ROLE into the baseline
+// membership granted to authenticated callers with no stored membership. An
+// empty role means deny, preserving the fail-closed default. Anything set but
+// unusable is a startup error rather than a silent denial, because an operator
+// who configured a default role and got none would have no way to tell.
+func selectDefaultMembership(roleEnv, orgSlug string) (orgs.DefaultMembership, error) {
+	roleEnv = strings.TrimSpace(roleEnv)
+	orgSlug = strings.TrimSpace(orgSlug)
+	if roleEnv == "" {
+		return orgs.DefaultMembership{}, nil
+	}
+	role, ok := rbac.ParseRole(roleEnv)
+	if !ok {
+		return orgs.DefaultMembership{}, fmt.Errorf(
+			"FRAMES_DEFAULT_ROLE=%q is not a valid role; use one of viewer, publisher, admin, or leave it unset to require explicit membership",
+			roleEnv,
+		)
+	}
+	if orgSlug == "" {
+		return orgs.DefaultMembership{}, fmt.Errorf(
+			"FRAMES_DEFAULT_ROLE=%q needs an organization to grant access to, but SEED_ORG_SLUG is not set",
+			roleEnv,
+		)
+	}
+	return orgs.DefaultMembership{Role: role, OrgSlug: orgSlug}, nil
 }
 
 // selectAuthMode resolves the auth bootstrap decision from environment values.

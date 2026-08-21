@@ -50,7 +50,7 @@ Starts Keycloak in Docker (`:8081`) with an auto-imported realm and runs the bac
 
 ### Troubleshooting
 
-**"No organization access" after login.** This is intentional fail-closed behavior: a signed-in user who is not a member of any org is denied. Locally, `make dev` seeds you (`dev-user`) as an admin, and `make dev-auth` seeds `dev@localhost` as a pending admin that activates on first login - so neither should show this page. If you see it against a real deployment, ask an org admin to add your email.
+**"No organization access" after login.** This is intentional fail-closed behavior: a signed-in user who is not a member of any org is denied. Locally, `make dev` seeds you (`dev-user`) as an admin, and `make dev-auth` seeds `dev@localhost` as a pending admin that activates on first login - so neither should show this page. If you see it against a real deployment, ask an org admin to add your email, or set `auth.defaultRole` to admit every authenticated user at a baseline role (see [Default role for authenticated users](#default-role-for-authenticated-users)).
 
 **`disk I/O error` / `database is locked` on startup.** A previous dev backend was left running (e.g. `make dev` was suspended with Ctrl-Z or killed with `kill -9` instead of stopped with a single Ctrl-C) and still holds the SQLite lock. Run `make dev-clean` to stop the orphan (it frees ports `:5173`/`:8080`), clear the dev DB and its `-wal`/`-shm` files, and reset Keycloak, then start again. Always stop a dev loop with a single **Ctrl-C** so both processes shut down cleanly.
 
@@ -81,6 +81,7 @@ For a standalone binary or a non-chart deployment, the equivalent environment va
 | `OIDC_DEVICE_CLIENT_ID` | OIDC client id for the device-flow login used by `frames auth login`. |
 | `OIDC_GROUPS_CLAIM` | Claim to read group membership from. Defaults to `groups`. |
 | `FRAMES_DEV_MODE` | Set to exactly `true` to disable auth (dev only). |
+| `FRAMES_DEFAULT_ROLE` | Baseline role for an authenticated user with no membership: unset (deny, the default), `viewer`, `publisher`, or `admin`. Requires `SEED_ORG_SLUG`. |
 
 `FRAMES_DEV_MODE=true` short-circuits everything else. Otherwise both `OIDC_ISSUER_URL` and `OIDC_CLIENT_ID` are required, or the server fails fast on startup with a message naming the missing variable.
 
@@ -90,6 +91,7 @@ Beyond the auth block above, the values most people end up touching are:
 
 - `nebariapp.hostname` - the hostname the operator routes to the app.
 - `seed.orgSlug`, `seed.orgDisplayName`, `seed.adminEmail` - the organization created on first boot, and the email that is reconciled to the first real admin on their first login.
+- `auth.defaultRole` - baseline role for any authenticated user who has no membership yet. Empty (the default) keeps today's behavior: a signed-in user with no invite is denied. See [Default role for authenticated users](#default-role-for-authenticated-users).
 - `persistence.size`, `persistence.storageClass` - PVC size and storage class for the SQLite database.
 - `mcp.enabled`, `mcp.publicUrl` - whether the `/mcp` endpoint is mounted, and an override for its public URL when it can't be derived from `nebariapp.hostname`.
 - `branding.*` - white-label the app: title, logo (light and dark), favicon, and theme colors. Delivered at runtime, so no image rebuild is needed; leaving the block empty keeps the built-in Nebari branding. See [Branding](chart/README.md#branding).
@@ -111,12 +113,49 @@ helm install nebari-frames oci://quay.io/nebari/charts/nebari-frames --version 0
 
 Installing from a git checkout also works, as shown in [`chart/README.md`](chart/README.md#install-on-nebari).
 
+### Default role for authenticated users
+
+By default, signing in is not enough: a user needs a membership, created by an admin invite or by
+`seed.adminEmail`. A valid SSO user with no invite gets the "No organization access" screen.
+
+Setting `auth.defaultRole` (env `FRAMES_DEFAULT_ROLE`) changes that. Any authenticated user with no
+membership is admitted to `seed.orgSlug` at that role, and the membership is written on their first
+request, so they appear in the admin members list and can be promoted from there.
+
+```bash
+helm upgrade --install nebari-frames ... \
+  --set auth.defaultRole=viewer \
+  --set seed.orgSlug=my-org
+```
+
+Consequences to weigh before enabling it:
+
+- **The identity provider becomes the access boundary.** Anyone the realm admits can read every
+  Frame shared with the org. This is only safe if realm registration is closed or SSO-gated.
+- **Removing a member stops being a revocation.** The removed user is re-provisioned at the default
+  role on their next request. To actually revoke access, disable the user in Keycloak, or unset
+  `auth.defaultRole` and manage membership explicitly.
+- **"Add member" stops working for anyone who has already signed in.** They already hold a
+  membership, so adding them by email is rejected as already present. Change their role from the
+  members list instead. If their sign-in address differs from the one you invite (a different
+  address, not just different capitalization), the invite is accepted and then never applies, because
+  they already have a membership - see
+  [#66](https://github.com/nebari-dev/nebari-frames/issues/66).
+- **Set `seed.adminSub` (or `seed.adminEmail`) as well.** A user who has signed in at the baseline
+  role already has a membership, which is why the server promotes the configured admin whenever the
+  organization has none. That recovery only works if an admin is configured, so configure one -
+  and prefer `seed.adminSub`, since it identifies the user by their stable subject rather than by an
+  address that may not match what their token carries.
+
+An invalid role, or a role set without `seed.orgSlug`, fails at startup with a message naming the
+variable rather than silently denying every request.
+
 ## Known Limitations
 
 - **SQLite is single-writer.** `replicaCount` must stay `1`; the chart defaults to it and documents why in [`chart/README.md`](chart/README.md#values-reference). There is no highly-available mode yet.
 - **OIDC discovery happens from inside the pod.** The backend resolves and validates the issuer URL itself at startup, so the pod must be able to resolve the issuer's hostname and trust its TLS certificate. This fails on clusters where the external Keycloak hostname isn't resolvable in-cluster, or where Keycloak serves a certificate the pod doesn't already trust.
 - **One organization in the MVP.** `seed.orgSlug` seeds a single organization; there's no cross-org sharing or multi-org UI yet.
-- **Role assignment is per-membership.** Each org membership carries its own role today. Keycloak group-to-role mapping is tracked in [#21](https://github.com/nebari-dev/nebari-frames/issues/21) and a default role for new members in [#22](https://github.com/nebari-dev/nebari-frames/issues/22).
+- **Role assignment is per-membership.** Each org membership carries its own role today. `auth.defaultRole` sets the floor for users with no membership; Keycloak group-to-role mapping, which would raise it per group, is tracked in [#21](https://github.com/nebari-dev/nebari-frames/issues/21).
 
 ## Troubleshooting a Nebari Deployment
 

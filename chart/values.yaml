@@ -77,6 +77,14 @@ seed:
 #   else                                        -> auth.oidc.* (self-managed OIDC)
 auth:
   devMode: false
+  # Baseline role granted to any authenticated user who has no membership yet:
+  # "" (deny, the default), viewer, publisher, or admin. Setting it means anyone
+  # the identity provider admits gets this role in seed.orgSlug, so the realm
+  # becomes the access boundary. It also makes removing a member a demotion
+  # rather than a revocation - the user is re-provisioned at this role on their
+  # next request - so revoke access in the identity provider instead. Requires
+  # seed.orgSlug; the server refuses to start without it.
+  defaultRole: ""
   oidc:
     issuerUrl: ""
     clientId: ""

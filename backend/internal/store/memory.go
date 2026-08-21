@@ -82,6 +82,7 @@ func (m *Memory) GetMembership(_ context.Context, userSub string) (*framesv1.Mem
 func (m *Memory) UpsertMembership(_ context.Context, mem *framesv1.Membership) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
+	mem.Email = CanonicalEmail(mem.Email)
 	for i, existing := range m.memberships {
 		if existing.UserSub == mem.UserSub && mem.UserSub != "" {
 			m.memberships[i] = mem
@@ -89,6 +90,28 @@ func (m *Memory) UpsertMembership(_ context.Context, mem *framesv1.Membership) e
 		}
 	}
 	m.memberships = append(m.memberships, mem)
+	return nil
+}
+
+func (m *Memory) CreateMembership(_ context.Context, mem *framesv1.Membership) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	email := CanonicalEmail(mem.Email)
+	for _, existing := range m.memberships {
+		if existing.UserSub == mem.UserSub && mem.UserSub != "" {
+			return ErrAlreadyExists
+		}
+		if email != "" && existing.OrgId == mem.OrgId && CanonicalEmail(existing.Email) == email {
+			return ErrAlreadyExists
+		}
+	}
+	m.memberships = append(m.memberships, &framesv1.Membership{
+		OrgId:   mem.OrgId,
+		UserSub: mem.UserSub,
+		Role:    mem.Role,
+		Email:   email,
+		AddedAt: mem.AddedAt,
+	})
 	return nil
 }
 
@@ -108,7 +131,8 @@ func (m *Memory) GetPendingMembershipByEmail(_ context.Context, email string) (*
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 	for _, mem := range m.memberships {
-		if mem.UserSub == "" && mem.Email == email {
+		// Mirrors the SQLite COLLATE NOCASE lookup.
+		if mem.UserSub == "" && CanonicalEmail(mem.Email) == CanonicalEmail(email) {
 			return mem, nil
 		}
 	}
@@ -239,14 +263,16 @@ func (m *Memory) AddPendingMembership(_ context.Context, mem *framesv1.Membershi
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	for _, e := range m.memberships {
-		if e.OrgId == mem.OrgId && e.Email == mem.Email {
+		// Case-insensitive so the fake rejects what a canonicalized store would;
+		// the SQLite index is still case-sensitive, tracked in #65.
+		if e.OrgId == mem.OrgId && CanonicalEmail(e.Email) == CanonicalEmail(mem.Email) {
 			return ErrAlreadyExists
 		}
 	}
 	m.memberships = append(m.memberships, &framesv1.Membership{
 		OrgId:   mem.OrgId,
 		Role:    mem.Role,
-		Email:   mem.Email,
+		Email:   CanonicalEmail(mem.Email),
 		AddedAt: mem.AddedAt,
 	})
 	return nil
@@ -256,7 +282,7 @@ func (m *Memory) ActivatePendingMembership(_ context.Context, email, sub string)
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	for _, e := range m.memberships {
-		if e.UserSub == "" && e.Email == email {
+		if e.UserSub == "" && CanonicalEmail(e.Email) == CanonicalEmail(email) {
 			e.UserSub = sub
 			return nil
 		}
