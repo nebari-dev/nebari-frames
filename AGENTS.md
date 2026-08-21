@@ -61,10 +61,19 @@ store.Repository**.
   the `@gen` alias). All three surfaces (web, CLI, MCP) speak the same RPCs.
 - `backend/internal/server` wires the mux: unauthenticated `/healthz`, `/readyz`, `/auth/config`,
   `/config.json` (runtime branding); the FrameService at its generated path behind
-  `auth.NewInterceptor`; optionally the MCP component; and the embedded SPA at `/`.
+  `auth.NewInterceptor`; optionally the MCP component; and the embedded SPA at `/`. The
+  FrameService is injected rather than constructed here, so the Connect and MCP endpoints share one
+  instance and cannot be configured differently. Request bodies are capped at
+  `server.MaxRequestBytes`, because a body is read in full before RBAC is consulted.
 - `backend/internal/auth` resolves identity. `FRAMES_DEV_MODE=true` short-circuits everything with a
   fixed `dev-user` identity and a permanently-ready `/readyz`. Otherwise a lazy OIDC validator
   performs discovery from inside the pod, and `/readyz` stays 503 until it succeeds (fail closed).
+- `backend/internal/orgs` turns claims into an `rbac.Caller`. Precedence is fixed: a stored
+  membership, then a pending invite matched by email, then the baseline role from
+  `FRAMES_DEFAULT_ROLE` (empty means deny, which is the fail-closed default). The baseline
+  membership is persisted, so those users appear in the members list and are promotable - and it is
+  written insert-only, because the "no membership" read that leads there is not atomic with the
+  write and an update would overwrite a role another request had just established.
 - `backend/internal/rbac` is the single authorization decision point. `Can` evaluates in order:
   cross-org deny, admin allow, then per-frame grants for the user or the org. Roles are
   `viewer | publisher | admin`, permissions `read | edit | delete`. A missing read permission is
@@ -82,7 +91,10 @@ store.Repository**.
     slots win last, cycles produce `CycleError`, and an unreadable ancestor propagates
     `ErrParentUnreadable` rather than silently dropping content.
 - `backend/internal/store` defines `Repository` plus an in-memory implementation used by tests;
-  `store/sqlite` is the real one, with goose migrations in `store/sqlite/migrations`. Publishes go
+  `store/sqlite` is the real one, with goose migrations in `store/sqlite/migrations`. Emails are
+  canonical at rest (`store.CanonicalEmail`) and unique per org case-insensitively, so an invite
+  cannot be shadowed by a case variant. The in-memory fake enforces the same unique constraints;
+  where it cannot, tests reach for real SQLite and say why. Publishes go
   through `CreateFrameVersion`, which inserts the frame row, version, inheritance edges, and grants
   atomically. **SQLite is single-writer, so the deployment is pinned to one replica.**
 - `backend/internal/mcp` is a thin protocol adapter over `frames.Service`, exposing frames as MCP
@@ -103,6 +115,10 @@ store.Repository**.
 ## Conventions
 
 - Table-driven Go tests. Tests sit beside the code they cover, including in `web/` (`*.test.tsx`).
+- Migrations are only ever applied to a fresh database by the normal suite, which hides anything that
+  breaks on existing rows. `store/sqlite/migrations/migrate_legacy_test.go` builds an older schema
+  with the data a migration has to repair and migrates forward; extend it when a migration touches
+  existing rows.
 - Never bump `chart/Chart.yaml`'s `version`/`appVersion` by hand: the release job stamps them from
   the git tag (`version` = tag without `v`, `appVersion` = the literal tag).
 - The SPA ships inside the image, not the chart. A frontend change reaches a cluster only through a
