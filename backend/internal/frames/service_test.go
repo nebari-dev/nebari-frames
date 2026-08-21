@@ -576,3 +576,452 @@ func TestConvertFrame_RequiresMembership(t *testing.T) {
 		t.Fatal("want error for a caller with no org membership")
 	}
 }
+
+// docFor builds a minimal valid Doc for PublishDoc tests.
+func docFor(name, version string, rules ...string) *frames.Doc {
+	return &frames.Doc{
+		Name:        name,
+		Description: name + " description",
+		Version:     version,
+		Slots:       frames.Slots{Rules: rules},
+	}
+}
+
+func TestService_PublishDoc(t *testing.T) {
+	tests := []struct {
+		name string
+		// role of the calling user in org o1
+		role string
+		// seed publishes brand-voice@1.0.0 as "owner" first
+		seedExisting bool
+		docName      string
+		version      string
+		intent       frames.PublishIntent
+		wantCode     connect.Code // 0 means success
+	}{
+		{
+			name: "publisher creates a new frame", role: "publisher",
+			docName: "brand-voice", version: "1.0.0", intent: frames.PublishCreate,
+		},
+		{
+			name: "viewer cannot create", role: "viewer",
+			docName: "brand-voice", version: "1.0.0", intent: frames.PublishCreate,
+			wantCode: connect.CodePermissionDenied,
+		},
+		{
+			name: "admin creates a new frame", role: "admin",
+			docName: "brand-voice", version: "1.0.0", intent: frames.PublishCreate,
+		},
+		{
+			name: "create refuses a name that already exists", role: "admin",
+			seedExisting: true,
+			docName:      "brand-voice", version: "2.0.0", intent: frames.PublishCreate,
+			wantCode: connect.CodeAlreadyExists,
+		},
+		{
+			name: "update requires the frame to exist", role: "admin",
+			docName: "brand-voice", version: "1.0.0", intent: frames.PublishUpdate,
+			wantCode: connect.CodeNotFound,
+		},
+		{
+			name: "admin updates an existing frame", role: "admin",
+			seedExisting: true,
+			docName:      "brand-voice", version: "2.0.0", intent: frames.PublishUpdate,
+		},
+		{
+			name: "upsert creates when absent, preserving the RPC's behavior", role: "publisher",
+			docName: "brand-voice", version: "1.0.0", intent: frames.PublishUpsert,
+		},
+		{
+			name: "upsert updates when present", role: "admin",
+			seedExisting: true,
+			docName:      "brand-voice", version: "2.0.0", intent: frames.PublishUpsert,
+		},
+		{
+			name: "a republished version is rejected", role: "admin",
+			seedExisting: true,
+			docName:      "brand-voice", version: "1.0.0", intent: frames.PublishUpdate,
+			wantCode: connect.CodeAlreadyExists,
+		},
+		{
+			name: "an invalid document is rejected before any write", role: "admin",
+			docName: "Not A Valid Name", version: "1.0.0", intent: frames.PublishCreate,
+			wantCode: connect.CodeInvalidArgument,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			repo := store.NewMemory()
+			ctx := seedOrg(t, repo, "caller", tt.role)
+			svc := frames.NewService(repo)
+
+			if tt.seedExisting {
+				ownerCtx := auth.WithClaims(context.Background(), &auth.Claims{Subject: "owner", Email: "owner@x"})
+				_ = repo.UpsertMembership(context.Background(), &framesv1.Membership{OrgId: "o1", UserSub: "owner", Role: "publisher"})
+				if _, _, err := svc.PublishDoc(ownerCtx, docFor("brand-voice", "1.0.0", "seeded"), "seed", frames.PublishCreate); err != nil {
+					t.Fatalf("seed publish: %v", err)
+				}
+			}
+
+			frame, version, err := svc.PublishDoc(ctx, docFor(tt.docName, tt.version, "a rule"), "changelog", tt.intent)
+			if tt.wantCode != 0 {
+				if connect.CodeOf(err) != tt.wantCode {
+					t.Fatalf("code = %v (err %v), want %v", connect.CodeOf(err), err, tt.wantCode)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if frame.Name != tt.docName {
+				t.Errorf("frame name = %q, want %q", frame.Name, tt.docName)
+			}
+			if version.Version != tt.version {
+				t.Errorf("version = %q, want %q", version.Version, tt.version)
+			}
+			if frame.LatestVersion != tt.version {
+				t.Errorf("latest version = %q, want %q", frame.LatestVersion, tt.version)
+			}
+		})
+	}
+}
+
+// A publisher who is not the owner and holds no edit grant must not be able to
+// overwrite someone else's frame, whichever intent they pass.
+func TestService_PublishDocDoesNotBypassEditPermission(t *testing.T) {
+	for _, intent := range []frames.PublishIntent{frames.PublishUpsert, frames.PublishUpdate, frames.PublishCreate} {
+		repo := store.NewMemory()
+		ownerCtx := seedOrg(t, repo, "owner", "publisher")
+		svc := frames.NewService(repo)
+		if _, _, err := svc.PublishDoc(ownerCtx, docFor("brand-voice", "1.0.0", "owned"), "", frames.PublishCreate); err != nil {
+			t.Fatalf("seed publish: %v", err)
+		}
+
+		ctx := context.Background()
+		_ = repo.UpsertMembership(ctx, &framesv1.Membership{OrgId: "o1", UserSub: "other", Role: "publisher"})
+		otherCtx := auth.WithClaims(ctx, &auth.Claims{Subject: "other", Email: "other@x"})
+
+		_, _, err := svc.PublishDoc(otherCtx, docFor("brand-voice", "9.9.9", "hijacked"), "", intent)
+		if err == nil {
+			t.Fatalf("intent %v: a non-owner publisher overwrote a frame they cannot edit", intent)
+		}
+		code := connect.CodeOf(err)
+		if code != connect.CodePermissionDenied && code != connect.CodeAlreadyExists {
+			t.Errorf("intent %v: code = %v, want PermissionDenied or AlreadyExists", intent, code)
+		}
+	}
+}
+
+// The Connect path must store the exact bytes the client submitted: normalizing
+// them through a Doc round trip would strip comments and change the digest of a
+// logically identical document.
+func TestService_PublishFramePreservesSubmittedBytes(t *testing.T) {
+	repo := store.NewMemory()
+	ctx := seedOrg(t, repo, "pub", "publisher")
+	svc := frames.NewService(repo)
+
+	content := []byte("# a comment the author cares about\n" + sampleFrame)
+	if _, err := svc.PublishFrame(ctx, connect.NewRequest(&framesv1.PublishFrameRequest{Content: content})); err != nil {
+		t.Fatalf("publish: %v", err)
+	}
+
+	resp, err := svc.GetFrame(ctx, connect.NewRequest(&framesv1.GetFrameRequest{OrgSlug: "openteams", Name: "brand-voice"}))
+	if err != nil {
+		t.Fatalf("get: %v", err)
+	}
+	if !bytes.Equal(resp.Msg.Version.Content, content) {
+		t.Errorf("stored content was rewritten:\n got: %q\nwant: %q", resp.Msg.Version.Content, content)
+	}
+}
+
+// Authorization must precede parsing: a caller who may not publish should be
+// denied without the server first parsing content they supplied. Malformed YAML
+// from a viewer therefore surfaces PermissionDenied, not InvalidArgument. The
+// ordering predates the create/update split; this pins it so extracting the
+// shared publish path cannot quietly invert it.
+func TestService_PublishFrameAuthorizesBeforeParsing(t *testing.T) {
+	repo := store.NewMemory()
+	viewerCtx := seedOrg(t, repo, "viewer-user", "viewer")
+	svc := frames.NewService(repo)
+
+	_, err := svc.PublishFrame(viewerCtx, connect.NewRequest(&framesv1.PublishFrameRequest{
+		Content: []byte("this: is: not: valid: yaml: at: all"),
+	}))
+	if got := connect.CodeOf(err); got != connect.CodePermissionDenied {
+		t.Fatalf("code = %v (err %v), want PermissionDenied: parsing ran before the role check", got, err)
+	}
+}
+
+// SourceDoc returns a frame's own stored document, NOT the inheritance-resolved
+// one. A write path that fed a resolved doc back in would flatten the parent's
+// content into the child and drop the extends edges, so this distinction is the
+// difference between a safe update and silent inheritance loss.
+func TestService_SourceDocIsUnresolved(t *testing.T) {
+	repo := store.NewMemory()
+	ctx := seedOrg(t, repo, "pub", "publisher")
+	svc := frames.NewService(repo)
+
+	parent := `name: base
+description: Base
+version: 1.0.0
+slots:
+  rules:
+    - from parent
+`
+	child := `name: child
+description: Child
+version: 1.0.0
+visibility: private
+scope: company
+maintainer: platform team
+extends:
+  - ref: openteams/base
+    version: 1.0.0
+slots:
+  rules:
+    - from child
+`
+	for _, content := range []string{parent, child} {
+		if _, err := svc.PublishFrame(ctx, connect.NewRequest(&framesv1.PublishFrameRequest{Content: []byte(content)})); err != nil {
+			t.Fatalf("publish: %v", err)
+		}
+	}
+
+	src, err := svc.SourceDoc(ctx, "child", "")
+	if err != nil {
+		t.Fatalf("SourceDoc: %v", err)
+	}
+	if got := src.Slots.Rules; len(got) != 1 || got[0] != "from child" {
+		t.Errorf("rules = %v, want only the child's own rule (parent content must not be merged in)", got)
+	}
+	if len(src.Extends) != 1 || src.Extends[0].Ref != "openteams/base" {
+		t.Errorf("extends = %+v, want the child's own pinned parent", src.Extends)
+	}
+	if src.Visibility != "private" || src.Scope != "company" || src.Maintainer != "platform team" {
+		t.Errorf("metadata lost: visibility=%q scope=%q maintainer=%q", src.Visibility, src.Scope, src.Maintainer)
+	}
+
+	// Contrast: ResolveDoc merges the parent in and is therefore unsafe to
+	// round-trip back into a write.
+	resolved, err := svc.ResolveDoc(ctx, "openteams", "child", "")
+	if err != nil {
+		t.Fatalf("ResolveDoc: %v", err)
+	}
+	if len(resolved.Slots.Rules) != 2 {
+		t.Errorf("resolved rules = %v, want both parent and child rules", resolved.Slots.Rules)
+	}
+}
+
+func TestService_SourceDocRespectsRead(t *testing.T) {
+	repo := store.NewMemory()
+	ownerCtx := seedOrg(t, repo, "owner", "publisher")
+	svc := frames.NewService(repo)
+	if _, _, err := svc.PublishDoc(ownerCtx, docFor("private-frame", "1.0.0", "secret"), "", frames.PublishCreate); err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+
+	// A member of a different org must not read it, and must not learn it exists.
+	otherCtx := seedSecondOrg(t, repo, "outsider", "admin")
+	if _, err := svc.SourceDoc(otherCtx, "private-frame", ""); connect.CodeOf(err) != connect.CodeNotFound {
+		t.Errorf("code = %v, want NotFound for a cross-org read", connect.CodeOf(err))
+	}
+}
+
+// An LLM-driven write path can emit arbitrarily large content, so the cap the
+// design doc promises has to be real - and enforced for both front doors.
+func TestService_PublishRejectsOversizedContent(t *testing.T) {
+	huge := strings.Repeat("x", frames.MaxContentBytes+1)
+
+	t.Run("connect path", func(t *testing.T) {
+		repo := store.NewMemory()
+		ctx := seedOrg(t, repo, "pub", "publisher")
+		svc := frames.NewService(repo)
+		content := "name: big\ndescription: d\nversion: 1.0.0\nslots:\n  goals: " + huge + "\n"
+		_, err := svc.PublishFrame(ctx, connect.NewRequest(&framesv1.PublishFrameRequest{Content: []byte(content)}))
+		if connect.CodeOf(err) != connect.CodeInvalidArgument {
+			t.Errorf("code = %v (err %v), want InvalidArgument", connect.CodeOf(err), err)
+		}
+	})
+
+	t.Run("publish doc path", func(t *testing.T) {
+		repo := store.NewMemory()
+		ctx := seedOrg(t, repo, "pub", "publisher")
+		svc := frames.NewService(repo)
+		doc := docFor("big", "1.0.0")
+		doc.Slots.Goals = huge
+		_, _, err := svc.PublishDoc(ctx, doc, "", frames.PublishCreate)
+		if connect.CodeOf(err) != connect.CodeInvalidArgument {
+			t.Errorf("code = %v (err %v), want InvalidArgument", connect.CodeOf(err), err)
+		}
+	})
+
+	// Pins the boundary exactly: content of precisely MaxContentBytes is allowed
+	// and one byte more is not, so the comparison cannot drift between > and >=.
+	t.Run("the boundary is inclusive", func(t *testing.T) {
+		// Binary-search the padding that makes the marshalled document land on
+		// exactly the limit; YAML framing makes the offset awkward to hardcode.
+		sizeFor := func(pad int) int {
+			d := docFor("ok", "1.0.0")
+			d.Slots.Goals = strings.Repeat("y", pad)
+			b, err := frames.Marshal(d)
+			if err != nil {
+				t.Fatalf("marshal: %v", err)
+			}
+			return len(b)
+		}
+		lo, hi := 0, frames.MaxContentBytes
+		for lo < hi {
+			mid := (lo + hi + 1) / 2
+			if sizeFor(mid) <= frames.MaxContentBytes {
+				lo = mid
+			} else {
+				hi = mid - 1
+			}
+		}
+		if got := sizeFor(lo); got != frames.MaxContentBytes {
+			t.Fatalf("could not construct content of exactly %d bytes (closest %d)", frames.MaxContentBytes, got)
+		}
+
+		atLimit := docFor("ok", "1.0.0")
+		atLimit.Slots.Goals = strings.Repeat("y", lo)
+		repo := store.NewMemory()
+		ctx := seedOrg(t, repo, "pub", "publisher")
+		if _, _, err := frames.NewService(repo).PublishDoc(ctx, atLimit, "", frames.PublishCreate); err != nil {
+			t.Errorf("content of exactly %d bytes was rejected: %v", frames.MaxContentBytes, err)
+		}
+
+		over := docFor("ok", "1.0.0")
+		over.Slots.Goals = strings.Repeat("y", lo+1)
+		repo2 := store.NewMemory()
+		ctx2 := seedOrg(t, repo2, "pub", "publisher")
+		_, _, err := frames.NewService(repo2).PublishDoc(ctx2, over, "", frames.PublishCreate)
+		if connect.CodeOf(err) != connect.CodeInvalidArgument {
+			t.Errorf("one byte over the limit: code = %v (err %v), want InvalidArgument", connect.CodeOf(err), err)
+		}
+	})
+}
+
+// latest_version must not move backwards. Publishing an older version would
+// otherwise make every default read - GetFrame, ListFrames, MCP get_frame, and
+// the merge base of the next update - resolve to the older document, quietly
+// unpublishing newer content.
+func TestService_PublishRejectsNonAdvancingVersion(t *testing.T) {
+	tests := []struct {
+		name     string
+		versions []string // published in order; the last one is the assertion
+		wantCode connect.Code
+	}{
+		{name: "advancing patch", versions: []string{"1.0.0", "1.0.1"}},
+		{name: "advancing minor", versions: []string{"1.0.0", "1.1.0"}},
+		{name: "advancing major", versions: []string{"1.9.9", "2.0.0"}},
+		{name: "double digits sort numerically", versions: []string{"1.9.0", "1.10.0"}},
+		{name: "going backwards is rejected", versions: []string{"2.0.0", "1.0.1"}, wantCode: connect.CodeInvalidArgument},
+		{name: "minor going backwards is rejected", versions: []string{"1.2.0", "1.1.9"}, wantCode: connect.CodeInvalidArgument},
+		{name: "republishing the same version is rejected", versions: []string{"1.0.0", "1.0.0"}, wantCode: connect.CodeAlreadyExists},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			repo := store.NewMemory()
+			ctx := seedOrg(t, repo, "pub", "publisher")
+			svc := frames.NewService(repo)
+			var err error
+			for i, v := range tt.versions {
+				intent := frames.PublishUpdate
+				if i == 0 {
+					intent = frames.PublishCreate
+				}
+				_, _, err = svc.PublishDoc(ctx, docFor("brand-voice", v, "r"), "", intent)
+				if i < len(tt.versions)-1 && err != nil {
+					t.Fatalf("seeding %s: %v", v, err)
+				}
+			}
+			if got := connect.CodeOf(err); tt.wantCode == 0 && err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			} else if tt.wantCode != 0 && got != tt.wantCode {
+				t.Fatalf("code = %v (err %v), want %v", got, err, tt.wantCode)
+			}
+		})
+	}
+}
+
+// Two callers that both read version 1.0.0 and then publish must not silently
+// lose one another's changes. The second publish is rejected because the Frame
+// moved on beneath it.
+func TestService_PublishDetectsAStaleBase(t *testing.T) {
+	repo := store.NewMemory()
+	ctx := seedOrg(t, repo, "pub", "publisher")
+	svc := frames.NewService(repo)
+	if _, _, err := svc.PublishDoc(ctx, docFor("brand-voice", "1.0.0", "original"), "", frames.PublishCreate); err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+
+	// Both callers read 1.0.0 as their base.
+	first := docFor("brand-voice", "1.1.0", "original", "from the first caller")
+	second := docFor("brand-voice", "1.2.0", "original", "from the second caller")
+
+	if _, _, err := svc.PublishDocFrom(ctx, first, "", frames.PublishUpdate, "1.0.0"); err != nil {
+		t.Fatalf("first publish: %v", err)
+	}
+	_, _, err := svc.PublishDocFrom(ctx, second, "", frames.PublishUpdate, "1.0.0")
+	if connect.CodeOf(err) != connect.CodeFailedPrecondition {
+		t.Fatalf("code = %v (err %v), want FailedPrecondition: the second caller's base was stale",
+			connect.CodeOf(err), err)
+	}
+
+	// The first caller's change survived.
+	doc, err := svc.SourceDoc(ctx, "brand-voice", "")
+	if err != nil {
+		t.Fatalf("source: %v", err)
+	}
+	if doc.Version != "1.1.0" {
+		t.Errorf("latest = %q, want 1.1.0", doc.Version)
+	}
+}
+
+// An empty base version means "I did not check", which keeps the Connect API's
+// existing behaviour rather than forcing every caller to supply one.
+func TestService_PublishWithoutABaseVersionIsUnchecked(t *testing.T) {
+	repo := store.NewMemory()
+	ctx := seedOrg(t, repo, "pub", "publisher")
+	svc := frames.NewService(repo)
+	if _, _, err := svc.PublishDoc(ctx, docFor("brand-voice", "1.0.0", "a"), "", frames.PublishCreate); err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+	if _, _, err := svc.PublishDoc(ctx, docFor("brand-voice", "1.1.0", "b"), "", frames.PublishUpdate); err != nil {
+		t.Errorf("unchecked publish should succeed: %v", err)
+	}
+}
+
+// The version error is reported as a field violation so the web form can mark
+// the version input, the way it already does for a duplicate version.
+func TestService_NonAdvancingVersionIsAFieldViolation(t *testing.T) {
+	repo := store.NewMemory()
+	ctx := seedOrg(t, repo, "pub", "publisher")
+	svc := frames.NewService(repo)
+	if _, _, err := svc.PublishDoc(ctx, docFor("brand-voice", "2.0.0", "a"), "", frames.PublishCreate); err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+	_, _, err := svc.PublishDoc(ctx, docFor("brand-voice", "1.0.0", "b"), "", frames.PublishUpdate)
+	var ce *connect.Error
+	if !errors.As(err, &ce) {
+		t.Fatalf("want a connect error, got %v", err)
+	}
+	found := false
+	for _, d := range ce.Details() {
+		v, derr := d.Value()
+		if derr != nil {
+			continue
+		}
+		if fv, ok := v.(*framesv1.FieldViolations); ok {
+			for _, viol := range fv.Violations {
+				if viol.Field == "version" {
+					found = true
+				}
+			}
+		}
+	}
+	if !found {
+		t.Errorf("no field violation on 'version'; details = %v", ce.Details())
+	}
+}

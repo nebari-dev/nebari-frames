@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"strconv"
 	"strings"
 
 	"connectrpc.com/connect"
@@ -83,32 +84,127 @@ func (s *Service) GetMe(ctx context.Context, _ *connect.Request[framesv1.GetMeRe
 	}), nil
 }
 
+// MaxContentBytes caps a single Frame version's stored document. The limit is
+// per-version and applies to the canonical stored bytes, not to the resolved
+// form: a Frame that inherits heavily can still compose to more than this.
+const MaxContentBytes = 512 * 1024
+
+// PublishIntent tells PublishDoc whether the caller means to create a new
+// frame, update an existing one, or either. It exists so the create/update
+// distinction is enforced next to the RBAC checks rather than by each caller:
+// the MCP tools rely on it, and the Connect RPC keeps its upsert behavior.
+type PublishIntent int
+
+const (
+	// PublishUpsert creates the frame when absent and updates it when present.
+	PublishUpsert PublishIntent = iota
+	// PublishCreate requires the frame not to exist yet.
+	PublishCreate
+	// PublishUpdate requires the frame to already exist.
+	PublishUpdate
+)
+
 func (s *Service) PublishFrame(ctx context.Context, req *connect.Request[framesv1.PublishFrameRequest]) (*connect.Response[framesv1.PublishFrameResponse], error) {
-	caller, err := s.resolveCaller(ctx)
+	// Authorization stays ahead of parsing, as it was before this path was
+	// split: parsing is the expensive, caller-controlled step, and someone who
+	// may not publish should never reach it.
+	caller, err := s.authorizePublish(ctx)
 	if err != nil {
 		return nil, err
 	}
-	if !rbac.CanPublish(caller) {
-		return nil, connect.NewError(connect.CodePermissionDenied, errors.New("publisher or admin role required"))
-	}
-
 	doc, err := Parse(req.Msg.Content)
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInvalidArgument, err)
 	}
+	// The submitted bytes are stored verbatim rather than re-marshalled from
+	// doc: an author's comments and formatting survive, and the digest stays
+	// stable for a document that did not change.
+	frame, version, err := s.publish(ctx, caller, doc, req.Msg.Content, req.Msg.Changelog, PublishUpsert, "")
+	if err != nil {
+		return nil, err
+	}
+	return connect.NewResponse(&framesv1.PublishFrameResponse{Frame: frame, Version: version}), nil
+}
+
+// authorizePublish resolves the caller and checks the role required to publish
+// at all. Both front doors call it before touching caller-supplied content.
+func (s *Service) authorizePublish(ctx context.Context) (rbac.Caller, error) {
+	caller, err := s.resolveCaller(ctx)
+	if err != nil {
+		return rbac.Caller{}, err
+	}
+	if !rbac.CanPublish(caller) {
+		return rbac.Caller{}, connect.NewError(connect.CodePermissionDenied, errors.New("publisher or admin role required"))
+	}
+	return caller, nil
+}
+
+// PublishDoc validates and publishes doc as a new version, enforcing RBAC:
+// creating a frame needs the publisher or admin role, and writing to an
+// existing frame needs edit permission on it. It is the single write path
+// shared by the Connect RPC and the MCP tools, so neither can drift from the
+// other or skip a check.
+//
+// Errors are connect errors so both front doors can map them without
+// translation: PermissionDenied, InvalidArgument (with field violations),
+// AlreadyExists, NotFound, Internal.
+func (s *Service) PublishDoc(ctx context.Context, doc *Doc, changelog string, intent PublishIntent) (*framesv1.Frame, *framesv1.FrameVersion, error) {
+	return s.PublishDocFrom(ctx, doc, changelog, intent, "")
+}
+
+// PublishDocFrom is PublishDoc with a concurrency check. baseVersion is the
+// version the caller read before composing doc; the publish is rejected with
+// CodeFailedPrecondition when the frame has moved on since. An empty
+// baseVersion means the caller did not check, which is the unguarded behaviour
+// the Connect RPC has always had.
+//
+// A read-modify-write without this check silently loses one of two concurrent
+// updates: both merge onto the same base, both pick different version strings
+// so nothing collides, and both report success.
+func (s *Service) PublishDocFrom(ctx context.Context, doc *Doc, changelog string, intent PublishIntent, baseVersion string) (*framesv1.Frame, *framesv1.FrameVersion, error) {
+	caller, err := s.authorizePublish(ctx)
+	if err != nil {
+		return nil, nil, err
+	}
+	content, err := Marshal(doc)
+	if err != nil {
+		return nil, nil, connect.NewError(connect.CodeInternal, err)
+	}
+	return s.publish(ctx, caller, doc, content, changelog, intent, baseVersion)
+}
+
+// publish is the shared implementation, called only with a caller that
+// authorizePublish has already cleared. content is the canonical stored form of
+// doc; callers holding the author's original bytes pass those so they are not
+// normalized away.
+func (s *Service) publish(ctx context.Context, caller rbac.Caller, doc *Doc, content []byte, changelog string, intent PublishIntent, baseVersion string) (*framesv1.Frame, *framesv1.FrameVersion, error) {
 	if verr := Validate(doc); verr != nil {
-		return nil, violationErr(verr)
+		return nil, nil, violationErr(verr)
+	}
+	// Enforced here rather than at either entry point so the Connect API and the
+	// MCP tools share one limit. It matters more now that an LLM can author a
+	// Frame: the content lands verbatim in a single-writer SQLite database and is
+	// re-read on every read and every child's inheritance walk.
+	if len(content) > MaxContentBytes {
+		return nil, nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf(
+			"frame content is %d bytes, over the %d byte limit", len(content), MaxContentBytes))
 	}
 
 	org, err := s.repo.GetOrgByID(ctx, caller.OrgID)
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInternal, err)
+		return nil, nil, connect.NewError(connect.CodeInternal, err)
 	}
 
 	existing, err := s.repo.GetFrameBySlugName(ctx, org.Slug, doc.Name)
 	isNew := errors.Is(err, store.ErrNotFound)
 	if err != nil && !isNew {
-		return nil, connect.NewError(connect.CodeInternal, err)
+		return nil, nil, connect.NewError(connect.CodeInternal, err)
+	}
+	switch {
+	case isNew && intent == PublishUpdate:
+		return nil, nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("no frame named %q to update", doc.Name))
+	case !isNew && intent == PublishCreate:
+		return nil, nil, connect.NewError(connect.CodeAlreadyExists, fmt.Errorf("a frame named %q already exists; update it instead", doc.Name))
 	}
 
 	now := timestamppb.Now()
@@ -122,10 +218,31 @@ func (s *Service) PublishFrame(ctx context.Context, req *connect.Request[framesv
 		// editing an existing frame requires edit permission
 		allowed, err := rbac.Can(ctx, s.lookup, caller, existing.OrgId, existing.Id, rbac.PermEdit)
 		if err != nil {
-			return nil, connect.NewError(connect.CodeInternal, err)
+			return nil, nil, connect.NewError(connect.CodeInternal, err)
 		}
 		if !allowed {
-			return nil, connect.NewError(connect.CodePermissionDenied, errors.New("edit permission required"))
+			return nil, nil, connect.NewError(connect.CodePermissionDenied, errors.New("edit permission required"))
+		}
+		if baseVersion != "" && existing.LatestVersion != baseVersion {
+			return nil, nil, connect.NewError(connect.CodeFailedPrecondition, fmt.Errorf(
+				"frame %q has moved on: you based this change on %s but the latest is %s; re-read it and apply your change again",
+				doc.Name, baseVersion, existing.LatestVersion))
+		}
+		// latest_version must only move forward. Otherwise publishing an older
+		// version silently unpublishes newer content: every default read, and
+		// the merge base of the next update, resolves to whatever is "latest".
+		// Strictly below only: republishing the current version is a duplicate,
+		// which CreateFrameVersion reports as AlreadyExists - a more precise
+		// answer than "does not advance".
+		if cmp, ok := compareVersions(doc.Version, existing.LatestVersion); ok && cmp < 0 {
+			// Reported as a field violation on `version`, so the web form marks
+			// the offending field rather than showing a form-level error, and
+			// the CLI names the field too.
+			return nil, nil, violationErr(&ValidationError{Errors: []FieldError{{
+				Path: "version",
+				Message: fmt.Sprintf("must be higher than the current version %s",
+					existing.LatestVersion),
+			}}})
 		}
 		frame = existing
 		frame.Description = doc.Description
@@ -135,18 +252,18 @@ func (s *Service) PublishFrame(ctx context.Context, req *connect.Request[framesv
 
 	edges, err := s.resolveEdges(ctx, caller, org.Slug, doc.Extends)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	excludeIDs, err := s.resolveExcludes(ctx, caller, org.Slug, doc.Excludes)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
-	digest := sha256.Sum256(req.Msg.Content)
+	digest := sha256.Sum256(content)
 	version := &framesv1.FrameVersion{
-		Version: doc.Version, Changelog: req.Msg.Changelog, Digest: hex.EncodeToString(digest[:]),
-		SizeBytes: int64(len(req.Msg.Content)), PublishedBy: caller.Subject, PublishedAt: now,
-		Content: req.Msg.Content,
+		Version: doc.Version, Changelog: changelog, Digest: hex.EncodeToString(digest[:]),
+		SizeBytes: int64(len(content)), PublishedBy: caller.Subject, PublishedAt: now,
+		Content: content,
 	}
 
 	in := store.CreateFrameVersionInput{
@@ -160,11 +277,11 @@ func (s *Service) PublishFrame(ctx context.Context, req *connect.Request[framesv
 	}
 	if err := s.repo.CreateFrameVersion(ctx, in); err != nil {
 		if errors.Is(err, store.ErrAlreadyExists) {
-			return nil, connect.NewError(connect.CodeAlreadyExists, errors.New("frame version already exists"))
+			return nil, nil, connect.NewError(connect.CodeAlreadyExists, errors.New("frame version already exists"))
 		}
-		return nil, connect.NewError(connect.CodeInternal, err)
+		return nil, nil, connect.NewError(connect.CodeInternal, err)
 	}
-	return connect.NewResponse(&framesv1.PublishFrameResponse{Frame: frame, Version: version}), nil
+	return frame, version, nil
 }
 
 // readableFramesInOrg resolves the caller and returns the frames in their org
@@ -315,6 +432,31 @@ func (s *Service) ListReadable(ctx context.Context) ([]ReadableFrame, error) {
 		})
 	}
 	return out, nil
+}
+
+// SourceDoc returns a frame's own stored document, scoped to the caller's org
+// and read-enforced (a denied or missing read is CodeNotFound, no existence
+// leak). Unlike ResolveDoc it does NOT merge ancestors, which is what makes it
+// the safe input to a write: feeding a resolved document back into a publish
+// would copy every parent's slots into the child and drop its extends edges.
+func (s *Service) SourceDoc(ctx context.Context, name, version string) (*Doc, error) {
+	caller, err := s.resolveCaller(ctx)
+	if err != nil {
+		return nil, err
+	}
+	org, err := s.repo.GetOrgByID(ctx, caller.OrgID)
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInternal, err)
+	}
+	_, v, _, _, err := s.loadForRead(ctx, caller, org.Slug, name, version)
+	if err != nil {
+		return nil, err
+	}
+	doc, err := Parse(v.Content)
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInternal, err)
+	}
+	return doc, nil
 }
 
 // ResolveDoc returns the inheritance-merged Doc for a frame, read-enforced.
@@ -558,4 +700,44 @@ func (s *Service) ConvertFrame(ctx context.Context, req *connect.Request[framesv
 		return nil, connect.NewError(connect.CodeInvalidArgument,
 			errors.New("exactly one of yaml or markdown must be set"))
 	}
+}
+
+// compareVersions orders two validated semantic versions, reporting false when
+// either cannot be parsed. Validate already enforces the shape, so a false here
+// means an unexpected form rather than user error - the caller lets it through
+// rather than rejecting a document it cannot reason about.
+func compareVersions(a, b string) (int, bool) {
+	pa, ok := parseVersion(a)
+	if !ok {
+		return 0, false
+	}
+	pb, ok := parseVersion(b)
+	if !ok {
+		return 0, false
+	}
+	for i := range pa {
+		if pa[i] != pb[i] {
+			if pa[i] < pb[i] {
+				return -1, true
+			}
+			return 1, true
+		}
+	}
+	return 0, true
+}
+
+func parseVersion(v string) ([3]int, bool) {
+	var out [3]int
+	parts := strings.Split(v, ".")
+	if len(parts) != 3 {
+		return out, false
+	}
+	for i, p := range parts {
+		n, err := strconv.Atoi(p)
+		if err != nil || n < 0 {
+			return out, false
+		}
+		out[i] = n
+	}
+	return out, true
 }

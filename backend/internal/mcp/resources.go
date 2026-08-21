@@ -13,6 +13,7 @@ import (
 
 	"github.com/nebari-dev/nebari-frames/backend/internal/auth"
 	"github.com/nebari-dev/nebari-frames/backend/internal/frames"
+	framesv1 "github.com/nebari-dev/nebari-frames/gen/go/frames/v1"
 )
 
 // compile-time assertion that the real service satisfies the adapter's interface.
@@ -23,6 +24,12 @@ var _ FrameSource = (*frames.Service)(nil)
 type FrameSource interface {
 	ListReadable(ctx context.Context) ([]frames.ReadableFrame, error)
 	ResolveDoc(ctx context.Context, orgSlug, name, version string) (*frames.Doc, error)
+	// SourceDoc reads a frame's own unresolved document, for use as the merge
+	// base of an update. Distinct from ResolveDoc on purpose: see updateFrameTool.
+	SourceDoc(ctx context.Context, name, version string) (*frames.Doc, error)
+	// PublishDocFrom is the RBAC-enforcing write path shared with the Connect
+	// API. The base version it takes is what makes concurrent updates safe.
+	PublishDocFrom(ctx context.Context, doc *frames.Doc, changelog string, intent frames.PublishIntent, baseVersion string) (*framesv1.Frame, *framesv1.FrameVersion, error)
 }
 
 type resourceServer struct {
@@ -86,8 +93,19 @@ func (rs *resourceServer) getServer(req *http.Request) *gomcp.Server {
 	}, rs.listFramesTool(claims))
 	gomcp.AddTool(srv, &gomcp.Tool{
 		Name:        "get_frame",
-		Description: "Get the full composed Markdown of a Frame by name (optionally a specific version). Use this to load an organization Frame as context before writing.",
+		Description: "Get the Markdown of a Frame by name (optionally a specific version). By default returns the composed form, including everything it inherits - use that to load an organization Frame as context. Pass source=true to get only the Frame's own content, which is what you must read before editing it with update_frame.",
 	}, rs.getFrameTool(claims))
+	// Writes. Permission is enforced entirely by frames.PublishDoc, the same
+	// path the Connect API uses; a caller without the role or grant gets an
+	// error result rather than a partial write.
+	gomcp.AddTool(srv, &gomcp.Tool{
+		Name:        "create_frame",
+		Description: "Create a new Frame in the user's organization. Fails if a Frame with that name already exists, or if the user may not publish. Call list_frames first to check the name is free.",
+	}, rs.createFrameTool(claims))
+	gomcp.AddTool(srv, &gomcp.Tool{
+		Name:        "update_frame",
+		Description: "Publish a new version of an existing Frame, changing only the fields you supply. Read it first with get_frame source=true and pass the version it reports as base_version; the update is refused if someone else published in the meantime. The new version must be higher than the current one. Anything you omit keeps its current value, so send just what changes; pass an empty list to clear a list. To modify a list or a text section, first read the current value with get_frame source=true - never with the default composed form, whose inherited content would be copied into this Frame and detach it from its parents. Fails if no Frame with that name exists, or if the user may not edit it.",
+	}, rs.updateFrameTool(claims))
 
 	return srv
 }
@@ -142,6 +160,11 @@ func (rs *resourceServer) listFramesTool(claims *auth.Claims) gomcp.ToolHandlerF
 type getFrameInput struct {
 	Name    string `json:"name" jsonschema:"the Frame name, e.g. nebari-platform"`
 	Version string `json:"version,omitempty" jsonschema:"optional version; defaults to the latest"`
+	// Source exists so a client that intends to EDIT a Frame can see what the
+	// Frame itself says. The default composed view merges every ancestor's
+	// slots, and sending that back through update_frame would copy the parents'
+	// content into the child and detach it from their future revisions.
+	Source bool `json:"source,omitempty" jsonschema:"when true, return only this Frame's own content without inherited content. Use this before update_frame; use the default (false) when reading a Frame as context"`
 }
 
 // getFrameTool returns a Frame's composed Markdown. It finds the named frame
@@ -168,7 +191,7 @@ func (rs *resourceServer) getFrameTool(claims *auth.Claims) gomcp.ToolHandlerFor
 		if version == "" {
 			version = match.Version
 		}
-		doc, err := rs.src.ResolveDoc(ctx, match.OrgSlug, in.Name, version)
+		doc, err := rs.docFor(ctx, in, match.OrgSlug, version)
 		if err != nil {
 			return errorResult("frame not found: " + in.Name), nil, nil
 		}
@@ -183,4 +206,14 @@ func textResult(s string) *gomcp.CallToolResult {
 
 func errorResult(s string) *gomcp.CallToolResult {
 	return &gomcp.CallToolResult{IsError: true, Content: []gomcp.Content{&gomcp.TextContent{Text: s}}}
+}
+
+// docFor returns the Frame's own document when the caller asked for source,
+// and the inheritance-composed one otherwise. Both are read-enforced by the
+// service.
+func (rs *resourceServer) docFor(ctx context.Context, in getFrameInput, orgSlug, version string) (*frames.Doc, error) {
+	if in.Source {
+		return rs.src.SourceDoc(ctx, in.Name, version)
+	}
+	return rs.src.ResolveDoc(ctx, orgSlug, in.Name, version)
 }

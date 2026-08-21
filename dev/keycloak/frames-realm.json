@@ -26,6 +26,16 @@
             "id.token.claim": "false",
             "access.token.claim": "true"
           }
+        },
+        {
+          "name": "frames-mcp-audience",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-audience-mapper",
+          "config": {
+            "included.custom.audience": "http://localhost:5173/mcp",
+            "id.token.claim": "false",
+            "access.token.claim": "true"
+          }
         }
       ]
     }

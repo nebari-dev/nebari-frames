@@ -2,7 +2,8 @@
 
 ChatGPT can use an organization's Frames as a remote MCP connector. It registers
 itself via Dynamic Client Registration (DCR) against Keycloak, signs the user in
-with their Nebari account, and then exposes the `list_frames` and `get_frame`
+with their Nebari account, and then exposes the `list_frames`, `get_frame`,
+`create_frame`, and `update_frame`
 tools in the conversation.
 
 ## Prerequisites
@@ -35,7 +36,7 @@ tools in the conversation.
    reads the protected-resource metadata and registers a client via **DCR**
    (CIMD is skipped because the server doesn't advertise it), then opens the
    OAuth login. **Sign in with your Nebari (Keycloak) account** and approve.
-5. The app shows **connected** with two tools: `list_frames` and `get_frame`.
+5. The app shows **connected** with four tools: `list_frames`, `get_frame`, `create_frame`, and `update_frame`. The write tools are RBAC-gated: a viewer sees them listed but every call is denied.
 
 ## Using it
 
@@ -58,7 +59,7 @@ load the content, and writes grounded in that Frame (respecting its rules).
 - **Connects but tool calls 401:** the token lacks the `/mcp` audience. Confirm
   the audience mapper is on a scope every client gets (see keycloak-setup.md).
 - **No tools shown:** confirm the server is the tool-bearing build (it exposes
-  `list_frames`/`get_frame`), not resources-only.
+  `list_frames`/`get_frame`/`create_frame`/`update_frame`), not resources-only.
 
 ## References
 
