@@ -319,14 +319,45 @@ slots:
 
 1. Walk `extends` graph depth-first from the requested Frame version. Abort with error on cycle.
 2. Remove any node whose `frame_id` appears in the requested Frame's `excludes`.
-3. Merge slots in `extends` order (later wins):
-   - `terminology`: merge by `term`; later definition wins on collision.
-   - Typed-list-of-strings (`rules`, `skills`, `prompts`): concatenate, dedupe preserving last occurrence.
-   - Prose slots (and `tool_specs`): later parent's content replaces earlier entirely.
-4. Apply the Frame's own slot values last; they override all parents.
+3. Append each ancestor's body in `extends` order, ancestors first. A parent reachable through more
+   than one path (a diamond) contributes once, keyed by `ref@version`.
+4. Append the Frame's own body last, so its guidance reads after everything it inherits.
 5. Return the resolved Frame.
 
 Resolution at read time (not publish time) keeps storage simple. Pinned parent refs mean read-time results are stable until the child re-publishes.
+
+##### Why precedence is reading order, and what that costs
+
+> **Supersedes step 3 above** ([#59](https://github.com/nebari-dev/nebari-frames/issues/59)), which
+> merged ten typed slots. This is the trade that came with the free-form body, recorded here because
+> it is a deliberate loss rather than an oversight.
+
+Per-slot merging gave a child two kinds of override that concatenation does not:
+
+- **`terminology` merged by key.** A parent defining `customer` and a child redefining it produced
+  one entry, the child's. Now both definitions appear in the resolved body, adjacent.
+- **Prose slots replaced outright.** A child's `style` erased its parent's. Now both paragraphs
+  appear, parent first.
+
+Two things did *not* change, and are worth naming so this is not read as broader than it is. Rules,
+skills, and prompts were already append-with-last-wins-dedupe, so fine-grained **removal** never
+existed on either side - a child could add to a parent's rules or restate one, never delete one. And
+`excludes` still works, at whole-ancestor granularity.
+
+**Why not keep per-section override.** It requires the body to have addressable sections, which is
+precisely what Frame Spec v0.2 does not define. Reintroducing a fixed section vocabulary to support
+override would rebuild the ten-slot schema under another name and give back the authoring rigidity
+the free-form body exists to remove.
+
+**What we are betting on instead.** Later guidance overriding earlier guidance is a convention the
+reader honors, not a guarantee the format enforces. That is a real assertion about model behavior,
+and `mcp/compose.go` emits the concatenation flat, so a model sees both the parent's and the child's
+`customer` definition with no marker saying which wins. Ordering is the only signal.
+
+**If the bet turns out badly**, the fix is narrower than restoring slots: `excludes` scoped to a
+heading path, or an explicit `## Overrides` convention the composer understands. Neither needs the
+schema back. The signal to watch for is resolved Frames where a child's correction is visibly not
+taking effect.
 
 #### Frame Spec metadata and the `.frame.md` interchange format
 

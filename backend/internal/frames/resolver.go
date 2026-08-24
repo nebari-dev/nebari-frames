@@ -23,8 +23,17 @@ type ParentFetcher interface {
 // Resolve merges the extends graph of doc, honoring excludes. Bodies are
 // concatenated in merge order - ancestors first, the doc's own body last - so
 // the resolved body reads from the most general context to the most specific,
-// and later guidance naturally overrides earlier guidance for a reader. It
-// detects cycles and propagates unreadable-ancestor errors.
+// and later guidance overrides earlier guidance for a reader. It detects cycles
+// and propagates unreadable-ancestor errors.
+//
+// Reading order is the whole precedence model, and that is a deliberate trade
+// rather than an omission: a free-form body has no addressable sections to
+// override, so a child appends to its parents and `excludes` operates on a whole
+// ancestor. What that costs - a child can no longer redefine a single term or
+// replace a single prose section - and why the alternative would rebuild the
+// retired slot schema is recorded in
+// docs/design/2026-05-21-nebari-frames-migration.md, §3.4, under "Why precedence
+// is reading order, and what that costs".
 func Resolve(ctx context.Context, fetcher ParentFetcher, doc *Doc, extends []ExtendRef, excludes []string) (*Doc, error) {
 	excludeSet := map[string]bool{}
 	for _, e := range excludes {
