@@ -279,3 +279,100 @@ func TestUnmarshalMarkdown_StructuralErrors(t *testing.T) {
 func normalizeBody(d *frames.Doc) {
 	d.Body = strings.TrimRight(d.Body, "\n")
 }
+
+// A --- inside a multi-line frontmatter value must not close the block.
+//
+// This is the one place where being lenient about the delimiter is a data-loss
+// bug rather than a convenience: YAML block scalars are always indented, so an
+// indented --- that terminated the frontmatter would truncate the document and
+// silently drop every field after it. The codec does this to its own output -
+// a description containing a --- line exports cleanly and reimports as a
+// different, shorter document - so a round-trip case is included alongside the
+// direct parses.
+func TestUnmarshalMarkdown_FenceOnlyAtColumnZero(t *testing.T) {
+	head := "---\ntype: frame [0.2]\nname: c\nversion: 1.0.0\nvisibility: internal\n"
+
+	tests := []struct {
+		name string
+		src  string
+
+		wantDesc string
+		wantVer  string
+		wantBody string
+	}{
+		{
+			name:     "indented --- inside a block scalar is content",
+			src:      head + "description: |-\n  Line one\n  ---\n  Line two\n---\n\nBody.\n",
+			wantDesc: "Line one\n---\nLine two",
+			wantVer:  "1.0.0",
+			wantBody: "Body.",
+		},
+		{
+			name: "a block scalar before the required fields does not swallow them",
+			src: "---\ntype: frame [0.2]\ndescription: |-\n  Line one\n  ---\n  Line two\n" +
+				"name: c\nversion: 1.0.0\nvisibility: internal\n---\n\nBody.\n",
+			wantDesc: "Line one\n---\nLine two",
+			wantVer:  "1.0.0",
+			wantBody: "Body.",
+		},
+		{
+			name:     "a --- in the body stays in the body",
+			src:      head + "description: d\n---\n\nBefore.\n\n---\n\nAfter.\n",
+			wantDesc: "d",
+			wantVer:  "1.0.0",
+			wantBody: "Before.\n\n---\n\nAfter.",
+		},
+		{
+			name:     "trailing whitespace on the closing fence still closes",
+			src:      head + "description: d\n---   \n\nBody.\n",
+			wantDesc: "d",
+			wantVer:  "1.0.0",
+			wantBody: "Body.",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			doc, err := frames.UnmarshalMarkdown([]byte(tc.src))
+			if err != nil {
+				t.Fatalf("unmarshal: %v", err)
+			}
+			if doc.Description != tc.wantDesc {
+				t.Errorf("description = %q, want %q", doc.Description, tc.wantDesc)
+			}
+			if doc.Version != tc.wantVer {
+				t.Errorf("version = %q, want %q: a field after the block scalar was lost", doc.Version, tc.wantVer)
+			}
+			if doc.Body != tc.wantBody {
+				t.Errorf("body = %q, want %q", doc.Body, tc.wantBody)
+			}
+		})
+	}
+
+	t.Run("a document the codec itself wrote survives its own round trip", func(t *testing.T) {
+		orig := &frames.Doc{
+			Name:        "c",
+			Description: "Line one\n---\nLine two",
+			Version:     "1.0.0",
+			Visibility:  "internal",
+			Maintainer:  "platform team",
+			Body:        "## Rules\n\n- be kind",
+		}
+		md, err := frames.MarshalMarkdown(orig)
+		if err != nil {
+			t.Fatalf("marshal: %v", err)
+		}
+		got, err := frames.UnmarshalMarkdown(md)
+		if err != nil {
+			t.Fatalf("reparse: %v\n%s", err, md)
+		}
+		if !reflect.DeepEqual(got, orig) {
+			t.Errorf("round trip lost content\n got: %+v\nwant: %+v\nmarkdown:\n%s", got, orig, md)
+		}
+		// The failure this guards against was silent: the reparsed document was
+		// invalid for a field the author never touched.
+		if err := frames.Validate(got); err != nil {
+			t.Errorf("reparsed document does not validate: %v", err)
+		}
+	})
+}

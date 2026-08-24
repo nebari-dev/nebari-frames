@@ -50,24 +50,51 @@ export type FrameDoc = Omit<z.infer<typeof frameDocSchema>, "slots">;
 type LegacySlots = z.infer<typeof legacySlotsSchema>;
 
 // legacySlotsToMarkdown renders retired slot content as the markdown sections
-// the old .frame.md codec emitted, matching legacy.go renderMarkdown.
+// the old .frame.md codec emitted.
+//
+// This is a byte-for-byte mirror of renderMarkdown in
+// backend/internal/frames/legacy.go, down to the string building, because its
+// output is not display-only: FrameDetailPage feeds it back through
+// serializeFrameDoc when a legacy version is restored, so whatever this
+// produces becomes canonical stored content. A divergence is a silent content
+// rewrite, not a rendering difference.
+//
+// The two sides are pinned to one shared fixture - testdata/legacy-slots -
+// which carries the cases where a naive port drifts: a multi-line list item
+// (Go indents continuation lines two spaces; without that, CommonMark lazy
+// continuation flattens nested markup into sibling items) and prose padded
+// with blank lines (Go trims newlines only, not all whitespace).
 function legacySlotsToMarkdown(s: LegacySlots): string {
-  const sections: string[] = [];
+  let out = "";
+
+  // Mirrors writeLegacyBullet: continuation lines are indented two spaces so a
+  // multi-line item stays part of that item, and a blank line stays blank.
+  const writeBullet = (item: string) => {
+    const lines = item.replace(/^\n+|\n+$/g, "").split("\n");
+    out += `- ${lines[0]}\n`;
+    for (const l of lines.slice(1)) {
+      out += l.trim() === "" ? "\n" : `  ${l}\n`;
+    }
+  };
+
   if (s.terminology && s.terminology.length > 0) {
-    sections.push(
-      `## Terminology\n\n${s.terminology.map((t) => `- **${t.term}**: ${t.definition}`).join("\n")}`,
-    );
+    out += "## Terminology\n\n";
+    for (const t of s.terminology) writeBullet(`**${t.term}**: ${t.definition}`);
+    out += "\n";
   }
+
   const lists: [string, string[] | undefined][] = [
     ["Rules", s.rules],
     ["Skills", s.skills],
     ["Prompts", s.prompts],
   ];
   for (const [heading, items] of lists) {
-    if (items && items.length > 0) {
-      sections.push(`## ${heading}\n\n${items.map((i) => `- ${i}`).join("\n")}`);
-    }
+    if (!items || items.length === 0) continue;
+    out += `## ${heading}\n\n`;
+    for (const it of items) writeBullet(it);
+    out += "\n";
   }
+
   const prose: [string, string | undefined][] = [
     ["Tool Specifications", s.tool_specs],
     ["Goals", s.goals],
@@ -77,11 +104,13 @@ function legacySlotsToMarkdown(s: LegacySlots): string {
     ["Business Process", s.business_process],
   ];
   for (const [heading, text] of prose) {
-    if (text && text.trim() !== "") {
-      sections.push(`## ${heading}\n\n${text.trim()}`);
-    }
+    if (!text || text.trim() === "") continue;
+    // Newlines only, matching Go's strings.Trim(body, "\n"): trimming all
+    // whitespace would strip indentation that is meaningful in markdown.
+    out += `## ${heading}\n\n${text.replace(/^\n+|\n+$/g, "")}\n\n`;
   }
-  return sections.join("\n\n");
+
+  return out.replace(/\n+$/, "");
 }
 
 // Decodes and validates the YAML in FrameVersion.content. A legacy `slots:`

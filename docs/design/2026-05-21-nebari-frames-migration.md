@@ -347,20 +347,29 @@ stateless `ConvertFrame` RPC and used for the web app's Markdown editor, import,
 | `visibility` / `scope` / `maintainer` | same keys |
 | `inherits: ["org/name@1.2.0", ...]` | `extends: [{ref, version}]` - split on the last `@` |
 | `x-nebari-excludes` | `excludes` (no spec equivalent; namespaced as the spec advises) |
-| `## Terminology` -> `- **term**: definition` | `slots.terminology` |
-| `## Rules` / `## Skills` / `## Prompts` | the matching list slots |
-| `## Goals`, `## Style`, ... | the matching prose slots |
+| everything after the closing `---` | `body`, verbatim |
+| ~~`## Terminology` -> `- **term**: definition`~~ | ~~`slots.terminology`~~ |
+| ~~`## Rules` / `## Skills` / `## Prompts`~~ | ~~the matching list slots~~ |
+| ~~`## Goals`, `## Style`, ...~~ | ~~the matching prose slots~~ |
 
 Inheritance order agrees with the spec by coincidence rather than adaptation: the spec says later
 `inherits` entries win, which is what `resolver.go` already did for `extends`.
 
-Section headings and ordering come from `frames.SlotTable`, shared with `mcp/compose.go`, so the two
-markdown renderings cannot drift. `examples/*.frame.md` are checked-in golden files asserting both
-`yaml -> md` output and `yaml -> md -> yaml` identity; they also pass the frame-spec project's own
+> **Superseded by [#59](https://github.com/nebari-dev/nebari-frames/issues/59):** a Frame's content
+> is a single free-form markdown `body`, matching Frame Spec v0.2, which defines no body structure.
+> The struck-through rows above describe the retired ten-slot schema. Documents published under it
+> are still readable - `backend/internal/frames/legacy.go` folds a `slots:` block into a body on
+> read, and nothing writes that shape again.
+
+`examples/*.frame.md` are checked-in golden files asserting both `yaml -> md` output and
+`yaml -> md -> yaml` identity; they also pass the frame-spec project's own
 `tools/validate_frames.py`.
 
-Adding a slot therefore means editing `SlotTable`, `Slots`, `validate.go`, the two zod mirrors in
-`web/src/lib/`, and regenerating the goldens - the codec and the MCP composer follow automatically.
+~~Adding a slot therefore means editing `SlotTable`, `Slots`, `validate.go`, the two zod mirrors in
+`web/src/lib/`, and regenerating the goldens - the codec and the MCP composer follow automatically.~~
+There are no slots to add. The one place the retired rendering still exists twice - Go's
+`legacy.go` and the web's `frame-yaml.ts`, which renders a stored legacy version without a server
+round trip - is pinned to the shared fixture in `testdata/legacy-slots/`.
 
 ### 3.5 RBAC model
 

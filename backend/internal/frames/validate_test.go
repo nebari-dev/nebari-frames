@@ -33,6 +33,64 @@ body: |
 // Documents published under the retired ten-slot schema must stay readable:
 // Parse folds a legacy `slots:` block into the free-form body, rendered as the
 // markdown sections the old .frame.md codec emitted.
+// Both keys in one document is a legacy version somebody has since edited, and
+// the precedence is silent - the discarded side produces no error and no
+// warning - so it has to be pinned rather than left to be rediscovered.
+func TestParse_BodyWinsOverLegacySlots(t *testing.T) {
+	tests := []struct {
+		name     string
+		content  string
+		wantBody string
+	}{
+		{
+			name:     "slots only fold into the body",
+			content:  "name: c\ndescription: d\nversion: 1.0.0\nslots:\n  rules:\n    - from slots\n",
+			wantBody: "## Rules\n\n- from slots",
+		},
+		{
+			name: "an explicit body wins and the legacy block is dropped",
+			content: "name: c\ndescription: d\nversion: 1.0.0\nbody: from body\n" +
+				"slots:\n  rules:\n    - from slots\n",
+			wantBody: "from body",
+		},
+		{
+			name: "an explicitly empty body still falls back to slots",
+			content: "name: c\ndescription: d\nversion: 1.0.0\nbody: \"\"\n" +
+				"slots:\n  rules:\n    - from slots\n",
+			wantBody: "## Rules\n\n- from slots",
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			doc, err := frames.Parse([]byte(tc.content))
+			if err != nil {
+				t.Fatalf("parse: %v", err)
+			}
+			if doc.Body != tc.wantBody {
+				t.Errorf("body = %q, want %q", doc.Body, tc.wantBody)
+			}
+		})
+	}
+}
+
+// The decode error reaches API clients unwrapped, so it must name the schema
+// rather than the unexported Go type yaml.v3 happens to be decoding into.
+func TestParse_UnknownKeyErrorNamesTheSchema(t *testing.T) {
+	_, err := frames.Parse([]byte("name: c\ndescription: d\nversion: 1.0.0\nbogus: x\n"))
+	if err == nil {
+		t.Fatal("expected an error for an unknown key")
+	}
+	if strings.Contains(err.Error(), "docYAML") {
+		t.Errorf("error leaks an internal type name, which means nothing to a client: %v", err)
+	}
+	if !strings.Contains(err.Error(), "bogus") {
+		t.Errorf("error does not name the offending key: %v", err)
+	}
+	if !strings.Contains(err.Error(), "maintainer") {
+		t.Errorf("error does not list the recognized keys: %v", err)
+	}
+}
+
 func TestParse_LegacySlotsFoldIntoBody(t *testing.T) {
 	content := []byte(`
 name: brand-voice

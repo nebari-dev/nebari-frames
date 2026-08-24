@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+import path from "node:path";
 import { describe, expect, it } from "vitest";
 import { parseFrameContent, serializeFrameDoc, type FrameDoc } from "./frame-yaml";
 
@@ -88,5 +90,52 @@ describe("serializeFrameDoc", () => {
     expect(out).not.toMatch(/excludes/);
     // re-parse must succeed (no stray keys for KnownFields(true))
     expect(parseFrameContent(out).name).toBe("minimal");
+  });
+});
+
+// The legacy `slots:` renderer exists twice: here and in renderMarkdown in
+// backend/internal/frames/legacy.go. The web copy is not display-only -
+// FrameDetailPage re-serializes a rendered legacy body when a version is
+// restored, so whatever this produces becomes canonical stored content, and a
+// divergence from Go is a silent content rewrite rather than a rendering
+// difference.
+//
+// testdata/legacy-slots is the single fixture both sides are pinned to, and the
+// comparison is on the whole string. The substring assertions above are what let
+// the two implementations drift on continuation-line indentation and on
+// newline-only versus whitespace trimming while both suites stayed green.
+//
+// The Go-side assertion is TestLegacySlots_SharedFixture in
+// backend/internal/frames/legacy_test.go. Changing the rendering means
+// regenerating expected.md and updating both.
+describe("legacy slots rendering matches the Go implementation", () => {
+  const dir = path.resolve(__dirname, "../../../testdata/legacy-slots");
+  const input = readFileSync(path.join(dir, "input.yaml"), "utf8");
+  // expected.md carries a trailing newline so it is a well-formed text file;
+  // the rendered body does not.
+  const expected = readFileSync(path.join(dir, "expected.md"), "utf8").replace(/\n$/, "");
+
+  it("renders the shared fixture byte for byte", () => {
+    expect(parseFrameContent(input).body).toBe(expected);
+  });
+
+  // The case that makes the divergence matter: without the two-space
+  // continuation indent, CommonMark lazy continuation absorbs the following
+  // lines as siblings, so one rule with a nested list becomes three flat rules
+  // and the nesting is gone from the stored content permanently.
+  it("indents continuation lines so a multi-line item stays one item", () => {
+    expect(expected).toContain("- Redact before logging:\n  - no names\n  - no account numbers");
+  });
+
+  // A blank line inside an item stays bare rather than becoming indented
+  // whitespace, matching writeLegacyBullet.
+  it("keeps a blank line inside an item blank", () => {
+    expect(expected).toContain("- Cite the benchmark.\n\n  Link to the run that produced it.");
+  });
+
+  // Prose is trimmed of newlines only. A .trim() port would eat the leading
+  // spaces, which markdown gives meaning to.
+  it("trims newlines but not other whitespace from prose", () => {
+    expect(expected).toContain("## Style\n\n  Two leading spaces, and a trailing newline to strip.");
   });
 });

@@ -614,14 +614,18 @@ func TestConvertFrame_RequiresMembership(t *testing.T) {
 	}
 }
 
-// docFor builds a minimal valid Doc for PublishDoc tests.
+// docFor builds a minimal valid Doc for PublishDoc tests. Any rules supplied
+// become bullets in the free-form body, which is all a Frame's content is now.
 func docFor(name, version string, rules ...string) *frames.Doc {
-	return &frames.Doc{
+	d := &frames.Doc{
 		Name:        name,
 		Description: name + " description",
 		Version:     version,
-		Slots:       frames.Slots{Rules: rules},
 	}
+	if len(rules) > 0 {
+		d.Body = "## Rules\n\n- " + strings.Join(rules, "\n- ")
+	}
+	return d
 }
 
 func TestService_PublishDoc(t *testing.T) {
@@ -829,8 +833,8 @@ slots:
 	if err != nil {
 		t.Fatalf("SourceDoc: %v", err)
 	}
-	if got := src.Slots.Rules; len(got) != 1 || got[0] != "from child" {
-		t.Errorf("rules = %v, want only the child's own rule (parent content must not be merged in)", got)
+	if !strings.Contains(src.Body, "from child") || strings.Contains(src.Body, "from parent") {
+		t.Errorf("body = %q, want only the child's own rule (parent content must not be merged in)", src.Body)
 	}
 	if len(src.Extends) != 1 || src.Extends[0].Ref != "openteams/base" {
 		t.Errorf("extends = %+v, want the child's own pinned parent", src.Extends)
@@ -845,8 +849,8 @@ slots:
 	if err != nil {
 		t.Fatalf("ResolveDoc: %v", err)
 	}
-	if len(resolved.Slots.Rules) != 2 {
-		t.Errorf("resolved rules = %v, want both parent and child rules", resolved.Slots.Rules)
+	if !strings.Contains(resolved.Body, "from parent") || !strings.Contains(resolved.Body, "from child") {
+		t.Errorf("resolved body = %q, want both parent and child rules", resolved.Body)
 	}
 }
 
@@ -874,7 +878,7 @@ func TestService_PublishRejectsOversizedContent(t *testing.T) {
 		repo := store.NewMemory()
 		ctx := seedOrg(t, repo, "pub", "publisher")
 		svc := frames.NewService(repo)
-		content := "name: big\ndescription: d\nversion: 1.0.0\nslots:\n  goals: " + huge + "\n"
+		content := "name: big\ndescription: d\nversion: 1.0.0\nbody: " + huge + "\n"
 		_, err := svc.PublishFrame(ctx, connect.NewRequest(&framesv1.PublishFrameRequest{Content: []byte(content)}))
 		if connect.CodeOf(err) != connect.CodeInvalidArgument {
 			t.Errorf("code = %v (err %v), want InvalidArgument", connect.CodeOf(err), err)
@@ -886,7 +890,7 @@ func TestService_PublishRejectsOversizedContent(t *testing.T) {
 		ctx := seedOrg(t, repo, "pub", "publisher")
 		svc := frames.NewService(repo)
 		doc := docFor("big", "1.0.0")
-		doc.Slots.Goals = huge
+		doc.Body = huge
 		_, _, err := svc.PublishDoc(ctx, doc, "", frames.PublishCreate)
 		if connect.CodeOf(err) != connect.CodeInvalidArgument {
 			t.Errorf("code = %v (err %v), want InvalidArgument", connect.CodeOf(err), err)
@@ -900,7 +904,7 @@ func TestService_PublishRejectsOversizedContent(t *testing.T) {
 		// exactly the limit; YAML framing makes the offset awkward to hardcode.
 		sizeFor := func(pad int) int {
 			d := docFor("ok", "1.0.0")
-			d.Slots.Goals = strings.Repeat("y", pad)
+			d.Body = strings.Repeat("y", pad)
 			b, err := frames.Marshal(d)
 			if err != nil {
 				t.Fatalf("marshal: %v", err)
@@ -921,7 +925,7 @@ func TestService_PublishRejectsOversizedContent(t *testing.T) {
 		}
 
 		atLimit := docFor("ok", "1.0.0")
-		atLimit.Slots.Goals = strings.Repeat("y", lo)
+		atLimit.Body = strings.Repeat("y", lo)
 		repo := store.NewMemory()
 		ctx := seedOrg(t, repo, "pub", "publisher")
 		if _, _, err := frames.NewService(repo).PublishDoc(ctx, atLimit, "", frames.PublishCreate); err != nil {
@@ -929,7 +933,7 @@ func TestService_PublishRejectsOversizedContent(t *testing.T) {
 		}
 
 		over := docFor("ok", "1.0.0")
-		over.Slots.Goals = strings.Repeat("y", lo+1)
+		over.Body = strings.Repeat("y", lo+1)
 		repo2 := store.NewMemory()
 		ctx2 := seedOrg(t, repo2, "pub", "publisher")
 		_, _, err := frames.NewService(repo2).PublishDoc(ctx2, over, "", frames.PublishCreate)

@@ -5,6 +5,8 @@ package frames
 import (
 	"bytes"
 	"fmt"
+	"regexp"
+	"strings"
 
 	"gopkg.in/yaml.v3"
 )
@@ -49,6 +51,19 @@ type docYAML struct {
 	Slots *legacySlots `yaml:"slots,omitempty"`
 }
 
+// docKeys is the recognized top-level key set, named in unknown-key errors.
+// Keep in sync with Doc and docYAML.
+var docKeys = []string{
+	"name", "description", "version", "visibility", "scope",
+	"maintainer", "extends", "excludes", "template", "body",
+}
+
+// unknownFieldRe extracts the offending key from a yaml.v3 KnownFields error.
+// The message yaml.v3 produces names the Go type it was decoding into, which
+// here is the unexported docYAML - meaningless to an API client, and this error
+// reaches one unwrapped through the publish and convert endpoints.
+var unknownFieldRe = regexp.MustCompile(`field (\S+) not found in type \S+`)
+
 // Parse decodes YAML content into a Doc. Unknown keys are rejected because the
 // Frame schema is fixed and not extensible. A legacy `slots:` block is folded
 // into Body so versions published under the slot schema remain readable.
@@ -57,12 +72,25 @@ func Parse(content []byte) (*Doc, error) {
 	dec := yaml.NewDecoder(newReader(content))
 	dec.KnownFields(true) // reject unknown top-level keys: schema is fixed
 	if err := dec.Decode(&d); err != nil {
-		return nil, fmt.Errorf("parse frame yaml: %w", err)
+		return nil, fmt.Errorf("parse frame yaml: %s", parseErr(err))
 	}
+	// A document carrying both keys is a legacy version someone has edited. The
+	// explicit body wins: `slots:` is only ever a fallback rendering of content
+	// nothing writes any more, so preferring it would discard the deliberate
+	// edit in favour of a reconstruction.
 	if d.Slots != nil && d.Body == "" {
 		d.Body = d.Slots.renderMarkdown()
 	}
 	return &d.Doc, nil
+}
+
+// parseErr replaces the internal decode type in a yaml.v3 unknown-key error
+// with the recognized key set, since the raw message reaches API clients.
+func parseErr(err error) string {
+	msg := strings.TrimPrefix(err.Error(), "yaml: ")
+	msg = strings.ReplaceAll(msg, "unmarshal errors:\n  ", "")
+	return unknownFieldRe.ReplaceAllString(msg,
+		`unknown field $1 - recognized fields are: `+strings.Join(docKeys, ", "))
 }
 
 // Marshal encodes a Doc to YAML.

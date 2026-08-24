@@ -3,3 +3,6 @@
 -- UI's "start from a template" picker. Denormalized from the latest version's
 -- `template` doc field at publish time so listing never parses content blobs.
 ALTER TABLE frames ADD COLUMN is_template INTEGER NOT NULL DEFAULT 0;
+
+-- +goose Down
+ALTER TABLE frames DROP COLUMN is_template;

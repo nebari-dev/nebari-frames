@@ -1,0 +1,60 @@
+# Shared fixture for the legacy `slots:` -> body rendering, which exists in two
+# places: renderMarkdown in backend/internal/frames/legacy.go and
+# legacySlotsToMarkdown in web/src/lib/frame-yaml.ts.
+#
+# Both must produce expected.md byte for byte. The web copy is not display-only:
+# restoring a legacy version re-serializes its rendered body as the new
+# canonical content, so a divergence rewrites what is stored. Neither side's own
+# tests caught the drift this fixture was added for, because both used
+# single-line values and substring assertions.
+#
+# Every value here is a case where a plausible port drifts. Keep it that way:
+# add a case when you find a new one, and do not simplify the awkward ones.
+name: legacy-fixture
+description: Every shape the legacy renderer has to get right
+version: 1.0.0
+slots:
+  terminology:
+    # Single-line: the ordinary case.
+    - term: customer
+      definition: An enterprise organization
+    # Multi-line definition. Unreachable from the web form (it used an <Input>),
+    # but reachable from a .frame.md import and from the CLI.
+    - term: Frame
+      definition: |-
+        A portable context artifact.
+        Versioned, and pinned when inherited.
+  rules:
+    - Never claim performance numbers without data.
+    # A multi-line item whose continuation is itself block-level markup. Without
+    # the two-space indent, CommonMark lazy continuation turns this one rule
+    # into three flat list items and loses the nesting.
+    - |-
+      Redact before logging:
+      - no names
+      - no account numbers
+    # A multi-line item with a blank line in the middle, which the renderer
+    # emits as a bare blank line rather than an indented one.
+    - |-
+      Cite the benchmark.
+
+      Link to the run that produced it.
+  skills:
+    - Summarize a thread
+  prompts:
+    - Draft a release note from a changelog.
+  tool_specs: |-
+    `search(query)` returns ranked results.
+  goals: |+
+
+    Grow the platform.
+
+  # Quoted so the leading spaces reach the renderer: markdown gives leading
+  # whitespace meaning, and a .trim() port would silently eat it.
+  style: "  Two leading spaces, and a trailing newline to strip.\n"
+  norms: |-
+    Ship small.
+  architecture: |-
+    Go backend, React web app.
+  business_process: |-
+    Quarterly planning.

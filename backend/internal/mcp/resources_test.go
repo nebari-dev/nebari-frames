@@ -222,7 +222,7 @@ func (s *stubWriter) PublishDocFrom(_ context.Context, doc *frames.Doc, changelo
 }
 
 // ptr is shorthand for the optional string fields.
-func ptr(s string) *string { return &s }
+func ptr[T any](v T) *T { return &v }
 
 func TestWriteFrameTools(t *testing.T) {
 	validInput := func() writeFrameInput {
@@ -232,7 +232,7 @@ func TestWriteFrameTools(t *testing.T) {
 			Version:     "1.0.0",
 			// Required by update_frame and ignored by create_frame.
 			BaseVersion: "0.9.0",
-			Rules:       []string{"Cite benchmarks."},
+			Body:        ptr("## Rules\n\n- Cite benchmarks."),
 		}
 	}
 
@@ -327,21 +327,13 @@ func TestWriteFrameInputCarriesEveryField(t *testing.T) {
 
 	in := writeFrameInput{
 		Name: "full", Description: ptr("d"), Version: "1.0.0",
-		Visibility:      ptr("private"),
-		Scope:           ptr("company"),
-		Maintainer:      ptr("platform team"),
-		Terminology:     []termInput{{Term: "Frame", Definition: "a context artifact"}},
-		Rules:           []string{"rule"},
-		Skills:          []string{"skill"},
-		Prompts:         []string{"prompt"},
-		ToolSpecs:       ptr("tools"),
-		Goals:           ptr("goals"),
-		Style:           ptr("style"),
-		Norms:           ptr("norms"),
-		Architecture:    ptr("architecture"),
-		BusinessProcess: ptr("process"),
-		Extends:         []extendInput{{Ref: "openteams/base", Version: "1.0.0"}},
-		Excludes:        []string{"openteams/legacy"},
+		Visibility: ptr("private"),
+		Scope:      ptr("company"),
+		Maintainer: ptr("platform team"),
+		Body:       ptr("## Rules\n\n- rule"),
+		Template:   ptr(true),
+		Extends:    []extendInput{{Ref: "openteams/base", Version: "1.0.0"}},
+		Excludes:   []string{"openteams/legacy"},
 	}
 	if _, _, err := h(context.Background(), &gomcp.CallToolRequest{}, in); err != nil {
 		t.Fatalf("create_frame: %v", err)
@@ -355,18 +347,8 @@ func TestWriteFrameInputCarriesEveryField(t *testing.T) {
 		Visibility: "private", Scope: "company", Maintainer: "platform team",
 		Extends:  []frames.ExtendRef{{Ref: "openteams/base", Version: "1.0.0"}},
 		Excludes: []string{"openteams/legacy"},
-		Slots: frames.Slots{
-			Terminology:     []frames.Term{{Term: "Frame", Definition: "a context artifact"}},
-			Rules:           []string{"rule"},
-			Skills:          []string{"skill"},
-			Prompts:         []string{"prompt"},
-			ToolSpecs:       "tools",
-			Goals:           "goals",
-			Style:           "style",
-			Norms:           "norms",
-			Architecture:    "architecture",
-			BusinessProcess: "process",
-		},
+		Template: true,
+		Body:     "## Rules\n\n- rule",
 	}
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("doc mismatch\n got: %+v\nwant: %+v", got, want)
@@ -377,8 +359,8 @@ func TestWriteFrameInputCarriesEveryField(t *testing.T) {
 // hand-written literal, so a newly added slot or document field was zero on both
 // sides and passed - which is exactly how visibility, scope, and maintainer came
 // to be silently dropped. This walks the canonical definitions instead, so
-// extending frames.Doc or frames.SlotTable without extending writeFrameInput
-// fails here rather than in production.
+// extending frames.Doc without extending writeFrameInput fails here rather than
+// in production.
 func TestWriteFrameInputCoversDocFields(t *testing.T) {
 	inputFields := map[string]bool{}
 	inT := reflect.TypeOf(writeFrameInput{})
@@ -387,42 +369,27 @@ func TestWriteFrameInputCoversDocFields(t *testing.T) {
 		inputFields[name] = true
 	}
 
-	t.Run("every slot has an input field", func(t *testing.T) {
-		for _, d := range frames.SlotTable {
-			if !inputFields[d.Key] {
-				t.Errorf("slot %q has no writeFrameInput field: MCP writes would silently drop it", d.Key)
-			}
+	// Every field of frames.Doc, and the decision recorded for each. A new
+	// document field lands here as a failure, which is the point: the author has
+	// to say whether MCP writes carry it rather than letting it default to no.
+	expected := map[string]bool{
+		"name": true, "description": true, "version": true,
+		"visibility": true, "scope": true, "maintainer": true,
+		"extends": true, "excludes": true,
+		// The content itself, and the flag that offers a Frame as a template.
+		"body": true, "template": true,
+	}
+	docT := reflect.TypeOf(frames.Doc{})
+	for i := range docT.NumField() {
+		name, _, _ := strings.Cut(docT.Field(i).Tag.Get("yaml"), ",")
+		if !expected[name] {
+			t.Errorf("frames.Doc gained field %q: decide whether MCP writes must carry it, then add it here", name)
+			continue
 		}
-		// Guard the other direction too: frames.Slots must not grow a field that
-		// SlotTable does not describe.
-		if got, want := reflect.TypeOf(frames.Slots{}).NumField(), len(frames.SlotTable); got != want {
-			t.Errorf("frames.Slots has %d fields but SlotTable describes %d", got, want)
+		if !inputFields[name] {
+			t.Errorf("document field %q has no writeFrameInput field: MCP writes would silently drop it", name)
 		}
-	})
-
-	t.Run("every document field is accounted for", func(t *testing.T) {
-		// Doc-level fields that are not slots. "slots" is the container itself;
-		// the rest are the Frame Spec metadata plus inheritance.
-		expected := map[string]bool{
-			"name": true, "description": true, "version": true,
-			"visibility": true, "scope": true, "maintainer": true,
-			"extends": true, "excludes": true, "slots": true,
-		}
-		docT := reflect.TypeOf(frames.Doc{})
-		for i := range docT.NumField() {
-			name, _, _ := strings.Cut(docT.Field(i).Tag.Get("yaml"), ",")
-			if !expected[name] {
-				t.Errorf("frames.Doc gained field %q: decide whether MCP writes must carry it, then add it here", name)
-				continue
-			}
-			if name == "slots" {
-				continue // covered by the slot walk above
-			}
-			if !inputFields[name] {
-				t.Errorf("document field %q has no writeFrameInput field: MCP writes would silently drop it", name)
-			}
-		}
-	})
+	}
 }
 
 // The write tools must be advertised, or a client has no way to call them.
@@ -484,7 +451,14 @@ func TestApplyToWiresEveryInputField(t *testing.T) {
 			f.SetString("sentinel-" + name)
 		case reflect.Pointer:
 			sv := reflect.New(f.Type().Elem())
-			sv.Elem().SetString("sentinel-" + name)
+			switch sv.Elem().Kind() {
+			case reflect.String:
+				sv.Elem().SetString("sentinel-" + name)
+			case reflect.Bool:
+				sv.Elem().SetBool(true)
+			default:
+				t.Fatalf("field %s: unhandled pointer element kind %s", name, sv.Elem().Kind())
+			}
 			f.Set(sv)
 		case reflect.Bool:
 			f.SetBool(true)
@@ -518,19 +492,8 @@ func TestApplyToWiresEveryInputField(t *testing.T) {
 	docV := reflect.ValueOf(*got)
 	docT := docV.Type()
 	for i := range docT.NumField() {
-		name := docT.Field(i).Name
-		if name == "Slots" {
-			continue
-		}
 		if docV.Field(i).IsZero() {
-			t.Errorf("Doc.%s is zero after applyTo: the input field exists but is not wired in", name)
-		}
-	}
-	slotsV := reflect.ValueOf(got.Slots)
-	slotsT := slotsV.Type()
-	for i := range slotsT.NumField() {
-		if slotsV.Field(i).IsZero() {
-			t.Errorf("Slots.%s is zero after applyTo: the input field exists but is not wired in", slotsT.Field(i).Name)
+			t.Errorf("Doc.%s is zero after applyTo: the input field exists but is not wired in", docT.Field(i).Name)
 		}
 	}
 }
@@ -541,14 +504,14 @@ func TestApplyToWiresEveryInputField(t *testing.T) {
 func TestUpdateFrameSendsTheBaseVersionItRead(t *testing.T) {
 	src := &stubWriter{current: &frames.Doc{
 		Name: "brand-voice", Description: "d", Version: "3.4.5",
-		Slots: frames.Slots{Rules: []string{"existing"}},
+		Body: "## Rules\n\n- existing",
 	}}
 	rs := &resourceServer{src: src, cfg: Config{DevMode: true}}
 	h := rs.updateFrameTool(auth.DevClaims())
 
 	if _, _, err := h(context.Background(), &gomcp.CallToolRequest{}, writeFrameInput{
 		Name: "brand-voice", Version: "3.5.0", BaseVersion: "3.4.5",
-		Rules: []string{"existing", "new"},
+		Body: ptr("## Rules\n\n- existing\n- new"),
 	}); err != nil {
 		t.Fatalf("update_frame: %v", err)
 	}
@@ -566,7 +529,7 @@ func TestCreateFrameSendsNoBaseVersion(t *testing.T) {
 	rs := &resourceServer{src: src, cfg: Config{DevMode: true}}
 	h := rs.createFrameTool(auth.DevClaims())
 	if _, _, err := h(context.Background(), &gomcp.CallToolRequest{}, writeFrameInput{
-		Name: "n", Description: ptr("d"), Version: "1.0.0", Rules: []string{"r"},
+		Name: "n", Description: ptr("d"), Version: "1.0.0", Body: ptr("- r"),
 	}); err != nil {
 		t.Fatalf("create_frame: %v", err)
 	}

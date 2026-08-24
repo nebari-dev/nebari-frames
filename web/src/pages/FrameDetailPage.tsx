@@ -135,7 +135,10 @@ export function FrameDetailPage() {
           >
             <ArrowLeft />
           </Button>
-          <h1 className="text-2xl font-semibold">{frame.name}</h1>
+          {/* Not PageHeader: that layout stacks a description under the title,
+              and this header runs badges inline with it. The classes are kept
+              identical to PageHeader's own h1 so the two do not drift. */}
+          <h1 className="text-2xl font-semibold tracking-tight text-foreground">{frame.name}</h1>
           <Badge variant="secondary" className="font-mono">v{version.version}</Badge>
           {isLatest ? (
             <Badge variant="outline">Latest</Badge>

@@ -138,14 +138,34 @@ Listing resources (`resources/list`) returns the user's full set of readable Fra
 
 ### 3.4 Resource content
 
+> **Superseded by [#59](https://github.com/nebari-dev/nebari-frames/issues/59):** a Frame's content is now a single free-form markdown body, matching Frame Spec v0.2, which defines no body structure. There are no slots left to render section by section, so the per-slot composition format below no longer describes the server. The read path (steps 1-3) is unchanged; only step 4 and the format are.
+>
+> What the server emits now is the framing plus the body verbatim - see `composeMarkdown` in `backend/internal/mcp/compose.go`:
+>
+> ```markdown
+> # Frame: <name>
+>
+> <description>
+>
+> > Version: <version>
+> > Inherits from: <parent1>@<v>, <parent2>@<v>
+> > Resolved at: <ISO timestamp>
+>
+> <body, verbatim>
+> ```
+>
+> `Version:` is new and load-bearing: it is the value `update_frame` requires as `base_version`, so a client that intends to edit has to be able to see it. `Inherits from:` is omitted when the Frame has no parents, and the whole body section when it is empty. The format is still deterministic and stable across requests.
+
 When a client reads a resource (`resources/read`), the server:
 
 1. Parses the URI to extract org / name / version (or "latest").
 2. Calls `frames.Service.GetResolved(ctx, frameID, version)` - returns the inheritance-merged Frame.
 3. `frames.Service` consults `rbac.Can(caller, Read, frame)` first; 404 if denied.
-4. Server composes resolved Frame slots into markdown.
+4. ~~Server composes resolved Frame slots into markdown.~~ Server emits the resolved Frame's body with the provenance framing above.
 
 **Composition format** (deterministic; same shape across all readers):
+
+~~The ten-slot form below was the original design. It is retained as the record of what the endpoint used to emit, since versions published under the slot schema still exist in storage and are folded into a body on read.~~
 
 ```markdown
 # Frame: <name>
@@ -200,7 +220,7 @@ When a client reads a resource (`resources/read`), the server:
 <prose>
 ```
 
-Empty slots are **omitted from the rendered markdown** (no empty headers). The format is stable across requests so the AI can rely on consistent structure.
+~~Empty slots are **omitted from the rendered markdown** (no empty headers).~~ The format is stable across requests so the AI can rely on consistent structure.
 
 ### 3.5 Per-provider compatibility notes
 

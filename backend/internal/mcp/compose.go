@@ -8,9 +8,13 @@ import (
 	"github.com/nebari-dev/nebari-frames/backend/internal/frames"
 )
 
-// composeMarkdown renders a resolved Frame Doc into the deterministic markdown
-// format defined in the MCP design doc (section 3.4). resolvedAt is passed in
-// (not read from a clock) so the function is pure and testable.
+// composeMarkdown renders a resolved Frame Doc into a deterministic markdown
+// form. resolvedAt is passed in (not read from a clock) so the function is pure
+// and testable.
+//
+// This supersedes the per-slot rendering in section 3.4 of the MCP design doc,
+// which is marked there as superseded: a Frame's content is a single free-form
+// body, so there are no slots to render section by section.
 //
 // The body passes through verbatim. The framing differs from the .frame.md
 // authoring form on purpose: this output describes an already-resolved frame
@@ -30,7 +34,12 @@ func composeMarkdown(doc *frames.Doc, resolvedAt time.Time) string {
 	if len(doc.Extends) > 0 {
 		parts := make([]string, len(doc.Extends))
 		for i, e := range doc.Extends {
-			parts[i] = e.Ref + "@" + e.Version
+			// Matches MarshalMarkdown: an unpinned ref renders bare rather than
+			// with a dangling "@".
+			parts[i] = e.Ref
+			if e.Version != "" {
+				parts[i] += "@" + e.Version
+			}
 		}
 		fmt.Fprintf(&b, "> Inherits from: %s\n", strings.Join(parts, ", "))
 	}

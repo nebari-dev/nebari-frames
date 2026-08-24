@@ -790,3 +790,138 @@ func TestMembershipEmailsAreCanonical(t *testing.T) {
 		}
 	})
 }
+
+// is_template is the one frame column this package writes from a flag rather
+// than from content, and it is read back by four separate SELECT lists whose
+// column order has to match four separate Scan calls. That is exactly the shape
+// where a mismatch survives a green suite: the service-level tests run against
+// store.NewMemory(), which round-trips the proto and executes none of this SQL.
+//
+// So every read path is asserted, and the false case is asserted alongside the
+// true one - a scan that landed on the wrong column would still satisfy a
+// true-only test whenever the neighbouring value happened to be truthy.
+func TestSQLite_IsTemplateRoundTripsThroughEveryReadPath(t *testing.T) {
+	ctx := context.Background()
+	now := timestamppb.Now()
+
+	r := newRepo(t)
+	seedOrg(t, r, "o1", "openteams")
+
+	tmpl := baseInput(now)
+	tmpl.Frame.IsTemplate = true
+	if err := r.CreateFrameVersion(ctx, tmpl); err != nil {
+		t.Fatalf("publish template: %v", err)
+	}
+
+	plain := baseInput(now)
+	plain.Frame.Id, plain.Frame.Name = "f2", "plain-frame"
+	plain.Frame.IsTemplate = false
+	if err := r.CreateFrameVersion(ctx, plain); err != nil {
+		t.Fatalf("publish non-template: %v", err)
+	}
+
+	// A child of the template, so FrameChildren has something to return.
+	child := baseInput(now)
+	child.Frame.Id, child.Frame.Name = "f3", "child-frame"
+	child.Frame.IsTemplate = false
+	child.Extends = []store.ParentEdge{{ParentFrameID: "f1", ParentVersion: "1.0.0"}}
+	if err := r.CreateFrameVersion(ctx, child); err != nil {
+		t.Fatalf("publish child: %v", err)
+	}
+
+	reads := []struct {
+		name string
+		get  func(id string) (*framesv1.Frame, error)
+	}{
+		{
+			name: "GetFrameByID",
+			get:  func(id string) (*framesv1.Frame, error) { return r.GetFrameByID(ctx, id) },
+		},
+		{
+			name: "GetFrameBySlugName",
+			get: func(id string) (*framesv1.Frame, error) {
+				byID, err := r.GetFrameByID(ctx, id)
+				if err != nil {
+					return nil, err
+				}
+				return r.GetFrameBySlugName(ctx, "openteams", byID.Name)
+			},
+		},
+		{
+			name: "ListFramesByOrg",
+			get: func(id string) (*framesv1.Frame, error) {
+				list, err := r.ListFramesByOrg(ctx, "o1")
+				if err != nil {
+					return nil, err
+				}
+				for _, f := range list {
+					if f.Id == id {
+						return f, nil
+					}
+				}
+				return nil, errors.New("frame not in listing")
+			},
+		},
+	}
+
+	for _, read := range reads {
+		t.Run(read.name, func(t *testing.T) {
+			for id, want := range map[string]bool{"f1": true, "f2": false} {
+				got, err := read.get(id)
+				if err != nil {
+					t.Fatalf("%s(%s): %v", read.name, id, err)
+				}
+				if got.IsTemplate != want {
+					t.Errorf("%s(%s).IsTemplate = %v, want %v", read.name, id, got.IsTemplate, want)
+				}
+				// A scan one column off would corrupt a neighbour rather than
+				// only the flag, so check the columns either side of it.
+				if got.Id != id {
+					t.Errorf("%s(%s).Id = %q: the scan is off by a column", read.name, id, got.Id)
+				}
+				if got.LatestVersion != "1.0.0" {
+					t.Errorf("%s(%s).LatestVersion = %q: the scan is off by a column", read.name, id, got.LatestVersion)
+				}
+			}
+		})
+	}
+
+	t.Run("FrameChildren", func(t *testing.T) {
+		children, err := r.FrameChildren(ctx, "f1")
+		if err != nil {
+			t.Fatalf("FrameChildren: %v", err)
+		}
+		if len(children) != 1 {
+			t.Fatalf("got %d children, want 1", len(children))
+		}
+		if children[0].IsTemplate {
+			t.Errorf("child.IsTemplate = true, want false")
+		}
+		if children[0].Id != "f3" || children[0].LatestVersion != "1.0.0" {
+			t.Errorf("child = %+v: the scan is off by a column", children[0])
+		}
+	})
+
+	// Republishing recomputes the flag, so the UPDATE arm has to carry it too -
+	// it is a different statement from the INSERT and would fail independently.
+	t.Run("republishing carries the flag through the UPDATE arm", func(t *testing.T) {
+		next := baseInput(timestamppb.Now())
+		next.IsNewFrame = false
+		next.Frame.IsTemplate = false
+		next.Frame.LatestVersion = "1.1.0"
+		next.Version.Version = "1.1.0"
+		if err := r.CreateFrameVersion(ctx, next); err != nil {
+			t.Fatalf("republish: %v", err)
+		}
+		got, err := r.GetFrameByID(ctx, "f1")
+		if err != nil {
+			t.Fatalf("GetFrameByID: %v", err)
+		}
+		if got.IsTemplate {
+			t.Error("IsTemplate = true after republishing without the flag; the UPDATE did not carry it")
+		}
+		if got.LatestVersion != "1.1.0" {
+			t.Errorf("LatestVersion = %q, want 1.1.0", got.LatestVersion)
+		}
+	})
+}
