@@ -14,17 +14,16 @@ export default defineConfig({
       title: 'Nebari Frames',
       description:
         'Registry and exchange for Frames: scoped, text-based context artifacts for AI conversations.',
-      plugins: [nebari()],
-      social: [
-        { icon: 'github', label: 'GitHub', href: 'https://github.com/nebari-dev/nebari-frames' },
+      // Shared Nebari identity (brand colors, fonts, logo, favicon, footer, and
+      // GitHub social link) comes from the @nebari/starlight theme plugin. The
+      // header logo returns users to the pack catalog and the GitHub icon
+      // opens this pack's repository.
+      plugins: [
+        nebari({
+          logoHref: 'https://packs.nebari.dev/',
+          githubHref: 'https://github.com/nebari-dev/nebari-frames',
+        }),
       ],
-      // The nebari() plugin above always prepends its own default GitHub
-      // link (the org, not this repo) ahead of `social`; this override
-      // renders the deduplicated, repo-specific list instead. See the
-      // component for details.
-      components: {
-        SocialIcons: './src/components/SocialIcons.astro',
-      },
       sidebar: [
         {
           label: 'Documentation',
