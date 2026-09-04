@@ -1,4 +1,4 @@
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/collapsible";
 
 export function SlotSection({ title, children }: { title: string; children: React.ReactNode }) {
   return (

@@ -4,7 +4,7 @@ import { FrameService } from "@gen/frames/v1/frame_service_pb";
 import { ChevronDown, LogOut, Monitor, Moon, Sun, User } from "lucide-react";
 import type { ReactNode } from "react";
 import { Link, useMatch } from "react-router";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Avatar, AvatarFallback } from "@/components/avatar";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
