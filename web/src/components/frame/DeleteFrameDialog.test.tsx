@@ -57,9 +57,10 @@ it("resets to initial confirm prompt after close then reopen", async () => {
   await userEvent.click(screen.getByRole("button", { name: /^delete$/i }));
   expect(screen.getByRole("button", { name: /delete anyway/i })).toBeInTheDocument();
 
-  // Click the "Close" button - this calls DialogClose's onClose which is handleOpenChange(false).
-  // handleOpenChange(false) resets blocking/error state, then calls onOpenChange(false) = setOpen(false).
-  await userEvent.click(screen.getByRole("button", { name: /^close$/i }));
+  // Click "Cancel" - the registry DialogClose asks the root to close, which calls
+  // handleOpenChange(false): it resets blocking/error state, then calls
+  // onOpenChange(false) = setOpen(false).
+  await userEvent.click(screen.getByRole("button", { name: /^cancel$/i }));
 
   // Reopen by driving the wrapper's state directly
   act(() => externalSetOpen(true));

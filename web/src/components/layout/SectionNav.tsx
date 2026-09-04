@@ -35,11 +35,9 @@ export function SectionNav({
       aria-label={ariaLabel}
       className={cn(
         tabsListVariants(),
-        // The registry paints the pill track `bg-background`, which the design
-        // system intends as a faint gray behind the `bg-card` pills. This app
-        // overrides `--background` to pure white (see styles.css), which would
-        // flatten the track into the pills, so the track takes `muted` to keep
-        // the intended contrast in both themes.
+        // The registry paints the pill track `bg-background`, a faint gray that
+        // sits too close to the `bg-card` pills on this app's white canvas, so
+        // the track takes `muted` to keep the contrast in both themes.
         "bg-muted",
         className,
       )}

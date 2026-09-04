@@ -3,7 +3,7 @@ import { Header } from "@/components/layout/Header";
 
 export function AppShell() {
   return (
-    <div className="flex min-h-screen flex-col bg-background text-foreground">
+    <div className="flex min-h-screen flex-col bg-canvas text-foreground">
       <Header />
       {/* A flex column so pages that want to fill the viewport (the frame
           content editor) can stretch with flex-1 instead of subtracting the
