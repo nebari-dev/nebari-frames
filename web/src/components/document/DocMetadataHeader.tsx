@@ -1,6 +1,12 @@
-import { useFormContext, useWatch } from "react-hook-form";
+import { Controller, useFormContext, useWatch } from "react-hook-form";
 import { Input } from "@/components/ui/input";
-import { Select } from "@/components/ui/select";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { FieldError, useFieldError, errorProps } from "@/components/form/FieldError";
 import { VISIBILITY_VALUES } from "@/lib/frame-yaml";
 import { cn } from "@/lib/utils";
@@ -54,21 +60,37 @@ export function DocMetadataHeader({ nameReadOnly }: { nameReadOnly: boolean }) {
       </div>
 
       <div className="flex flex-wrap items-end gap-x-4 gap-y-2 pt-2">
-        <label className="block space-y-0.5">
-          <span className="text-xs font-medium text-muted-foreground">Visibility</span>
-          <Select
-            {...register("visibility")}
-            title="Declared intent that travels with the frame. Access is still governed by this org's roles and grants."
-            className="h-8 w-32 text-xs"
-            {...errorProps("visibility", visibilityError)}
-          >
-            {VISIBILITY_VALUES.map((v) => (
-              <option key={v} value={v}>
-                {v}
-              </option>
-            ))}
-          </Select>
-        </label>
+        <div className="space-y-0.5">
+          <span className="block text-xs font-medium text-muted-foreground">Visibility</span>
+          <Controller
+            control={control}
+            name="visibility"
+            render={({ field }) => (
+              <Select
+                name={field.name}
+                value={field.value as string}
+                onValueChange={(v) => field.onChange(v)}
+              >
+                <SelectTrigger
+                  aria-label="Visibility"
+                  title="Declared intent that travels with the frame. Access is still governed by this org's roles and grants."
+                  className="h-8 w-32 text-xs"
+                  onBlur={field.onBlur}
+                  {...errorProps("visibility", visibilityError)}
+                >
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {VISIBILITY_VALUES.map((v) => (
+                    <SelectItem key={v} value={v}>
+                      {v}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
+          />
+        </div>
         <label className="block space-y-0.5">
           <span className="text-xs font-medium text-muted-foreground">Scope</span>
           <Input {...register("scope")} placeholder="company" className="h-8 w-36 text-xs" />
