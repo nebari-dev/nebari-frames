@@ -8,7 +8,13 @@ import { AddMemberDialog } from "@/components/member/AddMemberDialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { Select } from "@/components/ui/select";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 
 const ROLES = ["viewer", "publisher", "admin"] as const;
@@ -77,24 +83,28 @@ export function AdminMembersPage() {
                     <td className="px-4 py-3 font-medium text-foreground">{label}</td>
                     <td className="px-4 py-3">
                       <Select
-                        aria-label={`role for ${label}`}
                         value={m.role}
-                        className="w-36"
-                        onChange={(e) =>
+                        onValueChange={(role) => {
+                          if (!role) return;
                           setRoleM.mutate(
-                            { ...target, role: e.target.value },
+                            { ...target, role },
                             {
                               onSuccess: () => void invalidate(),
                               onError: (err) => setError(ConnectError.from(err).rawMessage),
                             },
-                          )
-                        }
+                          );
+                        }}
                       >
-                        {ROLES.map((r) => (
-                          <option key={r} value={r}>
-                            {r}
-                          </option>
-                        ))}
+                        <SelectTrigger aria-label={`role for ${label}`} className="w-36">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {ROLES.map((r) => (
+                            <SelectItem key={r} value={r}>
+                              {r}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
                       </Select>
                     </td>
                     <td className="px-4 py-3">

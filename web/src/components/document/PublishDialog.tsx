@@ -1,5 +1,5 @@
 import { useFormContext } from "react-hook-form";
-import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogFooter, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -29,7 +29,7 @@ export function PublishDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-md space-y-4">
+      <DialogContent className="max-w-md">
         <DialogTitle>Publish version</DialogTitle>
 
         {versionFromSource ? (
@@ -54,14 +54,14 @@ export function PublishDialog({
           <Textarea rows={3} {...register("changelog")} placeholder="What changed in this version?" />
         </label>
 
-        <div className="flex justify-end gap-2 pt-2">
+        <DialogFooter className="pt-2">
           <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
             Cancel
           </Button>
           <Button type="button" loading={pending} onClick={onConfirm}>
             Publish
           </Button>
-        </div>
+        </DialogFooter>
       </DialogContent>
     </Dialog>
   );

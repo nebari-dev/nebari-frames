@@ -3,7 +3,7 @@ import { useNavigate } from "react-router";
 import { useMutation, createConnectQueryKey } from "@connectrpc/connect-query";
 import { useQueryClient } from "@tanstack/react-query";
 import { FrameService } from "@gen/frames/v1/frame_service_pb";
-import { Dialog, DialogContent, DialogTitle, DialogClose } from "@/components/ui/dialog";
+import { Dialog, DialogClose, DialogContent, DialogFooter, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { mapDeleteError } from "@/lib/delete-errors";
 
@@ -68,19 +68,19 @@ export function DeleteFrameDialog({
             <p>This frame is inherited by:</p>
             <ul className="list-disc pl-5">{blocking.map((b) => <li key={b}>{b}</li>)}</ul>
             <p className="text-muted-foreground">Deleting anyway detaches these children; they keep their own content.</p>
-            <div className="flex justify-end gap-2">
-              <DialogClose onClose={() => handleOpenChange(false)} />
+            <DialogFooter>
+              <DialogClose render={<Button variant="outline" />}>Cancel</DialogClose>
               <Button variant="destructive" onClick={() => run(true)} disabled={del.isPending}>Delete anyway</Button>
-            </div>
+            </DialogFooter>
           </div>
         ) : (
           <div className="space-y-3 text-sm">
             <p>This permanently deletes the frame and all its versions.</p>
             {error && <p className="text-destructive">{error}</p>}
-            <div className="flex justify-end gap-2">
-              <DialogClose onClose={() => handleOpenChange(false)} />
+            <DialogFooter>
+              <DialogClose render={<Button variant="outline" />}>Cancel</DialogClose>
               <Button variant="destructive" onClick={() => run(false)} disabled={del.isPending}>Delete</Button>
-            </div>
+            </DialogFooter>
           </div>
         )}
       </DialogContent>

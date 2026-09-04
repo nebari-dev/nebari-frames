@@ -2,7 +2,13 @@ import { useState } from "react";
 import { useQuery } from "@connectrpc/connect-query";
 import { FrameService } from "@gen/frames/v1/frame_service_pb";
 import { Input } from "@/components/ui/input";
-import { Select } from "@/components/ui/select";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 export interface ExtendValue {
   ref: string;
@@ -64,16 +70,20 @@ export function FramePicker({
       </div>
       {withVersion && (
         <Select
-          aria-label="version"
-          className="w-32"
-          value={value.version}
+          value={value.version || null}
           disabled={value.ref === ""}
-          onChange={(e) => onChange({ ...value, version: e.target.value })}
+          onValueChange={(version) => onChange({ ...value, version: version ?? "" })}
         >
-          <option value="">version...</option>
-          {(versionsQ.data?.versions ?? []).map((v) => (
-            <option key={v.version} value={v.version}>{v.version}</option>
-          ))}
+          <SelectTrigger aria-label="version" className="w-32">
+            <SelectValue placeholder="version..." />
+          </SelectTrigger>
+          <SelectContent>
+            {(versionsQ.data?.versions ?? []).map((v) => (
+              <SelectItem key={v.version} value={v.version}>
+                {v.version}
+              </SelectItem>
+            ))}
+          </SelectContent>
         </Select>
       )}
     </div>

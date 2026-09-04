@@ -2,7 +2,7 @@ import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { expect, it, vi } from "vitest";
 import { Textarea } from "./textarea";
-import { Select } from "./select";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./select";
 import { Dialog, DialogContent, DialogTitle } from "./dialog";
 
 it("Textarea renders and accepts input", async () => {
@@ -11,16 +11,22 @@ it("Textarea renders and accepts input", async () => {
   expect(screen.getByLabelText("notes")).toHaveValue("hi");
 });
 
-it("Select fires onChange", async () => {
-  const onChange = vi.fn();
+it("Select opens its listbox and fires onValueChange", async () => {
+  const onValueChange = vi.fn();
   render(
-    <Select aria-label="ver" onChange={onChange}>
-      <option value="1.0.0">1.0.0</option>
-      <option value="2.0.0">2.0.0</option>
+    <Select onValueChange={onValueChange}>
+      <SelectTrigger aria-label="ver">
+        <SelectValue placeholder="version..." />
+      </SelectTrigger>
+      <SelectContent>
+        <SelectItem value="1.0.0">1.0.0</SelectItem>
+        <SelectItem value="2.0.0">2.0.0</SelectItem>
+      </SelectContent>
     </Select>,
   );
-  await userEvent.selectOptions(screen.getByLabelText("ver"), "2.0.0");
-  expect(onChange).toHaveBeenCalled();
+  await userEvent.click(screen.getByRole("combobox", { name: "ver" }));
+  await userEvent.click(await screen.findByRole("option", { name: "2.0.0" }));
+  expect(onValueChange).toHaveBeenCalledWith("2.0.0", expect.anything());
 });
 
 it("Dialog shows content only when open", () => {
