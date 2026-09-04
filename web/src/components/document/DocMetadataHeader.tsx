@@ -1,5 +1,8 @@
+import { useId, type ReactNode } from "react";
 import { Controller, useFormContext, useWatch } from "react-hook-form";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import {
   Select,
   SelectContent,
@@ -7,75 +10,93 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Textarea } from "@/components/ui/textarea";
 import { FieldError, useFieldError, errorProps } from "@/components/form/FieldError";
 import { VISIBILITY_VALUES } from "@/lib/frame-yaml";
-import { cn } from "@/lib/utils";
 
-// Inputs styled to read as document text until pointed at: the frame's name is
-// its title and the description its subtitle, so the editor keeps the shape of
-// the page the reader will see. A visible border appears on hover/focus (and on
-// error) so the fields stay discoverable as fields.
-const quiet =
-  "border-transparent bg-transparent shadow-none " +
-  "hover:border-input focus-visible:border-input aria-invalid:border-destructive";
+// One labeled field in the metadata column: label above control, and the
+// field's validation error (looked up by form path) below. The control receives
+// the generated id so the Label associates with it explicitly.
+function Field({
+  label,
+  name,
+  children,
+}: {
+  label: string;
+  name?: string;
+  children: (id: string) => ReactNode;
+}) {
+  const id = useId();
+  return (
+    <div className="space-y-1.5">
+      <Label htmlFor={id}>{label}</Label>
+      {children(id)}
+      {name && <FieldError name={name} />}
+    </div>
+  );
+}
 
-// The metadata header of the document editor: title, description, and the
-// spec metadata (visibility / scope / maintainer) as one compact row.
+// The frame's identity and spec metadata as a standard labeled form column -
+// the left side of the authoring layout.
 export function DocMetadataHeader({ nameReadOnly }: { nameReadOnly: boolean }) {
   const { register, control } = useFormContext();
-  // Watched (not getValues) so the async edit-mode prefill re-renders the title.
+  // Watched (not getValues) so the async edit-mode prefill re-renders the name.
   const name = useWatch({ control, name: "name" }) as string;
   const nameError = useFieldError("name");
   const descError = useFieldError("description");
   const visibilityError = useFieldError("visibility");
 
   return (
-    <div className="space-y-1">
+    <div className="space-y-4">
       {nameReadOnly ? (
-        // Identity is fixed after creation; render it as the plain title it is
-        // (the page label above is the document's h1).
-        <div className="text-2xl font-semibold">{name}</div>
-      ) : (
-        <div>
-          <Input
-            {...register("name")}
-            aria-label="Frame name"
-            placeholder="frame-name"
-            className={cn(quiet, "-mx-2 h-auto w-full py-1 font-mono text-2xl font-semibold")}
-            {...errorProps("name", nameError)}
-          />
-          <FieldError name="name" />
+        // Identity is fixed after creation; render it as a plain value.
+        <div className="space-y-1.5">
+          <div className="text-sm font-medium text-foreground">Name</div>
+          <div className="text-lg font-semibold">{name}</div>
         </div>
+      ) : (
+        <Field label="Name" name="name">
+          {(id) => (
+            <Input
+              id={id}
+              {...register("name")}
+              placeholder="frame-name"
+              // The name is the first thing a new frame needs; land the cursor there.
+              autoFocus
+              {...errorProps("name", nameError)}
+            />
+          )}
+        </Field>
       )}
 
-      <div>
-        <Input
-          {...register("description")}
-          aria-label="Description"
-          placeholder="What is this frame for? One or two sentences."
-          className={cn(quiet, "-mx-2 h-auto w-full py-1 text-base text-muted-foreground")}
-          {...errorProps("description", descError)}
-        />
-        <FieldError name="description" />
-      </div>
+      <Field label="Description" name="description">
+        {(id) => (
+          <Textarea
+            id={id}
+            rows={3}
+            {...register("description")}
+            placeholder="What is this frame for? One or two sentences."
+            {...errorProps("description", descError)}
+          />
+        )}
+      </Field>
 
-      <div className="flex flex-wrap items-end gap-x-4 gap-y-2 pt-2">
-        <div className="space-y-0.5">
-          <span className="block text-xs font-medium text-muted-foreground">Visibility</span>
+      <Field label="Visibility" name="visibility">
+        {(id) => (
+          // Base UI's Select is not a native control, so it is driven through a
+          // Controller rather than register().
           <Controller
             control={control}
             name="visibility"
             render={({ field }) => (
               <Select
-                name={field.name}
-                value={field.value as string}
-                onValueChange={(v) => field.onChange(v)}
+                value={field.value ?? ""}
+                onValueChange={(v) => field.onChange(String(v))}
               >
                 <SelectTrigger
-                  aria-label="Visibility"
-                  title="Declared intent that travels with the frame. Access is still governed by this org's roles and grants."
-                  className="h-8 w-32 text-xs"
+                  id={id}
                   onBlur={field.onBlur}
+                  title="Declared intent that travels with the frame. Access is still governed by this org's roles and grants."
                   {...errorProps("visibility", visibilityError)}
                 >
                   <SelectValue />
@@ -90,17 +111,30 @@ export function DocMetadataHeader({ nameReadOnly }: { nameReadOnly: boolean }) {
               </Select>
             )}
           />
-        </div>
-        <label className="block space-y-0.5">
-          <span className="text-xs font-medium text-muted-foreground">Scope</span>
-          <Input {...register("scope")} placeholder="company" className="h-8 w-36 text-xs" />
-        </label>
-        <label className="block space-y-0.5">
-          <span className="text-xs font-medium text-muted-foreground">Maintainer</span>
-          <Input {...register("maintainer")} placeholder="team or person" className="h-8 w-44 text-xs" />
-        </label>
-      </div>
-      <FieldError name="visibility" />
+        )}
+      </Field>
+
+      <Field label="Scope">
+        {(id) => <Input id={id} {...register("scope")} placeholder="company" />}
+      </Field>
+
+      <Field label="Maintainer">
+        {(id) => <Input id={id} {...register("maintainer")} placeholder="team or person" />}
+      </Field>
+
+      <Controller
+        control={control}
+        name="template"
+        render={({ field }) => (
+          <Checkbox
+            checked={Boolean(field.value)}
+            onCheckedChange={(checked) => field.onChange(checked)}
+            description='List this Frame in the "start from a template" picker when creating new Frames.'
+          >
+            Offer as a template
+          </Checkbox>
+        )}
+      />
     </div>
   );
 }

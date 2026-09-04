@@ -3,7 +3,15 @@ import { useNavigate } from "react-router";
 import { useMutation, createConnectQueryKey } from "@connectrpc/connect-query";
 import { useQueryClient } from "@tanstack/react-query";
 import { FrameService } from "@gen/frames/v1/frame_service_pb";
-import { Dialog, DialogClose, DialogContent, DialogFooter, DialogTitle } from "@/components/ui/dialog";
+import {
+  Dialog,
+  DialogClose,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { mapDeleteError } from "@/lib/delete-errors";
 
@@ -62,27 +70,37 @@ export function DeleteFrameDialog({
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent className="max-w-md">
-        <DialogTitle>Delete {name}?</DialogTitle>
-        {blocking ? (
-          <div className="space-y-3 text-sm">
+        <DialogHeader>
+          <DialogTitle>Delete {name}?</DialogTitle>
+          <DialogDescription>
+            {blocking
+              ? "Deleting anyway detaches these children; they keep their own content."
+              : "This permanently deletes the frame and all its versions."}
+          </DialogDescription>
+        </DialogHeader>
+
+        {blocking && (
+          <div className="space-y-2 text-sm">
             <p>This frame is inherited by:</p>
-            <ul className="list-disc pl-5">{blocking.map((b) => <li key={b}>{b}</li>)}</ul>
-            <p className="text-muted-foreground">Deleting anyway detaches these children; they keep their own content.</p>
-            <DialogFooter>
-              <DialogClose render={<Button variant="outline" />}>Cancel</DialogClose>
-              <Button variant="destructive" onClick={() => run(true)} disabled={del.isPending}>Delete anyway</Button>
-            </DialogFooter>
-          </div>
-        ) : (
-          <div className="space-y-3 text-sm">
-            <p>This permanently deletes the frame and all its versions.</p>
-            {error && <p className="text-destructive">{error}</p>}
-            <DialogFooter>
-              <DialogClose render={<Button variant="outline" />}>Cancel</DialogClose>
-              <Button variant="destructive" onClick={() => run(false)} disabled={del.isPending}>Delete</Button>
-            </DialogFooter>
+            <ul className="list-disc pl-5 text-muted-foreground">
+              {blocking.map((b) => (
+                <li key={b}>{b}</li>
+              ))}
+            </ul>
           </div>
         )}
+        {error && <p className="text-sm text-destructive-foreground">{error}</p>}
+
+        <DialogFooter>
+          <DialogClose render={<Button variant="outline" />}>Cancel</DialogClose>
+          <Button
+            variant="destructive"
+            loading={del.isPending}
+            onClick={() => run(Boolean(blocking))}
+          >
+            {blocking ? "Delete anyway" : "Delete"}
+          </Button>
+        </DialogFooter>
       </DialogContent>
     </Dialog>
   );

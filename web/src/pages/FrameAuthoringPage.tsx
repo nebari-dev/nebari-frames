@@ -1,73 +1,36 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useId, useRef } from "react";
 import { useForm, FormProvider, useWatch, type FieldErrors } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useNavigate, useParams, useSearchParams } from "react-router";
 import { useMutation, useQuery, createConnectQueryKey } from "@connectrpc/connect-query";
 import { useQueryClient } from "@tanstack/react-query";
-import { MoreHorizontal, X } from "lucide-react";
 import { FrameService } from "@gen/frames/v1/frame_service_pb";
 import { authoringFormSchema, emptyFrameDoc, suggestNextVersion } from "@/lib/authoring-schema";
 import { serializeFrameDoc, parseFrameContent } from "@/lib/frame-yaml";
-import { SLOT_SECTIONS, sectionHasContent, type SlotSectionDef } from "@/lib/slot-sections";
+import { FRAME_TEMPLATES } from "@/lib/frame-templates";
 import { mapPublishError } from "@/lib/publish-errors";
 import { type AuthoringForm, formToDoc, docToForm } from "@/components/form/form-model";
 import { ExtendsEditor } from "@/components/form/ExtendsEditor";
 import { ExcludesEditor } from "@/components/form/ExcludesEditor";
-import { TerminologyEditor } from "@/components/form/TerminologyEditor";
-import { ListEditor } from "@/components/form/ListEditor";
 import { MarkdownField } from "@/components/form/MarkdownField";
 import { MarkdownSourceEditor } from "@/components/form/MarkdownSourceEditor";
 import { DocMetadataHeader } from "@/components/document/DocMetadataHeader";
-import { AddSectionMenu } from "@/components/document/AddSectionMenu";
 import { PublishDialog } from "@/components/document/PublishDialog";
 import { Button } from "@/components/ui/button";
 import { Alert } from "@/components/ui/alert";
 import {
-  DropdownMenu,
-  DropdownMenuTrigger,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuPortal,
-} from "@/components/ui/dropdown-menu";
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectLabel,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { ResolvedPreview } from "@/components/form/ResolvedPreview";
 
 const encode = (s: string) => new TextEncoder().encode(s);
 const decode = (b: Uint8Array) => new TextDecoder().decode(b);
-
-// One editable section of the document: heading, the editor for its content
-// shape, and a remove control. Sections the author has not added simply are
-// not on the page - the document editor shows the document, not the schema.
-function SectionEditor({
-  def,
-  onRemove,
-}: {
-  def: SlotSectionDef;
-  onRemove: () => void;
-}) {
-  return (
-    <section className="group space-y-2 border-t border-border pt-4">
-      <div className="flex items-center justify-between">
-        <h2 className="text-lg font-semibold">{def.label}</h2>
-        <Button
-          type="button"
-          variant="ghost"
-          size="sm"
-          className="text-muted-foreground opacity-0 transition-opacity group-focus-within:opacity-100 group-hover:opacity-100"
-          onClick={onRemove}
-        >
-          <X className="size-4" />
-          Remove section
-        </Button>
-      </div>
-      <p className="text-xs text-muted-foreground">{def.hint}</p>
-      {def.kind === "terms" && <TerminologyEditor />}
-      {def.kind === "list" && (
-        <ListEditor name={def.path as `slots.${"rules" | "skills" | "prompts"}`} label={def.label} />
-      )}
-      {def.kind === "prose" && <MarkdownField name={def.path} />}
-    </section>
-  );
-}
 
 export function FrameAuthoringPage({ mode }: { mode: "create" | "edit" }) {
   const navigate = useNavigate();
@@ -78,7 +41,12 @@ export function FrameAuthoringPage({ mode }: { mode: "create" | "edit" }) {
   const methods = useForm<AuthoringForm>({
     resolver: zodResolver(authoringFormSchema),
     // A first frame is 1.0.0 unless the author says otherwise at publish time.
-    defaultValues: docToForm({ ...emptyFrameDoc(), version: "1.0.0" }, ""),
+    // ?template=1 (the admin Templates page's "New template") pre-checks the
+    // offer-as-a-template box.
+    defaultValues: docToForm(
+      { ...emptyFrameDoc(), version: "1.0.0", template: searchParams.get("template") === "1" },
+      "",
+    ),
   });
 
   // "Import a .frame.md" lands straight in the Markdown editor: it is the
@@ -92,12 +60,20 @@ export function FrameAuthoringPage({ mode }: { mode: "create" | "edit" }) {
   const [markdownSource, setMarkdownSource] = useState("");
   const [markdownErrors, setMarkdownErrors] = useState<string[]>([]);
 
-  // Sections the author added this session; content-bearing sections are
-  // always visible regardless (which covers the async edit-mode prefill).
-  const [added, setAdded] = useState<ReadonlySet<string>>(new Set());
+  // The starter template last applied, so switching templates before writing
+  // anything replaces cleanly, while switching after edits asks first.
+  // A "@org/name" id sources the template from an existing frame; ?from= is
+  // the "Use as template" entry point on a frame's detail page.
+  const initialFrom = mode === "create" ? (searchParams.get("from") ?? "") : "";
+  const [templateId, setTemplateId] = useState(initialFrom ? `@${initialFrom}` : "");
+  const [fromRef, setFromRef] = useState(initialFrom);
+  const appliedTemplateBody = useRef("");
 
   const [publishOpen, setPublishOpen] = useState(false);
   const [previewOpen, setPreviewOpen] = useState(false);
+  // The template picker's visible text label sits outside the trigger, so the
+  // trigger points at it with aria-labelledby.
+  const templatePickerLabelId = useId();
   const { org = "", name = "" } = useParams();
   const editQ = useQuery(
     FrameService.method.getFrame,
@@ -118,14 +94,6 @@ export function FrameAuthoringPage({ mode }: { mode: "create" | "edit" }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mode, editQ.data?.version?.digest]);
 
-  const slots = useWatch({ control: methods.control, name: "slots" }) as
-    | AuthoringForm["slots"]
-    | undefined;
-  const visibleSections = SLOT_SECTIONS.filter(
-    (d) => added.has(d.key) || sectionHasContent(d, slots ?? {}),
-  );
-  const hiddenSections = SLOT_SECTIONS.filter((d) => !visibleSections.includes(d));
-
   const extendsVal = useWatch({ control: methods.control, name: "extends" }) as { ref: string }[] | undefined;
   const hasParents = (extendsVal ?? []).some((e) => e.ref?.trim());
 
@@ -133,8 +101,8 @@ export function FrameAuthoringPage({ mode }: { mode: "create" | "edit" }) {
   // not the slug, and the detail route is keyed by slug, so read it from GetMe.
   const meQ = useQuery(FrameService.method.getMe, {});
   const publish = useMutation(FrameService.method.publishFrame);
-  // One RPC backs both editor directions, import, and export, so the slot
-  // table lives only in Go rather than being mirrored again in TypeScript.
+  // One RPC backs both editor directions, import, and export, so the .frame.md
+  // codec lives only in Go rather than being mirrored again in TypeScript.
   const convert = useMutation(FrameService.method.convertFrame);
 
   const busy = publish.isPending || convert.isPending;
@@ -151,19 +119,65 @@ export function FrameAuthoringPage({ mode }: { mode: "create" | "edit" }) {
     return () => window.removeEventListener("beforeunload", handler);
   }, [isDirty]);
 
-  const addSection = (def: SlotSectionDef) => {
-    setAdded((prev) => new Set(prev).add(def.key));
-  };
-  const removeSection = (def: SlotSectionDef) => {
-    // Clearing the value is what removes a content-bearing section; the set
-    // only tracks intentionally-added empty ones.
-    methods.setValue(def.path as never, (def.kind === "prose" ? "" : []) as never, { shouldDirty: true });
-    methods.clearErrors(def.path as never);
-    setAdded((prev) => {
-      const next = new Set(prev);
-      next.delete(def.key);
-      return next;
-    });
+  // Frames flagged as templates in this org, offered alongside the built-ins.
+  const orgTemplatesQ = useQuery(
+    FrameService.method.listFrames,
+    {},
+    { enabled: mode === "create" && !importing },
+  );
+  const orgTemplates = (orgTemplatesQ.data?.frames ?? []).filter((f) => f.isTemplate);
+  // ?from= may name a frame that is not flagged; it still needs a picker entry.
+  const fromOutsideCatalog =
+    fromRef !== "" && !orgTemplates.some((f) => `${f.orgSlug}/${f.name}` === fromRef);
+
+  const [fromOrg = "", fromName = ""] = fromRef.split("/");
+  const fromQ = useQuery(
+    FrameService.method.getFrame,
+    { orgSlug: fromOrg, name: fromName },
+    { enabled: mode === "create" && fromName !== "" },
+  );
+
+  // A frame-sourced template applies when its content arrives.
+  useEffect(() => {
+    if (!fromRef || !fromQ.data?.version) return;
+    try {
+      const doc = parseFrameContent(fromQ.data.version.content);
+      appliedTemplateBody.current = doc.body;
+      methods.setValue("body", doc.body, { shouldDirty: true });
+      if (doc.scope && (methods.getValues("scope") ?? "").trim() === "") {
+        methods.setValue("scope", doc.scope, { shouldDirty: true });
+      }
+    } catch {
+      setTimeout(() => setFormError("The selected template's content could not be loaded."), 0);
+    }
+    // apply once per selected source version
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [fromRef, fromQ.data?.version?.digest]);
+
+  // Applying a template replaces the content (and fills an empty scope). Edits
+  // the author has made since the last template are never discarded silently.
+  const applyTemplate = (id: string) => {
+    const current = methods.getValues("body") ?? "";
+    if (
+      current.trim() !== "" &&
+      current !== appliedTemplateBody.current &&
+      !window.confirm("Replace the current content with the template?")
+    ) {
+      return;
+    }
+    setTemplateId(id);
+    if (id.startsWith("@")) {
+      setFromRef(id.slice(1)); // content applies when the frame loads
+      return;
+    }
+    setFromRef("");
+    const tpl = FRAME_TEMPLATES.find((t) => t.id === id);
+    const body = tpl?.body ?? "";
+    appliedTemplateBody.current = body;
+    methods.setValue("body", body, { shouldDirty: true });
+    if (tpl?.scope && (methods.getValues("scope") ?? "").trim() === "") {
+      methods.setValue("scope", tpl.scope, { shouldDirty: true });
+    }
   };
 
   // Collects violation messages for the markdown editor. Structural failures
@@ -259,7 +273,7 @@ export function FrameAuthoringPage({ mode }: { mode: "create" | "edit" }) {
   };
 
   // Publishing from Markdown converts first so there is still exactly one
-  // publish path: the server only ever stores the canonical slot YAML.
+  // publish path: the server only ever stores the canonical YAML.
   const publishFromMarkdown = () => {
     setFormError(null);
     convert.mutate(
@@ -302,7 +316,10 @@ export function FrameAuthoringPage({ mode }: { mode: "create" | "edit" }) {
 
   return (
     <FormProvider {...methods}>
-      <form onSubmit={(e) => e.preventDefault()} className="mx-auto max-w-3xl space-y-6">
+      <form
+        onSubmit={(e) => e.preventDefault()}
+        className="flex min-h-0 flex-1 flex-col gap-6"
+      >
         <div className="flex items-center justify-between">
           <h1 className="text-sm font-medium uppercase tracking-wide text-muted-foreground">{title}</h1>
           <div className="flex items-center gap-2">
@@ -313,21 +330,22 @@ export function FrameAuthoringPage({ mode }: { mode: "create" | "edit" }) {
                 </Button>
               )
             ) : (
-              <DropdownMenu>
-                <DropdownMenuTrigger variant="ghost" aria-label="More actions">
-                  <MoreHorizontal className="size-4" />
-                </DropdownMenuTrigger>
-                <DropdownMenuPortal>
-        <DropdownMenuContent align="end">
-                  <DropdownMenuItem onClick={toMarkdown}>Edit as Markdown</DropdownMenuItem>
-                  <DropdownMenuItem disabled={!hasParents} onClick={() => setPreviewOpen(true)}>
-                    Preview as resolved Frame
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-      </DropdownMenuPortal>
-              </DropdownMenu>
+              <Button type="button" variant="ghost" disabled={busy} onClick={toMarkdown}>
+                Edit as Markdown
+              </Button>
             )}
             <Button type="button" variant="outline" onClick={() => navigate(-1)}>Cancel</Button>
+            {editorMode !== "markdown" && (
+              <Button
+                type="button"
+                variant="outline"
+                disabled={!hasParents}
+                title="Preview this Frame with its inherited parents merged in"
+                onClick={() => setPreviewOpen(true)}
+              >
+                Preview resolved
+              </Button>
+            )}
             <Button type="button" disabled={busy} onClick={() => setPublishOpen(true)}>
               Publish&hellip;
             </Button>
@@ -346,29 +364,89 @@ export function FrameAuthoringPage({ mode }: { mode: "create" | "edit" }) {
             busy={busy}
           />
         ) : (
-          <div className="space-y-6">
-            <DocMetadataHeader nameReadOnly={mode === "edit"} />
+          <div className="grid min-h-0 gap-x-10 gap-y-6 lg:flex-1 lg:grid-cols-[minmax(0,32rem)_minmax(0,1fr)] lg:items-stretch">
+            {/* Left: identity, spec metadata, and composition as a standard
+                labeled form column. */}
+            <div className="space-y-6">
+              <DocMetadataHeader nameReadOnly={mode === "edit"} />
 
-            {/* Composition sits between metadata and content, the way the
-                frontmatter it maps to sits above the document body. */}
-            <div className="space-y-3 rounded-md border border-border bg-card p-4">
-              <div className="space-y-2">
-                <h3 className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Inherits from</h3>
-                <ExtendsEditor />
-              </div>
-              <div className="space-y-2">
-                <h3 className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Excludes</h3>
-                <ExcludesEditor />
+              <div className="space-y-4 border-t border-border pt-4">
+                <div className="space-y-1.5">
+                  <h3 className="text-sm font-medium text-foreground">Inherits from</h3>
+                  <ExtendsEditor />
+                </div>
+                <div className="space-y-1.5">
+                  <h3 className="text-sm font-medium text-foreground">Excludes</h3>
+                  <ExcludesEditor />
+                </div>
               </div>
             </div>
 
-            {visibleSections.map((def) => (
-              <SectionEditor key={def.key} def={def} onRemove={() => removeSection(def)} />
-            ))}
-
-            <div className="border-t border-border pt-4">
-              <AddSectionMenu available={hiddenSections} onAdd={addSection} />
-            </div>
+            {/* Right: the frame's content, the main editing surface. */}
+            <section className="flex min-h-0 flex-col gap-2">
+              <div className="flex items-center justify-between gap-4">
+                <h2 className="text-lg font-semibold">Content</h2>
+                {mode === "create" && (
+                  <div className="flex items-center gap-2">
+                    <span
+                      id={templatePickerLabelId}
+                      className="text-xs font-medium text-muted-foreground"
+                    >
+                      Start from a template
+                    </span>
+                    <Select value={templateId} onValueChange={(v) => applyTemplate(String(v))}>
+                      <SelectTrigger
+                        aria-labelledby={templatePickerLabelId}
+                        className="h-8 w-48 text-xs"
+                      >
+                        <SelectValue placeholder="Blank" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="">Blank</SelectItem>
+                        <SelectGroup>
+                          <SelectLabel>Starter templates</SelectLabel>
+                          {FRAME_TEMPLATES.map((t) => (
+                            <SelectItem key={t.id} value={t.id} title={t.hint}>
+                              {t.label}
+                            </SelectItem>
+                          ))}
+                        </SelectGroup>
+                        {(orgTemplates.length > 0 || fromOutsideCatalog) && (
+                          <SelectGroup>
+                            <SelectLabel>Org templates</SelectLabel>
+                            {fromOutsideCatalog && (
+                              <SelectItem value={`@${fromRef}`}>{fromName}</SelectItem>
+                            )}
+                            {orgTemplates.map((f) => (
+                              <SelectItem
+                                key={`${f.orgSlug}/${f.name}`}
+                                value={`@${f.orgSlug}/${f.name}`}
+                                title={f.description}
+                              >
+                                {f.name}
+                              </SelectItem>
+                            ))}
+                          </SelectGroup>
+                        )}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Free-form Markdown: the context this Frame carries into AI conversations.
+                Keep it concise — include only guidance that would change how work is done.
+              </p>
+              {/* Fills whatever height is left below the page chrome,
+                  matching the view page's panel. */}
+              <MarkdownField
+                name="body"
+                ariaLabel="Content"
+                fill
+                className="min-h-[20rem]"
+                placeholder="The rules, terminology, goals, style, or process this Frame exists to convey."
+              />
+            </section>
           </div>
         )}
 
@@ -383,7 +461,9 @@ export function FrameAuthoringPage({ mode }: { mode: "create" | "edit" }) {
         <ResolvedPreview
           org={org}
           name={methods.getValues("name")}
-          version={methods.getValues("version")}
+          // Empty = latest published version. The form's version field holds
+          // the next (unpublished) version, which the resolver can't know.
+          version=""
           open={previewOpen}
           onClose={() => setPreviewOpen(false)}
         />

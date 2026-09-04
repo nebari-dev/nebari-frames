@@ -67,13 +67,16 @@ it("lists frames and filters by search", async () => {
   expect(screen.queryByText("hipaa")).not.toBeInTheDocument();
 });
 
-it("switches to the table view", async () => {
+it("opens in the table view by default and can switch to cards", async () => {
   useQueryMock.mockReturnValue(twoFrames);
   render(<MemoryRouter><CatalogPage /></MemoryRouter>);
-  await userEvent.click(screen.getByRole("button", { name: /table/i }));
-  const table = screen.getByRole("table");
-  expect(table).toBeInTheDocument();
+  // Table is the primary view: it renders without touching the toggle.
+  expect(screen.getByRole("table")).toBeInTheDocument();
   expect(screen.getByRole("columnheader", { name: /owner/i })).toBeInTheDocument();
+
+  await userEvent.click(screen.getByRole("button", { name: /cards/i }));
+  expect(screen.queryByRole("table")).not.toBeInTheDocument();
+  expect(screen.getByText("brand-voice")).toBeInTheDocument();
 });
 
 it("switches to the hierarchy view and hides the search box", async () => {

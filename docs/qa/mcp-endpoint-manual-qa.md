@@ -103,23 +103,28 @@ Notes:
 ### 1.2 Seed two readable frames (dev mode needs no token)
 
 The FrameService takes the Frame YAML as base64 bytes over Connect JSON. Seed a
-content-rich frame (so the read shows multiple markdown sections) and a second
+content-rich frame (so the read shows a real markdown body) and a second
 plain one (so the list shows more than one):
 
 ```bash
-# Frame 1: brand-voice (terminology + rules + goals)
+# Frame 1: brand-voice (multi-section markdown body)
 YAML1=$(cat <<'EOF'
 name: brand-voice
 description: How we speak to customers.
 version: 1.0.0
-slots:
-  terminology:
-    - term: Frame
-      definition: A scoped context artifact.
-  rules:
-    - Be concise and concrete.
-    - Prefer active voice.
-  goals: Sound human, not corporate.
+body: |
+  ## Terminology
+
+  - **Frame**: A scoped context artifact.
+
+  ## Rules
+
+  - Be concise and concrete.
+  - Prefer active voice.
+
+  ## Goals
+
+  Sound human, not corporate.
 EOF
 )
 curl -s localhost:8080/frames.v1.FrameService/PublishFrame \
@@ -132,9 +137,8 @@ YAML2=$(cat <<'EOF'
 name: support-tone
 description: Tone for support replies.
 version: 1.0.0
-slots:
-  rules:
-    - Acknowledge the issue first.
+body: |
+  Acknowledge the issue first.
 EOF
 )
 curl -s localhost:8080/frames.v1.FrameService/PublishFrame \
@@ -202,9 +206,8 @@ In the Inspector UI:
 
    Sound human, not corporate.
    ```
-   Confirm: named sections in fixed order; EMPTY slots (Skills, Style, Norms,
-   etc.) are OMITTED entirely (no empty headers); no `> Inherits from:` line for
-   this non-inheriting frame.
+   Confirm: the body renders verbatim after the provenance header; no
+   `> Inherits from:` line for this non-inheriting frame.
 
 > Alternative without Inspector (Claude Code as the client):
 > `claude mcp add --transport http frames-dev http://localhost:8080/mcp`
@@ -367,7 +370,7 @@ Journeys 1, 6, 2 (negative), 7 (denied).
 - [ ] (T1, J5) `/.well-known/oauth-protected-resource` returns resource=`<url>/mcp`, the issuer, and non-empty scopes.
 - [ ] (T1, J8) MCP Inspector connects to `/mcp` with no token.
 - [ ] (T1, J2+) List shows the seeded frames with `name (Org)` labels and `nebari-frame://` URIs.
-- [ ] (T1, J3) Read returns `text/markdown` with named sections, empty slots omitted.
+- [ ] (T1, J3) Read returns `text/markdown` with the frame body verbatim under the provenance header.
 - [ ] (T1, J7) Reading a nonexistent / malformed URI returns not-found.
 - [ ] (T2, J4) Tokenless POST `/mcp` -> 401 with `WWW-Authenticate` containing `resource_metadata`.
 - [ ] (T3, J1) Claude.ai connector completes OAuth and lists + reads frames (`docs/connect/claude-ai.md`).

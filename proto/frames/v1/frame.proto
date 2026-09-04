@@ -29,6 +29,9 @@ message Frame {
   string latest_version = 6;
   google.protobuf.Timestamp created_at = 7;
   google.protobuf.Timestamp updated_at = 8;
+  // Offered as a starting point in the "start from a template" picker.
+  // Denormalized from the latest version's `template` field at publish time.
+  bool is_template = 9;
 }
 
 message ParentRef {
@@ -59,6 +62,7 @@ message FrameSummary {
   string latest_version = 5;
   google.protobuf.Timestamp updated_at = 6;
   Permissions permissions = 7;
+  bool is_template = 8;
 }
 
 message FrameVersionSummary {

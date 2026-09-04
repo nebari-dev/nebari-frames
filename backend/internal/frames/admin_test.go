@@ -68,9 +68,8 @@ func TestDeleteFrameBlockThenForce(t *testing.T) {
 	publishFrame(t, ctx, svc, []byte(`name: parent
 description: Parent frame
 version: 1.0.0
-slots:
-  rules:
-    - Parent rule.
+body: |
+  Parent rule.
 `))
 
 	// Publish child frame that extends parent.
@@ -80,9 +79,8 @@ version: 1.0.0
 extends:
   - ref: openteams/parent
     version: 1.0.0
-slots:
-  rules:
-    - Child rule.
+body: |
+  Child rule.
 `))
 
 	// force=false should block and list the child.
@@ -154,9 +152,8 @@ func TestDeleteFrameDeniedForViewer(t *testing.T) {
 			publishFrame(t, adminCtx, svc, []byte(`name: secret-frame
 description: Admin frame
 version: 1.0.0
-slots:
-  rules:
-    - Only admins.
+body: |
+  Only admins.
 `))
 
 			// Non-deleter attempts to delete.

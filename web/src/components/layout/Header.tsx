@@ -1,7 +1,7 @@
 import { Menu as MenuPrimitive } from "@base-ui/react/menu";
 import { useQuery } from "@connectrpc/connect-query";
 import { FrameService } from "@gen/frames/v1/frame_service_pb";
-import { ChevronDown, LogOut, Monitor, Moon, Sun, User } from "lucide-react";
+import { ChevronDown, LogOut, Monitor, Moon, Plug, Sun, User } from "lucide-react";
 import type { ReactNode } from "react";
 import { Link, useMatch } from "react-router";
 import { Avatar, AvatarFallback } from "@/components/avatar";
@@ -55,6 +55,32 @@ function HeaderNavLink({
   );
 }
 
+/**
+ * Connect is a utility, not primary navigation: a quiet icon button beside
+ * the account menu that keeps aria-current so the active page is still
+ * announced.
+ */
+function ConnectButton(): ReactNode {
+  const active = useMatch({ path: "/connect", end: false }) !== null;
+
+  return (
+    <Button
+      variant="ghost"
+      size="icon"
+      aria-label="Connect"
+      title="Connect your tools"
+      aria-current={active ? "page" : undefined}
+      className={cn(
+        "text-header-foreground hover:bg-header-action-hover focus-visible:ring-offset-0",
+        active && "bg-header-action-hover",
+      )}
+      render={<Link to="/connect" />}
+    >
+      <Plug />
+    </Button>
+  );
+}
+
 function initialsFor(value?: string | null): string {
   if (!value) return "";
   const base = value.includes("@") ? (value.split("@")[0] ?? value) : value;
@@ -88,11 +114,11 @@ export function Header() {
             Frames
           </HeaderNavLink>
           {me?.role === "admin" && <HeaderNavLink to="/admin">Admin</HeaderNavLink>}
-          <HeaderNavLink to="/connect">Connect</HeaderNavLink>
         </MenuBarNav>
       </div>
 
       <MenuBarActions className="gap-2">
+        <ConnectButton />
         {isAuthenticated ? (
           <DropdownMenu modal={false}>
             <DropdownMenuTrigger

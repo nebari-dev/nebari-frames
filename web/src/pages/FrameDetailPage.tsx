@@ -1,132 +1,184 @@
-import { useState } from "react";
-import { Link, useParams } from "react-router";
-import { GitFork } from "lucide-react";
-import { useQuery } from "@connectrpc/connect-query";
+import { useId, useState } from "react";
+import { Link, useNavigate, useParams, useSearchParams } from "react-router";
+import { ArrowLeft, History, RotateCcw } from "lucide-react";
+import { useMutation, useQuery } from "@connectrpc/connect-query";
+import { useQueryClient } from "@tanstack/react-query";
 import { Code, ConnectError } from "@connectrpc/connect";
-import { timestampDate } from "@bufbuild/protobuf/wkt";
-import type { Timestamp } from "@bufbuild/protobuf/wkt";
+import type { ReactNode } from "react";
 import { FrameService } from "@gen/frames/v1/frame_service_pb";
-import { parseFrameContent } from "@/lib/frame-yaml";
-import { FrameSlots } from "@/components/slots/FrameSlots";
-import { VersionHistory } from "@/components/frame/VersionHistory";
-import { UseThisFrame } from "@/components/frame/UseThisFrame";
+import { parseFrameContent, serializeFrameDoc } from "@/lib/frame-yaml";
+import { suggestNextVersion } from "@/lib/authoring-schema";
 import { DeleteFrameDialog } from "@/components/frame/DeleteFrameDialog";
 import { ExportMenu } from "@/components/frame/ExportFrameButton";
+import { FrameVersionsDialog } from "@/components/frame/FrameVersionsDialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
+import { Checkbox } from "@/components/ui/checkbox";
+import {
+  Dialog,
+  DialogClose,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/collapsible";
+import { Textarea } from "@/components/ui/textarea";
+import { fillTextareaSlot } from "@/components/form/fill-height";
+import { cn } from "@/lib/utils";
 
-function fmtDateTime(ts?: Timestamp): string {
-  if (!ts) return "";
-  return timestampDate(ts).toLocaleString(undefined, {
-    year: "numeric",
-    month: "short",
-    day: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-}
-
-function fmtBytes(bytes?: bigint): string {
-  if (bytes === undefined) return "";
-  const n = Number(bytes);
-  if (n < 1024) return `${n} B`;
-  if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
-  return `${(n / (1024 * 1024)).toFixed(1)} MB`;
-}
-
-// A single label/value pair in the details list. Renders nothing when empty
-// so partial data (or minimal test fixtures) never leaves dangling labels.
-function Meta({ label, value, mono }: { label: string; value: string; mono?: boolean }) {
-  if (!value) return null;
+// One labeled read-only field, mirroring the edit form's Field styling. The
+// control gets the generated id so the Label associates with it properly
+// instead of relying on implicit wrapping.
+function ViewField({
+  label,
+  children,
+}: {
+  label: string;
+  children: (id: string) => ReactNode;
+}) {
+  const id = useId();
   return (
-    <div className="space-y-0.5">
-      <dt className="text-xs text-muted-foreground">{label}</dt>
-      <dd className={mono ? "font-mono text-xs break-all" : "text-sm"}>{value}</dd>
+    <div className="space-y-1.5">
+      <Label htmlFor={id}>{label}</Label>
+      {children(id)}
     </div>
   );
 }
 
 export function FrameDetailPage() {
   const { org = "", name = "" } = useParams();
+  const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const [deleteOpen, setDeleteOpen] = useState(false);
-  const frameQ = useQuery(FrameService.method.getFrame, { orgSlug: org, name });
-  const versionsQ = useQuery(FrameService.method.listFrameVersions, { orgSlug: org, name });
+  const [versionsOpen, setVersionsOpen] = useState(false);
+  const [restoreOpen, setRestoreOpen] = useState(false);
+  const [restoreError, setRestoreError] = useState<string | null>(null);
+  // ?v= pins the page to a past version; without it the latest is shown.
+  const [params] = useSearchParams();
+  const viewedVersion = params.get("v") ?? "";
 
-  if (frameQ.isLoading) {
-    return <div className="space-y-4"><Skeleton className="h-8 w-64" /><Skeleton className="h-40" /></div>;
-  }
+  const frameQ = useQuery(FrameService.method.getFrame, {
+    orgSlug: org,
+    name,
+    version: viewedVersion,
+  });
+  const versionsQ = useQuery(FrameService.method.listFrameVersions, { orgSlug: org, name });
+  const publish = useMutation(FrameService.method.publishFrame);
+
   if (frameQ.error) {
     const code = ConnectError.from(frameQ.error).code;
     if (code === Code.NotFound) {
       return <p className="text-muted-foreground">Frame not found, or you do not have access.</p>;
     }
-    return <p className="text-destructive">Could not load this frame.</p>;
+    return <p className="text-destructive-foreground">Could not load this frame.</p>;
+  }
+  const resp = frameQ.data;
+  const frame = resp?.frame;
+  const version = resp?.version;
+  // Covers isLoading plus in-between states (e.g. a paused retry) where the
+  // query has neither data nor an error yet.
+  if (!resp || !frame || !version) {
+    return <div className="space-y-4"><Skeleton className="h-8 w-64" /><Skeleton className="h-40" /></div>;
   }
 
-  const resp = frameQ.data!;
-  const frame = resp.frame!;
-  const version = resp.version!;
   let doc;
   try {
     doc = parseFrameContent(version.content);
   } catch {
-    return <p className="text-destructive">This frame&apos;s content could not be displayed.</p>;
+    return <p className="text-destructive-foreground">This frame&apos;s content could not be displayed.</p>;
   }
 
   const isLatest = !frame.latestVersion || frame.latestVersion === version.version;
+  const versions = versionsQ.data?.versions ?? [];
+  const nextVersion = suggestNextVersion(frame.latestVersion || version.version);
+
+  // Restoring republishes the viewed version's content as a new version on
+  // top of the history - past versions themselves stay immutable.
+  const restore = () => {
+    setRestoreError(null);
+    const content = new TextEncoder().encode(
+      serializeFrameDoc({ ...doc, version: nextVersion }),
+    );
+    publish.mutate(
+      { content, changelog: `Restore of v${version.version}` },
+      {
+        onSuccess: () => {
+          void queryClient.invalidateQueries();
+          setRestoreOpen(false);
+          navigate(`/frames/${org}/${name}`);
+        },
+        onError: (err) => setRestoreError(ConnectError.from(err).rawMessage),
+      },
+    );
+  };
 
   return (
-    <div className="max-w-6xl space-y-6">
-      {/* The header carries the frame's identity - what a reader needs to
-          decide whether this frame applies to them. Registry bookkeeping
-          (owner, digest, timestamps) lives in the collapsed Details box. */}
+    <div className="flex min-h-0 flex-1 flex-col gap-6">
       <header className="flex items-start justify-between gap-4">
-        <div className="min-w-0 space-y-2">
-          <div className="flex flex-wrap items-center gap-2">
-            <h1 className="text-2xl font-semibold">{frame.name}</h1>
-            <Badge variant="secondary" className="font-mono">v{version.version}</Badge>
-            {isLatest ? (
-              <Badge variant="outline">Latest</Badge>
-            ) : (
+        <div className="flex min-w-0 flex-wrap items-center gap-2">
+          <Button
+            variant="ghost"
+            size="icon"
+            aria-label="Back to frames"
+            render={<Link to="/" />}
+          >
+            <ArrowLeft />
+          </Button>
+          {/* Not PageHeader: that layout stacks a description under the title,
+              and this header runs badges inline with it. The classes are kept
+              identical to PageHeader's own h1 so the two do not drift. */}
+          <h1 className="text-2xl font-semibold tracking-tight text-foreground">{frame.name}</h1>
+          <Badge variant="secondary" className="font-mono">v{version.version}</Badge>
+          {isLatest ? (
+            <Badge variant="outline">Latest</Badge>
+          ) : (
+            <>
               <Badge variant="outline" title={`Latest is v${frame.latestVersion}`}>
                 latest: v{frame.latestVersion}
               </Badge>
-            )}
-            {doc.visibility && <Badge variant="outline">{doc.visibility}</Badge>}
-            {doc.scope && <Badge variant="outline">{doc.scope}</Badge>}
-          </div>
-          <p className="text-muted-foreground">{frame.description}</p>
-          {doc.maintainer && (
-            <p className="text-sm text-muted-foreground">Maintained by {doc.maintainer}</p>
+              <Link
+                to={`/frames/${org}/${name}`}
+                className="text-sm text-primary hover:underline"
+              >
+                View latest
+              </Link>
+            </>
           )}
-          {resp.extends.length > 0 && (
-            <p className="flex flex-wrap items-center gap-1.5 text-sm">
-              <span className="text-muted-foreground">Inherits from</span>
-              {resp.extends.map((p) => (
-                <Badge
-                  key={`${p.ref}@${p.version}`}
-                  variant="outline"
-                  className="font-mono font-normal"
-                  render={<Link to={`/frames/${p.ref}`} />}
-                >
-                  {p.ref}@{p.version}
-                </Badge>
-              ))}
-            </p>
-          )}
-          {(resp.excludes?.length ?? 0) > 0 && (
-            <p className="text-sm text-muted-foreground">
-              Excludes <span className="font-mono text-xs">{resp.excludes.join(", ")}</span>
-            </p>
-          )}
+          {doc.visibility && <Badge variant="outline">{doc.visibility}</Badge>}
+          {frame.isTemplate && <Badge>Template</Badge>}
         </div>
         <div className="flex shrink-0 gap-2">
+          {!isLatest && resp.permissions?.canEdit && (
+            <Button onClick={() => setRestoreOpen(true)}>
+              <RotateCcw />
+              Restore this version
+            </Button>
+          )}
+          <Button
+            variant="ghost"
+            title="Start a new Frame with this Frame's content as the starting point"
+            render={<Link to={`/frames/new?from=${org}/${name}`} />}
+          >
+            Use as template
+          </Button>
           {resp.permissions?.canEdit && (
             <Button variant="outline" render={<Link to={`/frames/${org}/${name}/edit`} />}>Edit</Button>
           )}
+          <Button variant="outline" onClick={() => setVersionsOpen(true)}>
+            <History />
+            Versions{versions.length > 0 ? ` (${versions.length})` : ""}
+          </Button>
           {/* Export is available to anyone who can read the frame. */}
           <ExportMenu name={frame.name} content={version.content} />
           {resp.permissions?.canDelete && (
@@ -135,47 +187,133 @@ export function FrameDetailPage() {
         </div>
       </header>
 
-      <div className="grid gap-10 lg:grid-cols-[minmax(0,1fr)_22rem] lg:items-start">
-        {/* The document itself is the page's main content, full-width and
-            unboxed so it reads like the .frame.md it exports as. */}
-        <div className="min-w-0 max-w-3xl">
-          <FrameSlots doc={doc} />
+      {/* The read view is the edit form, disabled: the same two-column layout
+          and controls, so reading and editing are one surface. */}
+      <div className="grid min-h-0 gap-x-10 gap-y-6 lg:flex-1 lg:grid-cols-[minmax(0,32rem)_minmax(0,1fr)] lg:items-stretch">
+        <div className="space-y-6">
+          <div className="space-y-4">
+            <ViewField label="Name">
+              {(id) => <Input id={id} readOnly value={frame.name} />}
+            </ViewField>
+            <ViewField label="Description">
+              {(id) => <Textarea id={id} readOnly rows={3} value={frame.description} />}
+            </ViewField>
+            <ViewField label="Visibility">
+              {(id) => {
+                const visibility = doc.visibility || "internal";
+                return (
+                  <Select disabled value={visibility}>
+                    <SelectTrigger id={id}>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value={visibility}>{visibility}</SelectItem>
+                    </SelectContent>
+                  </Select>
+                );
+              }}
+            </ViewField>
+            <ViewField label="Scope">
+              {(id) => <Input id={id} readOnly value={doc.scope} placeholder="—" />}
+            </ViewField>
+            <ViewField label="Maintainer">
+              {(id) => <Input id={id} readOnly value={doc.maintainer} placeholder="—" />}
+            </ViewField>
+            <Checkbox
+              disabled
+              checked={frame.isTemplate}
+              description='List this Frame in the "start from a template" picker when creating new Frames.'
+            >
+              Offer as a template
+            </Checkbox>
+          </div>
+
+          <div className="space-y-4 border-t border-border pt-4">
+            <div className="space-y-1.5">
+              <h3 className="text-sm font-medium text-foreground">Inherits from</h3>
+              {resp.extends.length === 0 ? (
+                <p className="text-sm text-muted-foreground">No parent Frames.</p>
+              ) : (
+                <div className="space-y-2">
+                  {resp.extends.map((p) => (
+                    <Input
+                      key={`${p.ref}@${p.version}`}
+                      readOnly
+                      value={`${p.ref}@${p.version}`}
+                      className="font-mono"
+                    />
+                  ))}
+                  <Link
+                    to={`/?view=hierarchy&focus=${org}/${name}`}
+                    className="inline-block text-sm text-primary hover:underline"
+                  >
+                    View in hierarchy
+                  </Link>
+                </div>
+              )}
+            </div>
+            <div className="space-y-1.5">
+              <h3 className="text-sm font-medium text-foreground">Excludes</h3>
+              {(resp.excludes?.length ?? 0) === 0 ? (
+                <p className="text-sm text-muted-foreground">No exclusions.</p>
+              ) : (
+                <div className="space-y-2">
+                  {resp.excludes.map((x) => (
+                    <Input key={x} readOnly value={x} className="font-mono" />
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
         </div>
 
-        <aside className="space-y-6">
-          <UseThisFrame org={org} name={name} />
-
-          <VersionHistory versions={versionsQ.data?.versions ?? []} />
-
-          <Card className="p-3">
-            <Link
-              to={`/?view=hierarchy&focus=${org}/${name}`}
-              className="flex items-center gap-2 text-sm text-primary hover:underline"
-            >
-              <GitFork className="size-4" />
-              View in hierarchy
-            </Link>
-          </Card>
-
-          {/* Registry bookkeeping, collapsed by default: it answers audit
-              questions, not "what does this frame say" questions. */}
-          <Collapsible className="rounded-lg border border-border bg-card p-3 text-card-foreground shadow-xs">
-            <CollapsibleTrigger className="text-sm font-medium">Details</CollapsibleTrigger>
-            <CollapsibleContent className="pt-3">
-              <dl className="space-y-3">
-                <Meta label="Owner" value={frame.ownerSub} />
-                <Meta label="Published by" value={version.publishedBy} />
-                <Meta label="Published" value={fmtDateTime(version.publishedAt)} />
-                <Meta label="Created" value={fmtDateTime(frame.createdAt)} />
-                <Meta label="Updated" value={fmtDateTime(frame.updatedAt)} />
-                <Meta label="Changelog" value={version.changelog} />
-                <Meta label="Size" value={fmtBytes(version.sizeBytes)} />
-                <Meta label="Digest" value={version.digest} mono />
-              </dl>
-            </CollapsibleContent>
-          </Collapsible>
-        </aside>
+        {/* The panel fills whatever height is left below the page chrome. */}
+        <section className={cn("flex min-h-0 flex-col gap-2", fillTextareaSlot)}>
+          <h2 className="text-lg font-semibold">Content</h2>
+          <p className="text-xs text-muted-foreground">
+            Free-form Markdown: the context this Frame carries into AI conversations.
+          </p>
+          <Textarea
+            readOnly
+            aria-label="Content"
+            value={doc.body}
+            className="min-h-[20rem] flex-1"
+          />
+        </section>
       </div>
+
+      <FrameVersionsDialog
+        org={org}
+        name={name}
+        frame={frame}
+        version={version}
+        versions={versions}
+        open={versionsOpen}
+        onOpenChange={setVersionsOpen}
+      />
+
+      <Dialog open={restoreOpen} onOpenChange={setRestoreOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Restore v{version.version}?</DialogTitle>
+            <DialogDescription>
+              This publishes the content of v{version.version} as a new version (v
+              {nextVersion}). Nothing is deleted — every published version stays in the
+              history.
+            </DialogDescription>
+          </DialogHeader>
+          {restoreError && (
+            <p className="text-sm text-destructive-foreground">{restoreError}</p>
+          )}
+          <DialogFooter>
+            <DialogClose render={<Button variant="outline" />}>Cancel</DialogClose>
+            <Button onClick={restore} loading={publish.isPending}>
+              Restore
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       <DeleteFrameDialog org={org} name={name} open={deleteOpen} onOpenChange={setDeleteOpen} />
     </div>
   );

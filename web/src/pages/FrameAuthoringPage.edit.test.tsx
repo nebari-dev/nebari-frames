@@ -24,9 +24,7 @@ import { FrameService } from "@gen/frames/v1/frame_service_pb";
 const sample = `name: brand-voice
 description: OpenTeams brand voice
 version: 1.2.0
-slots:
-  rules:
-    - Cite benchmarks.
+body: Cite benchmarks.
 `;
 
 it("pre-fills the document with the name fixed and suggests a bumped version", async () => {
@@ -42,9 +40,9 @@ it("pre-fills the document with the name fixed and suggests a bumped version", a
   );
   // Identity is fixed after creation: the name renders as the title, not an input.
   await waitFor(() => expect(screen.getByText("brand-voice")).toBeInTheDocument());
-  expect(screen.queryByLabelText(/frame name/i)).not.toBeInTheDocument();
+  expect(screen.queryByLabelText(/^name$/i)).not.toBeInTheDocument();
 
-  // Sections carrying content are on the page without any adding.
+  // The body content is on the page, prefilled in the body editor.
   expect(screen.getByDisplayValue("Cite benchmarks.")).toBeInTheDocument();
 
   // The bumped version suggestion lives in the publish dialog.

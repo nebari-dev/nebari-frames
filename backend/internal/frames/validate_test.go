@@ -13,6 +13,89 @@ func TestParseAndValidate_Valid(t *testing.T) {
 name: brand-voice
 description: OpenTeams brand voice
 version: 1.0.0
+body: |
+  Lead with customer impact.
+
+  Never claim performance numbers without a benchmark citation.
+`)
+	doc, err := frames.Parse(content)
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	if err := frames.Validate(doc); err != nil {
+		t.Fatalf("validate: %v", err)
+	}
+	if !strings.Contains(doc.Body, "Lead with customer impact.") {
+		t.Errorf("body not parsed: %q", doc.Body)
+	}
+}
+
+// Documents published under the retired ten-slot schema must stay readable:
+// Parse folds a legacy `slots:` block into the free-form body, rendered as the
+// markdown sections the old .frame.md codec emitted.
+// Both keys in one document is a legacy version somebody has since edited, and
+// the precedence is silent - the discarded side produces no error and no
+// warning - so it has to be pinned rather than left to be rediscovered.
+func TestParse_BodyWinsOverLegacySlots(t *testing.T) {
+	tests := []struct {
+		name     string
+		content  string
+		wantBody string
+	}{
+		{
+			name:     "slots only fold into the body",
+			content:  "name: c\ndescription: d\nversion: 1.0.0\nslots:\n  rules:\n    - from slots\n",
+			wantBody: "## Rules\n\n- from slots",
+		},
+		{
+			name: "an explicit body wins and the legacy block is dropped",
+			content: "name: c\ndescription: d\nversion: 1.0.0\nbody: from body\n" +
+				"slots:\n  rules:\n    - from slots\n",
+			wantBody: "from body",
+		},
+		{
+			name: "an explicitly empty body still falls back to slots",
+			content: "name: c\ndescription: d\nversion: 1.0.0\nbody: \"\"\n" +
+				"slots:\n  rules:\n    - from slots\n",
+			wantBody: "## Rules\n\n- from slots",
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			doc, err := frames.Parse([]byte(tc.content))
+			if err != nil {
+				t.Fatalf("parse: %v", err)
+			}
+			if doc.Body != tc.wantBody {
+				t.Errorf("body = %q, want %q", doc.Body, tc.wantBody)
+			}
+		})
+	}
+}
+
+// The decode error reaches API clients unwrapped, so it must name the schema
+// rather than the unexported Go type yaml.v3 happens to be decoding into.
+func TestParse_UnknownKeyErrorNamesTheSchema(t *testing.T) {
+	_, err := frames.Parse([]byte("name: c\ndescription: d\nversion: 1.0.0\nbogus: x\n"))
+	if err == nil {
+		t.Fatal("expected an error for an unknown key")
+	}
+	if strings.Contains(err.Error(), "docYAML") {
+		t.Errorf("error leaks an internal type name, which means nothing to a client: %v", err)
+	}
+	if !strings.Contains(err.Error(), "bogus") {
+		t.Errorf("error does not name the offending key: %v", err)
+	}
+	if !strings.Contains(err.Error(), "maintainer") {
+		t.Errorf("error does not list the recognized keys: %v", err)
+	}
+}
+
+func TestParse_LegacySlotsFoldIntoBody(t *testing.T) {
+	content := []byte(`
+name: brand-voice
+description: OpenTeams brand voice
+version: 1.0.0
 slots:
   terminology:
     - term: customer
@@ -28,6 +111,26 @@ slots:
 	}
 	if err := frames.Validate(doc); err != nil {
 		t.Fatalf("validate: %v", err)
+	}
+	for _, want := range []string{
+		"## Terminology",
+		"- **customer**: An enterprise organization.",
+		"## Rules",
+		"- Never claim performance numbers without a benchmark citation.",
+		"## Goals",
+		"Lead with customer impact.",
+	} {
+		if !strings.Contains(doc.Body, want) {
+			t.Errorf("legacy body missing %q:\n%s", want, doc.Body)
+		}
+	}
+	// The legacy shape is read-only: re-marshaling emits the new body form.
+	out, err := frames.Marshal(doc)
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	if strings.Contains(string(out), "slots:") {
+		t.Errorf("marshal must not emit the legacy slots key:\n%s", out)
 	}
 }
 
@@ -74,96 +177,52 @@ func TestValidate_CollectsFieldErrors(t *testing.T) {
 			wantErrorPaths: []string{"version"},
 		},
 		{
-			name: "empty terminology definition",
+			name: "bad visibility",
 			doc: &frames.Doc{
 				Name:        "good-name",
 				Description: "valid description",
 				Version:     "1.0.0",
+				Visibility:  "everyone",
 			},
-			// Slots.Terminology is set after the slice literal (see below tests[4]).
-			wantErrorPaths: []string{"slots.terminology[0].definition"},
-		},
-		{
-			name: "duplicate term",
-			doc: func() *frames.Doc {
-				d := &frames.Doc{
-					Name:        "good-name",
-					Description: "valid description",
-					Version:     "1.0.0",
-				}
-				d.Slots.Terminology = []frames.Term{
-					{Term: "foo", Definition: "first"},
-					{Term: "foo", Definition: "second"},
-				}
-				return d
-			}(),
-			wantErrorPaths: []string{"slots.terminology[1].term"},
-		},
-		{
-			name: "empty rule",
-			doc: func() *frames.Doc {
-				d := &frames.Doc{
-					Name:        "good-name",
-					Description: "valid description",
-					Version:     "1.0.0",
-				}
-				d.Slots.Rules = []string{"valid rule", ""}
-				return d
-			}(),
-			wantErrorPaths: []string{"slots.rules[1]"},
+			wantErrorPaths: []string{"visibility"},
 		},
 		{
 			name: "extends missing slash in ref",
-			doc: func() *frames.Doc {
-				d := &frames.Doc{
-					Name:        "good-name",
-					Description: "valid description",
-					Version:     "1.0.0",
-				}
-				d.Extends = []frames.ExtendRef{{Ref: "noslash", Version: "1.0.0"}}
-				return d
-			}(),
+			doc: &frames.Doc{
+				Name:        "good-name",
+				Description: "valid description",
+				Version:     "1.0.0",
+				Extends:     []frames.ExtendRef{{Ref: "noslash", Version: "1.0.0"}},
+			},
 			wantErrorPaths: []string{"extends[0].ref"},
 		},
 		{
 			name: "extends unpinned version",
-			doc: func() *frames.Doc {
-				d := &frames.Doc{
-					Name:        "good-name",
-					Description: "valid description",
-					Version:     "1.0.0",
-				}
-				d.Extends = []frames.ExtendRef{{Ref: "org/frame", Version: ""}}
-				return d
-			}(),
+			doc: &frames.Doc{
+				Name:        "good-name",
+				Description: "valid description",
+				Version:     "1.0.0",
+				Extends:     []frames.ExtendRef{{Ref: "org/frame", Version: ""}},
+			},
 			wantErrorPaths: []string{"extends[0].version"},
 		},
 		{
 			name: "multiple errors collected at once",
-			doc: func() *frames.Doc {
-				d := &frames.Doc{
-					Name:        "Bad Name",
-					Description: "",
-					Version:     "",
-				}
-				d.Slots.Terminology = []frames.Term{
-					{Term: "x", Definition: ""},
-					{Term: "x", Definition: "dupe"},
-				}
-				return d
-			}(),
+			doc: &frames.Doc{
+				Name:        "Bad Name",
+				Description: "",
+				Version:     "",
+				Extends:     []frames.ExtendRef{{Ref: "noslash"}},
+			},
 			wantErrorPaths: []string{
 				"name",
 				"description",
 				"version",
-				"slots.terminology[0].definition",
-				"slots.terminology[1].term",
+				"extends[0].ref",
+				"extends[0].version",
 			},
 		},
 	}
-
-	// Set the empty-definition case's terminology (the entry above used a comment placeholder).
-	tests[4].doc.Slots.Terminology = []frames.Term{{Term: "x", Definition: ""}}
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -186,7 +245,7 @@ func TestValidate_CollectsFieldErrors(t *testing.T) {
 }
 
 func TestParse_RejectsUnknownKeys(t *testing.T) {
-	_, err := frames.Parse([]byte("name: x\nbogus: y\nslots: {}\n"))
+	_, err := frames.Parse([]byte("name: x\nbogus: y\nbody: text\n"))
 	if err == nil {
 		t.Fatal("expected error for unknown key, got nil")
 	}

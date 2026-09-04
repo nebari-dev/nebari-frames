@@ -13,7 +13,7 @@ import (
 func TestResolve(t *testing.T) {
 	url := testutil.NewStubServer(t, &testutil.StubService{
 		ResolveFn: func(_ context.Context, r *connect.Request[framesv1.ResolveFrameRequest]) (*connect.Response[framesv1.ResolveFrameResponse], error) {
-			return connect.NewResponse(&framesv1.ResolveFrameResponse{ResolvedContent: []byte("name: brand-voice\nslots:\n  rules:\n    - merged\n")}), nil
+			return connect.NewResponse(&framesv1.ResolveFrameResponse{ResolvedContent: []byte("name: brand-voice\nbody: |\n  merged\n")}), nil
 		},
 	})
 	out := runCmd(t, url, "resolve", "openteams/brand-voice@1.0.0")

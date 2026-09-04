@@ -14,13 +14,13 @@ See [Background §1.1 in the migration design doc](docs/design/2026-05-21-nebari
 
 ### Frame Spec conformance
 
-Frames are stored in a slot-typed YAML schema with inheritance and RBAC, which is richer than
-[Frame Spec v0.2](https://github.com/openteams-ai/frame-spec) describes. The registry interoperates
-with the spec rather than replacing it: every Frame **imports and exports as a conformant
-`.frame.md` document** (`type: frame [0.2]`, YAML frontmatter, one `##` section per slot), and the
-web app's authoring page offers that document as a second editor alongside the typed form. Exports
-pass the spec project's own `tools/validate_frames.py`; `examples/*.frame.md` are checked-in
-examples of the output.
+A Frame's content is a single free-form markdown body, exactly as
+[Frame Spec v0.2](https://github.com/openteams-ai/frame-spec) defines it; the registry adds
+metadata, versioning, inheritance, and RBAC around that body. Every Frame **imports and exports as
+a conformant `.frame.md` document** (`type: frame [0.2]`, YAML frontmatter, then the body
+verbatim), and the web app's authoring page offers that document as a second editor alongside the
+form. Exports pass the spec project's own `tools/validate_frames.py`; `examples/*.frame.md` are
+checked-in examples of the output.
 
 The spec's optional `visibility`, `scope`, and `maintainer` fields travel with the document so a
 Frame survives a round trip through other tooling. **`visibility` is declared intent, not an access
@@ -36,7 +36,7 @@ control** - who may read a Frame is decided by this registry's roles and grants.
 make dev
 ```
 
-Runs the backend (dev mode, no OIDC) on `:8080` and the Vite dev server on `:5173`, seeded with representative sample data (an org, members across roles, and frames with full slot content, multi-level inheritance, and versions). Open **http://localhost:5173**; UI edits hot-reload. Ctrl-C stops both.
+Runs the backend (dev mode, no OIDC) on `:8080` and the Vite dev server on `:5173`, seeded with representative sample data (an org, members across roles, and frames with real body content, multi-level inheritance, and versions). Open **http://localhost:5173**; UI edits hot-reload. Ctrl-C stops both.
 
 There is no login step in this loop: dev mode disables OIDC and injects a fixed identity, so you land straight in the app as `dev-user`, an org admin - and never hit the "No organization access" screen (see [Troubleshooting](#troubleshooting)).
 

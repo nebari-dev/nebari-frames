@@ -16,7 +16,7 @@ export function RequireMembership() {
     if (code === Code.Unauthenticated) {
       return <Navigate to="/login" replace />;
     }
-    return <div className="p-8 text-destructive">Something went wrong.</div>;
+    return <div className="p-8 text-destructive-foreground">Something went wrong.</div>;
   }
   return <Outlet />;
 }

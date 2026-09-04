@@ -3,32 +3,6 @@ import { type FrameDoc, VISIBILITY_VALUES, DEFAULT_VISIBILITY } from "./frame-ya
 
 const NAME_RE = /^[a-z0-9][a-z0-9-]{0,63}$/;
 
-const termSchema = z.object({
-  term: z.string().trim().min(1, "must not be empty"),
-  definition: z.string().trim().min(1, "must not be empty"),
-});
-
-const nonEmptyList = z.array(z.string().trim().min(1, "must not be empty")).optional();
-
-const slotsSchema = z.object({
-  terminology: z
-    .array(termSchema)
-    .optional()
-    .refine(
-      (terms) => !terms || new Set(terms.map((t) => t.term)).size === terms.length,
-      { message: "duplicate term within slot" },
-    ),
-  rules: nonEmptyList,
-  skills: nonEmptyList,
-  prompts: nonEmptyList,
-  tool_specs: z.string().optional(),
-  goals: z.string().optional(),
-  style: z.string().optional(),
-  norms: z.string().optional(),
-  architecture: z.string().optional(),
-  business_process: z.string().optional(),
-});
-
 const extendSchema = z.object({
   ref: z.string().refine((r) => r.includes("/"), { message: "must be org_slug/frame_name" }),
   version: z.string().trim().min(1, "must be pinned to a version"),
@@ -50,7 +24,10 @@ export const authoringSchema = z.object({
   maintainer: z.string(),
   extends: z.array(extendSchema).optional(),
   excludes: z.array(z.string().trim().min(1)).optional(),
-  slots: slotsSchema,
+  template: z.boolean(),
+  // The body is free-form markdown; Frame Spec v0.2 imposes no structure and
+  // an empty body is valid.
+  body: z.string(),
 }) satisfies z.ZodType<FrameDoc>;
 
 // Resolver schema for the form: includes the version-scoped changelog. Used so
@@ -68,7 +45,8 @@ export function emptyFrameDoc(): FrameDoc {
     visibility: DEFAULT_VISIBILITY,
     scope: "",
     maintainer: "",
-    slots: {},
+    template: false,
+    body: "",
   };
 }
 

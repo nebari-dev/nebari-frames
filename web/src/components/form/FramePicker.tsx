@@ -70,12 +70,12 @@ export function FramePicker({
       </div>
       {withVersion && (
         <Select
-          value={value.version || null}
+          value={value.version}
           disabled={value.ref === ""}
-          onValueChange={(version) => onChange({ ...value, version: version ?? "" })}
+          onValueChange={(v) => onChange({ ...value, version: String(v) })}
         >
-          <SelectTrigger aria-label="version" className="w-32">
-            <SelectValue placeholder="version..." />
+          <SelectTrigger aria-label="version" className="w-32 shrink-0">
+            <SelectValue placeholder="version…" />
           </SelectTrigger>
           <SelectContent>
             {(versionsQ.data?.versions ?? []).map((v) => (

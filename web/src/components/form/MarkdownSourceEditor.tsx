@@ -2,8 +2,8 @@ import { useRef, useState } from "react";
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 import { Alert } from "@/components/ui/alert";
-import { MarkdownView } from "@/components/MarkdownView";
 import { cn } from "@/lib/utils";
+import { fillTextareaSlot } from "./fill-height";
 
 // The advanced editor: the frame as a single spec-conformant .frame.md
 // document. This is also the import surface, since pasting or dropping a file
@@ -19,7 +19,6 @@ export function MarkdownSourceEditor({
   errors: string[];
   busy?: boolean;
 }) {
-  const [preview, setPreview] = useState(false);
   const [dragging, setDragging] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
 
@@ -31,7 +30,9 @@ export function MarkdownSourceEditor({
   return (
     <div
       className={cn(
-        "space-y-3 rounded-md border border-dashed p-3 transition-colors",
+        "flex min-h-0 flex-1 flex-col gap-3 rounded-md border border-dashed p-3 transition-colors",
+        // The editor fills the height left below the page chrome.
+        fillTextareaSlot,
         dragging ? "border-ring bg-accent/40" : "border-transparent",
       )}
       onDragOver={(e) => {
@@ -47,8 +48,7 @@ export function MarkdownSourceEditor({
     >
       <div className="flex items-center justify-between gap-2">
         <p className="text-xs text-muted-foreground">
-          Frame Spec v0.2 &mdash; YAML frontmatter, then one <code>##</code> section per slot.
-          Use <code>###</code> or deeper for headings inside a section.
+          Frame Spec v0.2 &mdash; YAML frontmatter, then a free-form Markdown body.
         </p>
         <div className="flex shrink-0 gap-2">
           <input
@@ -61,9 +61,6 @@ export function MarkdownSourceEditor({
           />
           <Button type="button" variant="outline" size="sm" onClick={() => fileRef.current?.click()}>
             Load file
-          </Button>
-          <Button type="button" variant="ghost" size="sm" onClick={() => setPreview((p) => !p)}>
-            {preview ? "Edit" : "Preview"}
           </Button>
         </div>
       </div>
@@ -78,21 +75,15 @@ export function MarkdownSourceEditor({
         </Alert>
       )}
 
-      {preview ? (
-        <div className="rounded-md border border-border p-3">
-          <MarkdownView source={value} />
-        </div>
-      ) : (
-        <Textarea
-          aria-label="Frame markdown source"
-          spellCheck={false}
-          className="min-h-[32rem] font-mono text-xs"
-          placeholder={"---\ntype: frame [0.2]\nname: my-frame\ndescription: What this frame is for.\nvisibility: internal\nversion: 1.0.0\n---\n\n## Goals\n\n- ...\n\nOr drop a .frame.md file here."}
-          value={value}
-          disabled={busy}
-          onChange={(e) => onChange(e.target.value)}
-        />
-      )}
+      <Textarea
+        aria-label="Frame markdown source"
+        spellCheck={false}
+        className="min-h-[20rem] flex-1 font-mono text-xs"
+        placeholder={"---\ntype: frame [0.2]\nname: my-frame\ndescription: What this frame is for.\nvisibility: internal\nversion: 1.0.0\n---\n\nThe context this frame carries, as free-form Markdown.\n\nOr drop a .frame.md file here."}
+        value={value}
+        disabled={busy}
+        onChange={(e) => onChange(e.target.value)}
+      />
     </div>
   );
 }

@@ -1,7 +1,10 @@
 import { Link, useParams } from "react-router";
+import { ArrowLeft } from "lucide-react";
 import { getConnectProvider } from "@/lib/connect-providers";
 import { CopyField } from "@/components/connect/CopyField";
 import { MarkdownView } from "@/components/MarkdownView";
+import { PageHeader } from "@/components/layout/PageHeader";
+import { Button } from "@/components/ui/button";
 
 export function ConnectProviderPage() {
   const { provider: id = "" } = useParams();
@@ -9,14 +12,15 @@ export function ConnectProviderPage() {
 
   if (!provider || provider.status !== "available" || !provider.steps) {
     return (
-      <div className="space-y-4">
-        <h1 className="text-2xl font-semibold">Not available yet</h1>
-        <p className="text-muted-foreground">
-          We don&apos;t have connector instructions for this provider yet.
-        </p>
-        <Link to="/connect" className="text-sm text-primary hover:underline">
+      <div className="space-y-4 motion-safe:animate-fade-in">
+        <PageHeader
+          title="Not available yet"
+          description="We don't have connector instructions for this provider yet."
+        />
+        <Button variant="outline" render={<Link to="/connect" />}>
+          <ArrowLeft />
           Back to Connect
-        </Link>
+        </Button>
       </div>
     );
   }
@@ -24,22 +28,20 @@ export function ConnectProviderPage() {
   const connectorUrl = `${window.location.origin}/mcp`;
 
   return (
-    <div className="space-y-6 max-w-2xl">
-      <header className="space-y-1">
-        <h1 className="text-2xl font-semibold">{provider.name}</h1>
-        <p className="text-muted-foreground">
-          Connect {provider.name} to the Frames Hub in a few steps.
-        </p>
-      </header>
+    <div className="max-w-2xl space-y-6 motion-safe:animate-fade-in">
+      <PageHeader
+        title={provider.name}
+        description={`Connect ${provider.name} to the Frames Hub in a few steps.`}
+      />
 
       <CopyField label="Connector URL" value={connectorUrl} copyLabel="Copy URL" />
 
       <ol className="space-y-4">
         {provider.steps.map((step, i) => (
           <li key={i} className="space-y-1">
-            <div className="font-medium">
+            <h2 className="text-sm font-medium text-foreground">
               {i + 1}. {step.title}
-            </div>
+            </h2>
             <MarkdownView source={step.body} />
           </li>
         ))}
@@ -47,7 +49,7 @@ export function ConnectProviderPage() {
 
       {provider.verifyPrompt && (
         <div className="space-y-2">
-          <div className="font-medium">Verify it worked</div>
+          <h2 className="text-sm font-medium text-foreground">Verify it worked</h2>
           <p className="text-sm text-muted-foreground">
             Start a new chat and try a Frame-aware prompt:
           </p>
@@ -56,7 +58,7 @@ export function ConnectProviderPage() {
       )}
 
       {provider.lastVerified && (
-        <footer className="text-xs text-muted-foreground border-t pt-3">
+        <footer className="border-t border-border pt-3 text-xs text-muted-foreground">
           Last verified: {provider.lastVerified}
         </footer>
       )}

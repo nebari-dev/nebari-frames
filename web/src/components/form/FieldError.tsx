@@ -29,7 +29,7 @@ export function FieldError({ name }: { name: string }) {
   const message = useFieldError(name);
   if (!message) return null;
   return (
-    <span id={errorId(name)} role="alert" className="block text-xs text-destructive">
+    <span id={errorId(name)} role="alert" className="block text-xs text-destructive-foreground">
       {message}
     </span>
   );

@@ -1,4 +1,4 @@
-import { Route, Routes } from "react-router";
+import { Navigate, Route, Routes } from "react-router";
 import { RequireAuth } from "./RequireAuth";
 import { RequireMembership } from "./RequireMembership";
 import { RequireAdmin } from "./RequireAdmin";
@@ -11,9 +11,9 @@ import { FrameDetailPage } from "@/pages/FrameDetailPage";
 import { FrameAuthoringPage } from "@/pages/FrameAuthoringPage";
 import { ConnectHubPage } from "@/pages/ConnectHubPage";
 import { ConnectProviderPage } from "@/pages/ConnectProviderPage";
-import { AdminHomePage } from "@/pages/AdminHomePage";
+import { AdminLayout } from "@/pages/AdminLayout";
 import { AdminMembersPage } from "@/pages/AdminMembersPage";
-import { AdminFramesPage } from "@/pages/AdminFramesPage";
+import { AdminTemplatesPage } from "@/pages/AdminTemplatesPage";
 
 export function AppRoutes() {
   return (
@@ -31,9 +31,11 @@ export function AppRoutes() {
             <Route path="/connect" element={<ConnectHubPage />} />
             <Route path="/connect/:provider" element={<ConnectProviderPage />} />
             <Route element={<RequireAdmin />}>
-              <Route path="/admin" element={<AdminHomePage />} />
-              <Route path="/admin/members" element={<AdminMembersPage />} />
-              <Route path="/admin/frames" element={<AdminFramesPage />} />
+              <Route path="/admin" element={<AdminLayout />}>
+                <Route index element={<Navigate to="/admin/members" replace />} />
+                <Route path="members" element={<AdminMembersPage />} />
+                <Route path="templates" element={<AdminTemplatesPage />} />
+              </Route>
             </Route>
           </Route>
         </Route>

@@ -319,14 +319,45 @@ slots:
 
 1. Walk `extends` graph depth-first from the requested Frame version. Abort with error on cycle.
 2. Remove any node whose `frame_id` appears in the requested Frame's `excludes`.
-3. Merge slots in `extends` order (later wins):
-   - `terminology`: merge by `term`; later definition wins on collision.
-   - Typed-list-of-strings (`rules`, `skills`, `prompts`): concatenate, dedupe preserving last occurrence.
-   - Prose slots (and `tool_specs`): later parent's content replaces earlier entirely.
-4. Apply the Frame's own slot values last; they override all parents.
+3. Append each ancestor's body in `extends` order, ancestors first. A parent reachable through more
+   than one path (a diamond) contributes once, keyed by `ref@version`.
+4. Append the Frame's own body last, so its guidance reads after everything it inherits.
 5. Return the resolved Frame.
 
 Resolution at read time (not publish time) keeps storage simple. Pinned parent refs mean read-time results are stable until the child re-publishes.
+
+##### Why precedence is reading order, and what that costs
+
+> **Supersedes step 3 above** ([#59](https://github.com/nebari-dev/nebari-frames/issues/59)), which
+> merged ten typed slots. This is the trade that came with the free-form body, recorded here because
+> it is a deliberate loss rather than an oversight.
+
+Per-slot merging gave a child two kinds of override that concatenation does not:
+
+- **`terminology` merged by key.** A parent defining `customer` and a child redefining it produced
+  one entry, the child's. Now both definitions appear in the resolved body, adjacent.
+- **Prose slots replaced outright.** A child's `style` erased its parent's. Now both paragraphs
+  appear, parent first.
+
+Two things did *not* change, and are worth naming so this is not read as broader than it is. Rules,
+skills, and prompts were already append-with-last-wins-dedupe, so fine-grained **removal** never
+existed on either side - a child could add to a parent's rules or restate one, never delete one. And
+`excludes` still works, at whole-ancestor granularity.
+
+**Why not keep per-section override.** It requires the body to have addressable sections, which is
+precisely what Frame Spec v0.2 does not define. Reintroducing a fixed section vocabulary to support
+override would rebuild the ten-slot schema under another name and give back the authoring rigidity
+the free-form body exists to remove.
+
+**What we are betting on instead.** Later guidance overriding earlier guidance is a convention the
+reader honors, not a guarantee the format enforces. That is a real assertion about model behavior,
+and `mcp/compose.go` emits the concatenation flat, so a model sees both the parent's and the child's
+`customer` definition with no marker saying which wins. Ordering is the only signal.
+
+**If the bet turns out badly**, the fix is narrower than restoring slots: `excludes` scoped to a
+heading path, or an explicit `## Overrides` convention the composer understands. Neither needs the
+schema back. The signal to watch for is resolved Frames where a child's correction is visibly not
+taking effect.
 
 #### Frame Spec metadata and the `.frame.md` interchange format
 
@@ -347,20 +378,29 @@ stateless `ConvertFrame` RPC and used for the web app's Markdown editor, import,
 | `visibility` / `scope` / `maintainer` | same keys |
 | `inherits: ["org/name@1.2.0", ...]` | `extends: [{ref, version}]` - split on the last `@` |
 | `x-nebari-excludes` | `excludes` (no spec equivalent; namespaced as the spec advises) |
-| `## Terminology` -> `- **term**: definition` | `slots.terminology` |
-| `## Rules` / `## Skills` / `## Prompts` | the matching list slots |
-| `## Goals`, `## Style`, ... | the matching prose slots |
+| everything after the closing `---` | `body`, verbatim |
+| ~~`## Terminology` -> `- **term**: definition`~~ | ~~`slots.terminology`~~ |
+| ~~`## Rules` / `## Skills` / `## Prompts`~~ | ~~the matching list slots~~ |
+| ~~`## Goals`, `## Style`, ...~~ | ~~the matching prose slots~~ |
 
 Inheritance order agrees with the spec by coincidence rather than adaptation: the spec says later
 `inherits` entries win, which is what `resolver.go` already did for `extends`.
 
-Section headings and ordering come from `frames.SlotTable`, shared with `mcp/compose.go`, so the two
-markdown renderings cannot drift. `examples/*.frame.md` are checked-in golden files asserting both
-`yaml -> md` output and `yaml -> md -> yaml` identity; they also pass the frame-spec project's own
+> **Superseded by [#59](https://github.com/nebari-dev/nebari-frames/issues/59):** a Frame's content
+> is a single free-form markdown `body`, matching Frame Spec v0.2, which defines no body structure.
+> The struck-through rows above describe the retired ten-slot schema. Documents published under it
+> are still readable - `backend/internal/frames/legacy.go` folds a `slots:` block into a body on
+> read, and nothing writes that shape again.
+
+`examples/*.frame.md` are checked-in golden files asserting both `yaml -> md` output and
+`yaml -> md -> yaml` identity; they also pass the frame-spec project's own
 `tools/validate_frames.py`.
 
-Adding a slot therefore means editing `SlotTable`, `Slots`, `validate.go`, the two zod mirrors in
-`web/src/lib/`, and regenerating the goldens - the codec and the MCP composer follow automatically.
+~~Adding a slot therefore means editing `SlotTable`, `Slots`, `validate.go`, the two zod mirrors in
+`web/src/lib/`, and regenerating the goldens - the codec and the MCP composer follow automatically.~~
+There are no slots to add. The one place the retired rendering still exists twice - Go's
+`legacy.go` and the web's `frame-yaml.ts`, which renders a stored legacy version without a server
+round trip - is pinned to the shared fixture in `testdata/legacy-slots/`.
 
 ### 3.5 RBAC model
 

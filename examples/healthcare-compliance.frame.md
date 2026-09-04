@@ -8,8 +8,6 @@ scope: department
 maintainer: legal
 ---
 
-# healthcare-compliance
-
 ## Rules
 
 - Never state or imply HIPAA compliance without legal sign-off.

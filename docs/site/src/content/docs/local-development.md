@@ -12,7 +12,7 @@ Two loops cover local development, both documented in the project [Makefile](htt
 make dev
 ```
 
-Runs the backend in dev mode (no OIDC) on `:8080` and the Vite dev server on `:5173`, seeded with representative sample data: an org, members across roles, and Frames with full slot content, multi-level inheritance, and versions. Open **http://localhost:5173** - UI edits hot-reload. A single **Ctrl-C** stops both processes.
+Runs the backend in dev mode (no OIDC) on `:8080` and the Vite dev server on `:5173`, seeded with representative sample data: an org, members across roles, and Frames with real body content, multi-level inheritance, and versions. Open **http://localhost:5173** - UI edits hot-reload. A single **Ctrl-C** stops both processes.
 
 There is no login step in this loop. Dev mode disables OIDC and injects a fixed identity, so you land straight in the app as `dev-user`, an org admin, and never hit the "No organization access" screen (see [Troubleshooting](/troubleshooting/)).
 

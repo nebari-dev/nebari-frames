@@ -165,11 +165,19 @@ takes the version from the document's own frontmatter, so the publish dialog off
 changelog there. Import (`/frames/new?import=1`, reached from the catalog's "Import .frame.md"
 button) lands straight in the Markdown editor with paste/drop/Load file.
 
-**Editor kinds per section** are unchanged: terminology is a two-column row editor, rules/skills/
+~~**Editor kinds per section** are unchanged: terminology is a two-column row editor, rules/skills/
 prompts are single-column row editors, prose sections are markdown textareas with a preview
 toggle. The section list (keys, labels, editor kind, hints) lives once in
 `web/src/lib/slot-sections.ts`, mirroring the Go `SlotTable`; the read-only renderer
-(`FrameSlots`) and the editor both consume it.
+(`FrameSlots`) and the editor both consume it.~~
+
+> **Superseded by [#59](https://github.com/nebari-dev/nebari-frames/issues/59):** there are no
+> sections to have editor kinds for. A Frame's content is a single free-form markdown body,
+> matching Frame Spec v0.2, so authoring is one markdown editor with starter templates and the
+> `.frame.md` source mode described above. `web/src/lib/slot-sections.ts` and the Go `SlotTable`
+> it mirrored are both gone; `web/src/lib/frame-templates.ts` supplies the starting points that
+> the per-section hints used to. Versions published under the ten-slot schema are still readable:
+> the backend folds a legacy `slots:` block into a body on read (`backend/internal/frames/legacy.go`).
 
 **The view page mirrors the editor.** Frame Detail leads with identity (name, version badges,
 visibility/scope badges, description, maintainer, inherits chips linking to parents) and then the
@@ -180,23 +188,27 @@ a small menu (Download `.frame.md` / Copy as Markdown) available to anyone who c
 
 **Validation feedback.** Two phases, as before: zod client-side, then server `FieldViolations` on
 publish. Every field renders its own message through the shared `FieldError` component
-(`components/form/FieldError.tsx`), which also wires `aria-invalid` / `aria-describedby`. Server
+(`components/form/FieldError.tsx`), which also wires `aria-invalid` / `aria-describedby`. ~~Server
 paths use bracket notation (`slots.rules[0]`) while inputs register dotted paths
 (`slots.rules.0`); react-hook-form's `get` resolves both to the same node, so they meet on the
-input that caused them. Cycle detection in `extends` remains a form-level banner.
+input that caused them.~~ (Superseded by [#59](https://github.com/nebari-dev/nebari-frames/issues/59):
+with one body field there are no indexed slot paths to reconcile.) Cycle detection in `extends`
+remains a form-level banner.
 
 **The `.frame.md` codec.** Conversion lives only in Go (`backend/internal/frames/framemd.go`) and is
-reached through one stateless `ConvertFrame` RPC, so the slot table is not mirrored into TypeScript
-a fifth time. `frames.SlotTable` is the single source of slot keys, markdown headings, and content
-shape, shared with `mcp/compose.go`. Round-tripping is covered by a golden corpus over `examples/`.
+reached through one stateless `ConvertFrame` RPC, so the codec is not mirrored into TypeScript.
+Round-tripping is covered by a golden corpus over `examples/`.
 
-Parsing is strict about **structure** and lenient about **values**:
+Parsing is strict about the **frontmatter** and never rejects the **body**:
 
-- *Structural* (blocks conversion): unknown `##` heading, unknown frontmatter key, malformed
-  terminology bullet, missing/unterminated frontmatter, bad `type`. Errors name the line and
-  suggest the closest slot (`unknown section "## Ways of Working" - did you mean "## Norms"?`).
+- *Structural* (blocks conversion): unknown frontmatter key, missing or unterminated frontmatter,
+  bad `type`. Errors name the line. The frontmatter delimiter is matched only at column 0, so an
+  indented `---` inside a multi-line YAML value is content rather than a terminator.
 - *Value* (does not block): an unpinned or unqualified `inherits`, an empty description. These
   convert successfully and land as fixable inline errors in the form.
+
+The body itself is free-form under Frame Spec v0.2, so there are no headings to validate and no
+"did you mean" suggestions to make - whatever is after the closing `---` is the content.
 
 That split is what makes import usable: the spec's own `examples/complete/frame.md` uses
 `inherits: editorial-style-guide` - bare name, no org, no pinned version - which a single strict
@@ -221,7 +233,7 @@ Frame Detail (`/frames/:org/:name`) is the highest-value reading screen:
 - Header: name, description, version, owner, "Edit" / "Delete" buttons (visible per server-returned permissions).
 - **"Use this Frame" panel** (right rail on desktop, top section on mobile): one-click links to per-provider Connect pages; code block showing the MCP resource URI for users who know what to do with it.
 - **Inheritance trail**: visual representation of the `extends` chain. Each parent is clickable and links to its detail page.
-- **Slot rendering**: all populated slots rendered in their typed form (terminology as a definition list; rules / skills / prompts as bullet lists; prose slots as rendered markdown). Empty slots hidden. Each section collapsible.
+- ~~**Slot rendering**: all populated slots rendered in their typed form (terminology as a definition list; rules / skills / prompts as bullet lists; prose slots as rendered markdown). Empty slots hidden. Each section collapsible.~~ **Superseded by [#59](https://github.com/nebari-dev/nebari-frames/issues/59):** the body renders as markdown, whatever structure its author gave it. The detail page is the authoring form rendered read-only, so reading and editing are one surface rather than two renderers to keep in step.
 - **Version history**: collapsed by default; expandable to see all published versions with timestamps and changelogs. Each version row links to its read-only detail page (no in-app diff in MVP; roadmap).
 
 ### 3.6 Per-provider Connect pages

@@ -84,7 +84,7 @@ type FrameServiceClient interface {
 	ListFrameVersions(context.Context, *connect.Request[v1.ListFrameVersionsRequest]) (*connect.Response[v1.ListFrameVersionsResponse], error)
 	// Write - delete a frame. Blocks if the frame is a parent unless force=true.
 	DeleteFrame(context.Context, *connect.Request[v1.DeleteFrameRequest]) (*connect.Response[v1.DeleteFrameResponse], error)
-	// Pure conversion between the canonical slot YAML and the spec-conformant
+	// Pure conversion between the canonical YAML and the spec-conformant
 	// .frame.md form. Stateless and unauthenticated beyond org membership.
 	ConvertFrame(context.Context, *connect.Request[v1.ConvertFrameRequest]) (*connect.Response[v1.ConvertFrameResponse], error)
 	// Admin only - list the caller's org members.
@@ -275,7 +275,7 @@ type FrameServiceHandler interface {
 	ListFrameVersions(context.Context, *connect.Request[v1.ListFrameVersionsRequest]) (*connect.Response[v1.ListFrameVersionsResponse], error)
 	// Write - delete a frame. Blocks if the frame is a parent unless force=true.
 	DeleteFrame(context.Context, *connect.Request[v1.DeleteFrameRequest]) (*connect.Response[v1.DeleteFrameResponse], error)
-	// Pure conversion between the canonical slot YAML and the spec-conformant
+	// Pure conversion between the canonical YAML and the spec-conformant
 	// .frame.md form. Stateless and unauthenticated beyond org membership.
 	ConvertFrame(context.Context, *connect.Request[v1.ConvertFrameRequest]) (*connect.Response[v1.ConvertFrameResponse], error)
 	// Admin only - list the caller's org members.

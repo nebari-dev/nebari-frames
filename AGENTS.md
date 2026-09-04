@@ -80,17 +80,24 @@ store.Repository**.
   `viewer | publisher | admin`, permissions `read | edit | delete`. A missing read permission is
   surfaced as 404, never 403, so frame existence does not leak.
 - `backend/internal/frames` owns the Frame content model:
-  - `schema.go` - the `Doc`/`Slots` YAML types. Parsing uses `KnownFields(true)`: the slot schema is
-    fixed and unknown keys are an error.
-  - `slots.go` - `SlotTable` is the single source of truth for slot keys, markdown headings, and
-    content shape (terms / list / prose). Add or rename a slot here only; the `.frame.md` codec and
-    the MCP composer both read it.
-  - `framemd.go` - the Frame Spec v0.2 `.frame.md` codec (YAML frontmatter plus one `##` section per
-    slot). Round-trip fidelity matters: `examples/*.yaml` and `examples/*.frame.md` are checked-in
-    conformance fixtures asserted by `examples_test.go`.
-  - `resolver.go` - inheritance merge over `extends`/`excludes`. Later parents win, the child's own
-    slots win last, cycles produce `CycleError`, and an unreadable ancestor propagates
-    `ErrParentUnreadable` rather than silently dropping content.
+  - `schema.go` - the `Doc` YAML type. A Frame's content is a single free-form markdown `Body`,
+    matching Frame Spec v0.2, which requires four frontmatter fields and defines no body structure.
+    Parsing uses `KnownFields(true)`: the document schema is fixed and unknown keys are an error.
+  - `legacy.go` - read-only support for documents published under the retired ten-slot schema.
+    `Parse` folds a `slots:` block into `Body`; nothing ever writes that shape again. Stored versions
+    are immutable, so this has to stay readable forever. It is mirrored once, in
+    `web/src/lib/frame-yaml.ts`, because the web app renders a stored legacy version without a
+    server round trip - and that render can become canonical content when a legacy version is
+    restored. Both sides are pinned to `testdata/legacy-slots/`; change one and you must
+    regenerate `expected.md` and update the other.
+  - `framemd.go` - the Frame Spec v0.2 `.frame.md` codec: YAML frontmatter, then the body verbatim.
+    The frontmatter delimiter matches only at column 0, since an indented `---` inside a multi-line
+    YAML value would otherwise truncate the document. Round-trip fidelity matters: `examples/*.yaml`
+    and `examples/*.frame.md` are checked-in conformance fixtures asserted by `examples_test.go`.
+  - `resolver.go` - inheritance merge over `extends`/`excludes`. Ancestors' bodies are concatenated
+    ancestors-first so the child's own guidance reads last, each `ref@version` is included once,
+    cycles produce `CycleError`, and an unreadable ancestor propagates `ErrParentUnreadable` rather
+    than silently dropping content.
   - `service.go` - `publish` is the single write path behind both front doors. It authorizes before
     parsing caller-supplied content, enforces `MaxContentBytes` on the stored document, refuses a
     version that does not advance `latest_version`, and refuses a write whose declared base version
@@ -110,7 +117,7 @@ store.Repository**.
   Connect API uses, so the adapter itself performs no permission or validation logic. Two rules
   matter when changing it. `update_frame` merges onto the frame's own document from `SourceDoc` and
   never onto the composed form `get_frame` returns by default - merging onto a resolved document
-  would copy every parent's slots into the child and drop its `extends` edges. And the base version
+  would bake every ancestor's body into the child and drop its `extends` edges. And the base version
   it asserts against comes from the caller (`base_version`, read via `get_frame source=true`), never
   from a fresh server-side read, which would always match and make the check inert. Request bodies
   are capped at `mcp.MaxRequestBytes`; the cap must wrap the outermost handler, since the bearer
@@ -141,8 +148,9 @@ store.Repository**.
 - A test that asserts only "this was rejected" usually proves nothing: an unrelated 401, or a parse
   failure, satisfies it just as well. Assert the specific code or message, and pair a rejection with
   a control that must succeed. Reflective guards in `backend/internal/mcp/resources_test.go` walk
-  `frames.SlotTable` and `frames.Doc`, so adding a slot without wiring it through the MCP input
-  fails rather than silently dropping data.
+  `frames.Doc`, so adding a document field without wiring it through the MCP input fails rather than
+  silently dropping data - the guard names the field and asks for a decision rather than defaulting
+  to one.
 - Comments in this repo explain *why* a constraint exists (pinned CI versions, fail-closed
   readiness, the vite `@bufbuild/protobuf` aliases). Preserve that rationale when editing near it,
   and keep new comments in the same register.

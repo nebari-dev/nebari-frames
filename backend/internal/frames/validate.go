@@ -40,7 +40,8 @@ func (e *ValidationError) Error() string {
 	return strings.Join(parts, "; ")
 }
 
-// Validate checks the fixed 10-slot schema. Returns *ValidationError (non-nil
+// Validate checks a Doc's metadata fields and extends references. The body is
+// free-form markdown and is never rejected. Returns *ValidationError (non-nil
 // .Errors) or nil.
 func Validate(doc *Doc) error {
 	var errs []FieldError
@@ -64,30 +65,6 @@ func Validate(doc *Doc) error {
 	if v := doc.Visibility; v != "" && !validVisibility(v) {
 		add("visibility", "must be one of "+strings.Join(VisibilityValues, ", "))
 	}
-
-	seenTerm := map[string]bool{}
-	for i, term := range doc.Slots.Terminology {
-		if strings.TrimSpace(term.Term) == "" {
-			add(fmt.Sprintf("slots.terminology[%d].term", i), "must not be empty")
-		} else if seenTerm[term.Term] {
-			add(fmt.Sprintf("slots.terminology[%d].term", i), "duplicate term within slot")
-		}
-		seenTerm[term.Term] = true
-		if strings.TrimSpace(term.Definition) == "" {
-			add(fmt.Sprintf("slots.terminology[%d].definition", i), "must not be empty")
-		}
-	}
-
-	checkList := func(name string, items []string) {
-		for i, s := range items {
-			if strings.TrimSpace(s) == "" {
-				add(fmt.Sprintf("slots.%s[%d]", name, i), "must not be empty")
-			}
-		}
-	}
-	checkList("rules", doc.Slots.Rules)
-	checkList("skills", doc.Slots.Skills)
-	checkList("prompts", doc.Slots.Prompts)
 
 	for i, e := range doc.Extends {
 		if !strings.Contains(e.Ref, "/") {

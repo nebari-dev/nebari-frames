@@ -61,7 +61,7 @@ export function ExportMenu({ name, content }: { name: string; content: Uint8Arra
         </DropdownMenuContent>
       </DropdownMenuPortal>
       </DropdownMenu>
-      {error && <span className="text-xs text-destructive">{error}</span>}
+      {error && <span className="text-xs text-destructive-foreground">{error}</span>}
       {copied && <span className="text-xs text-muted-foreground" role="status">Copied to clipboard</span>}
     </div>
   );

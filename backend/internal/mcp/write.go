@@ -13,12 +13,6 @@ import (
 	"github.com/nebari-dev/nebari-frames/backend/internal/frames"
 )
 
-// termInput is one vocabulary entry in the terminology slot.
-type termInput struct {
-	Term       string `json:"term" jsonschema:"the term being defined"`
-	Definition string `json:"definition" jsonschema:"what the term means in this organization"`
-}
-
 // extendInput is a pinned reference to a parent Frame.
 type extendInput struct {
 	Ref     string `json:"ref" jsonschema:"parent Frame reference as org_slug/frame_name"`
@@ -32,11 +26,11 @@ type extendInput struct {
 // Every optional field is a pointer or a slice so that "not mentioned" is
 // distinguishable from "set to empty". update_frame relies on that distinction:
 // an omitted field keeps the Frame's current value, while an explicitly empty
-// one clears it. Without it, an AI updating a single slot would silently erase
+// one clears it. Without it, an AI updating only the body would silently erase
 // the Frame's metadata and - far worse - its inheritance edges.
 //
-// TestWriteFrameInputCoversDocFields walks frames.SlotTable and the frames.Doc
-// field set, so adding a slot or a document field without adding it here fails.
+// TestWriteFrameInputCoversDocFields walks the frames.Doc field set, so adding a
+// document field without adding it here fails.
 type writeFrameInput struct {
 	Name      string `json:"name" jsonschema:"Frame name: lowercase letters, digits and dashes, e.g. brand-voice"`
 	Version   string `json:"version" jsonschema:"semantic version for the new revision, e.g. 1.1.0; must not already exist"`
@@ -51,16 +45,16 @@ type writeFrameInput struct {
 	Scope       *string `json:"scope,omitempty" jsonschema:"who this Frame applies to, e.g. company or team-platform; omit to keep the current one, pass an empty string to clear it"`
 	Maintainer  *string `json:"maintainer,omitempty" jsonschema:"who owns this Frame; omit to keep the current one, pass an empty string to clear it"`
 
-	Terminology     []termInput `json:"terminology,omitempty" jsonschema:"named concepts and their definitions; omit to keep the current list, pass an empty list to clear it"`
-	Rules           []string    `json:"rules,omitempty" jsonschema:"constraints that must be followed; omit to keep the current list, pass an empty list to clear it"`
-	Skills          []string    `json:"skills,omitempty" jsonschema:"capabilities this Frame expects; omit to keep, empty list to clear"`
-	Prompts         []string    `json:"prompts,omitempty" jsonschema:"reusable prompts; omit to keep, empty list to clear"`
-	ToolSpecs       *string     `json:"tool_specs,omitempty" jsonschema:"tool specifications, as markdown; omit to keep the current text, pass an empty string to clear it"`
-	Goals           *string     `json:"goals,omitempty" jsonschema:"what the organization is trying to achieve, as markdown; omit to keep the current text, pass an empty string to clear it"`
-	Style           *string     `json:"style,omitempty" jsonschema:"voice and formatting conventions, as markdown; omit to keep the current text, pass an empty string to clear it"`
-	Norms           *string     `json:"norms,omitempty" jsonschema:"team norms and expectations, as markdown; omit to keep the current text, pass an empty string to clear it"`
-	Architecture    *string     `json:"architecture,omitempty" jsonschema:"system architecture context, as markdown; omit to keep the current text, pass an empty string to clear it"`
-	BusinessProcess *string     `json:"business_process,omitempty" jsonschema:"business process context, as markdown; omit to keep the current text, pass an empty string to clear it"`
+	// The whole content of a Frame. Frame Spec v0.2 defines no body structure,
+	// so there is nothing to break it into: headings, lists and prose are the
+	// author's choice. Callers that read a legacy slot-shaped Frame get it back
+	// already rendered as markdown, so editing and republishing it is a plain
+	// string edit rather than a schema migration.
+	Body *string `json:"body,omitempty" jsonschema:"the Frame's content as free-form markdown. Structure it however the guidance reads best - headings, lists, prose. Omit to keep the current body, pass an empty string to clear it"`
+	// Registry metadata rather than spec metadata, but MCP writes must carry it:
+	// without it create_frame could not produce a template at all, and an
+	// omitted-means-keep pointer stops update_frame de-listing one by accident.
+	Template *bool `json:"template,omitempty" jsonschema:"true to offer this Frame in the authoring UI's template picker; omit to keep the current setting"`
 
 	Extends  []extendInput `json:"extends,omitempty" jsonschema:"parent Frames this one inherits from, each pinned to a version; later parents win. Omit to keep the current inheritance, pass an empty list to remove all parents"`
 	Excludes []string      `json:"excludes,omitempty" jsonschema:"parent references to exclude from inheritance; omit to keep, empty list to clear"`
@@ -80,29 +74,10 @@ func (in writeFrameInput) applyTo(base *frames.Doc) *frames.Doc {
 	setString(&d.Visibility, in.Visibility)
 	setString(&d.Scope, in.Scope)
 	setString(&d.Maintainer, in.Maintainer)
+	setString(&d.Body, in.Body)
 
-	setString(&d.Slots.ToolSpecs, in.ToolSpecs)
-	setString(&d.Slots.Goals, in.Goals)
-	setString(&d.Slots.Style, in.Style)
-	setString(&d.Slots.Norms, in.Norms)
-	setString(&d.Slots.Architecture, in.Architecture)
-	setString(&d.Slots.BusinessProcess, in.BusinessProcess)
-
-	if in.Rules != nil {
-		d.Slots.Rules = in.Rules
-	}
-	if in.Skills != nil {
-		d.Slots.Skills = in.Skills
-	}
-	if in.Prompts != nil {
-		d.Slots.Prompts = in.Prompts
-	}
-	if in.Terminology != nil {
-		terms := make([]frames.Term, len(in.Terminology))
-		for i, t := range in.Terminology {
-			terms[i] = frames.Term{Term: t.Term, Definition: t.Definition}
-		}
-		d.Slots.Terminology = terms
+	if in.Template != nil {
+		d.Template = *in.Template
 	}
 	if in.Extends != nil {
 		refs := make([]frames.ExtendRef, len(in.Extends))
@@ -139,8 +114,8 @@ func (rs *resourceServer) createFrameTool(claims *auth.Claims) gomcp.ToolHandler
 // permission on the target and rejects an unknown name.
 //
 // The merge base is SourceDoc - the Frame's OWN document - and not the composed
-// form get_frame returns. Merging onto a resolved document would copy every
-// parent's slots into the child and drop its extends edges, quietly destroying
+// form get_frame returns. Merging onto a resolved document would bake every
+// ancestor's body into the child and drop its extends edges, quietly destroying
 // the inheritance graph.
 func (rs *resourceServer) updateFrameTool(claims *auth.Claims) gomcp.ToolHandlerFor[writeFrameInput, any] {
 	return func(ctx context.Context, _ *gomcp.CallToolRequest, in writeFrameInput) (*gomcp.CallToolResult, any, error) {

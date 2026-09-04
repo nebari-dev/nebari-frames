@@ -1,7 +1,6 @@
 package frames_test
 
 import (
-	"errors"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -60,8 +59,8 @@ func TestExampleFrames_MarkdownRoundTrip(t *testing.T) {
 			if err != nil {
 				t.Fatalf("unmarshal markdown: %v", err)
 			}
-			normalizeProse(doc)
-			normalizeProse(back)
+			normalizeBody(doc)
+			normalizeBody(back)
 			if !reflect.DeepEqual(doc, back) {
 				t.Errorf("round trip lost data.\noriginal:      %+v\nround-tripped: %+v", doc, back)
 			}
@@ -84,6 +83,7 @@ func TestMarshalMarkdown_Frontmatter(t *testing.T) {
 			{Ref: "industry/healthcare", Version: "2024.4"},
 		},
 		Excludes: []string{"openteams/legacy"},
+		Body:     "Lead with customer impact.",
 	}
 	md, err := frames.MarshalMarkdown(doc)
 	if err != nil {
@@ -98,7 +98,7 @@ func TestMarshalMarkdown_Frontmatter(t *testing.T) {
 		"    - openteams/company-core@1.2.0\n",
 		"    - industry/healthcare@2024.4\n",
 		"x-nebari-excludes:\n",
-		"# brand-voice\n",
+		"Lead with customer impact.\n",
 	} {
 		if !strings.Contains(got, want) {
 			t.Errorf("output missing %q\n---\n%s", want, got)
@@ -115,6 +115,23 @@ func TestMarshalMarkdown_DefaultsVisibility(t *testing.T) {
 	}
 	if !strings.Contains(string(md), "visibility: internal\n") {
 		t.Errorf("expected defaulted visibility, got:\n%s", md)
+	}
+}
+
+// The body is emitted verbatim: no synthesized title heading, no section
+// structure imposed on the author's markdown.
+func TestMarshalMarkdown_BodyPassthrough(t *testing.T) {
+	doc := &frames.Doc{
+		Name: "c", Description: "d", Version: "1.0.0", Visibility: "internal",
+		Body: "# My Own Title\n\nSome prose.\n\n## Any Heading At All\n\n- a bullet",
+	}
+	md, err := frames.MarshalMarkdown(doc)
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	wantTail := "---\n\n" + doc.Body + "\n"
+	if !strings.HasSuffix(string(md), wantTail) {
+		t.Errorf("body not passed through verbatim:\n%s", md)
 	}
 }
 
@@ -146,72 +163,87 @@ func TestUnmarshalMarkdown_InheritsForms(t *testing.T) {
 	}
 }
 
-// The spec's own examples/complete/frame.md must import: its sections all map
-// to slots, and its bare `inherits` must surface as a fixable field error from
-// Validate rather than blocking the conversion.
-func TestUnmarshalMarkdown_SpecCompleteExample(t *testing.T) {
+// Any body shape at all must import: the spec defines no sections, so headings,
+// loose prose, bullets, and content before a heading are all just body.
+func TestUnmarshalMarkdown_FreeFormBody(t *testing.T) {
 	src := `---
 type: frame
-name: engineering-documentation-style
-description: Writing guidance for engineering documentation.
-visibility: internal
+name: code-review-norms
+description: How this team reviews pull requests.
+visibility: shared
 version: 0.1.0
 scope: department
 maintainer: engineering enablement
-inherits: editorial-style-guide
 ---
 
-# Engineering Documentation Style
+# Code Review Norms
 
-## Goals
+Block on correctness, security, and data loss.
 
-- Make technical guidance easy to scan and act on.
-
-## Terminology
+## Whatever Heading
 
 - **abbreviation**: A shortened form defined before repeated use.
 
-## Style
-
-- Lead with the task outcome before implementation detail.
+Approve when the change is safe to merge, not when it is perfect.
 `
 	doc, err := frames.UnmarshalMarkdown([]byte(src))
 	if err != nil {
-		t.Fatalf("spec example must convert, got: %v", err)
+		t.Fatalf("free-form body must convert, got: %v", err)
 	}
 	if doc.Scope != "department" || doc.Maintainer != "engineering enablement" {
 		t.Errorf("metadata lost: %+v", doc)
 	}
-	if len(doc.Slots.Terminology) != 1 || doc.Slots.Terminology[0].Term != "abbreviation" {
-		t.Errorf("terminology not parsed: %+v", doc.Slots.Terminology)
+	for _, want := range []string{
+		"# Code Review Norms",
+		"Block on correctness, security, and data loss.",
+		"## Whatever Heading",
+		"- **abbreviation**: A shortened form defined before repeated use.",
+		"Approve when the change is safe to merge, not when it is perfect.",
+	} {
+		if !strings.Contains(doc.Body, want) {
+			t.Errorf("body missing %q:\n%s", want, doc.Body)
+		}
 	}
-	if !strings.Contains(doc.Slots.Goals, "easy to scan") {
-		t.Errorf("goals not parsed: %q", doc.Slots.Goals)
+	if err := frames.Validate(doc); err != nil {
+		t.Errorf("doc should validate: %v", err)
 	}
+}
 
-	verr := frames.Validate(doc)
-	if verr == nil {
-		t.Fatal("expected validation errors for the unpinned bare inherits ref")
+// The template flag has no Frame Spec equivalent, so it travels in the
+// x- namespace and must survive a round trip.
+func TestMarkdown_TemplateFlagRoundTrip(t *testing.T) {
+	doc := &frames.Doc{
+		Name: "starter", Description: "d", Version: "1.0.0",
+		Visibility: "internal", Template: true, Body: "Guidance.",
 	}
-	var ve *frames.ValidationError
-	if !errors.As(verr, &ve) {
-		t.Fatalf("expected *ValidationError, got %T", verr)
+	md, err := frames.MarshalMarkdown(doc)
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
 	}
-	wantPaths := map[string]bool{"extends[0].ref": false, "extends[0].version": false}
-	for _, fe := range ve.Errors {
-		if _, ok := wantPaths[fe.Path]; ok {
-			wantPaths[fe.Path] = true
-		}
+	if !strings.Contains(string(md), "x-nebari-template: true\n") {
+		t.Errorf("template flag not exported:\n%s", md)
 	}
-	for path, seen := range wantPaths {
-		if !seen {
-			t.Errorf("expected a fixable field error on %s, got %v", path, ve.Errors)
-		}
+	back, err := frames.UnmarshalMarkdown(md)
+	if err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if !back.Template {
+		t.Error("template flag lost on import")
+	}
+}
+
+func TestUnmarshalMarkdown_EmptyBody(t *testing.T) {
+	src := "---\ntype: frame [0.2]\nname: c\ndescription: d\nvisibility: internal\n---\n"
+	doc, err := frames.UnmarshalMarkdown([]byte(src))
+	if err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if doc.Body != "" {
+		t.Errorf("expected empty body, got %q", doc.Body)
 	}
 }
 
 func TestUnmarshalMarkdown_StructuralErrors(t *testing.T) {
-	const head = "---\ntype: frame [0.2]\nname: c\ndescription: d\nvisibility: internal\n---\n\n"
 	tests := []struct {
 		name    string
 		src     string
@@ -222,13 +254,6 @@ func TestUnmarshalMarkdown_StructuralErrors(t *testing.T) {
 		{"unknown frontmatter key", "---\ntype: frame [0.2]\nname: c\nowner: bob\n---\n", "unknown frontmatter key \"owner\""},
 		{"missing type", "---\nname: c\ndescription: d\nvisibility: internal\n---\n", "missing required frontmatter field \"type\""},
 		{"bad type", "---\ntype: skill\nname: c\ndescription: d\nvisibility: internal\n---\n", "type must be"},
-		{"unknown section", head + "## Ways of Working\n\n- a\n", "did you mean \"## Norms\"?"},
-		{"unknown section no hint", head + "## Escalation Path\n\n- a\n", "recognized sections are: Terminology"},
-		{"wrong case section", head + "## goals\n\ntext\n", "did you mean \"## Goals\"?"},
-		{"duplicate section", head + "## Goals\n\na\n\n## Goals\n\nb\n", "duplicate section"},
-		{"content before section", head + "Loose prose.\n\n## Goals\n\na\n", "content before the first section heading"},
-		{"malformed terminology", head + "## Terminology\n\n- customer is an org\n", "malformed terminology entry"},
-		{"stray content in list", head + "## Rules\n\nnot a bullet\n", "unexpected content in \"## Rules\""},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -246,65 +271,108 @@ func TestUnmarshalMarkdown_StructuralErrors(t *testing.T) {
 	}
 }
 
-// Multi-line list items are the one shape naive bullet rendering breaks: the
-// continuation lines must be indented on the way out and dedented on the way in.
-func TestMarkdown_MultiLineListItem(t *testing.T) {
-	doc := &frames.Doc{
-		Name: "c", Description: "d", Version: "1.0.0", Visibility: "internal",
-		Slots: frames.Slots{Rules: []string{
-			"First line of the rule.\nSecond line.\n\nA new paragraph.",
-			"A single-line rule.",
-		}},
-	}
-	md, err := frames.MarshalMarkdown(doc)
-	if err != nil {
-		t.Fatalf("marshal: %v", err)
-	}
-	if !strings.Contains(string(md), "- First line of the rule.\n  Second line.\n\n  A new paragraph.\n") {
-		t.Errorf("continuation lines not indented:\n%s", md)
-	}
-	back, err := frames.UnmarshalMarkdown(md)
-	if err != nil {
-		t.Fatalf("unmarshal: %v", err)
-	}
-	if !reflect.DeepEqual(doc.Slots.Rules, back.Slots.Rules) {
-		t.Errorf("multi-line rule lost.\nwant %q\ngot  %q", doc.Slots.Rules, back.Slots.Rules)
-	}
+// normalizeBody strips trailing newlines from the body. A YAML block scalar
+// ("body: |") always ends with one, whereas the markdown form trims it. That
+// whitespace carries no meaning in either form, so it is the one difference
+// the round trip does not preserve, and both sides are normalized before
+// comparison.
+func normalizeBody(d *frames.Doc) {
+	d.Body = strings.TrimRight(d.Body, "\n")
 }
 
-// Slot bodies may not contain their own "## " headings, since those delimit
-// sections. Authors must use "###" or deeper; this locks in the diagnostic.
-func TestUnmarshalMarkdown_H2InsideProse(t *testing.T) {
-	src := "---\ntype: frame [0.2]\nname: c\ndescription: d\nvisibility: internal\n---\n\n## Goals\n\nIntro.\n\n## Sub Goal\n\nMore.\n"
-	_, err := frames.UnmarshalMarkdown([]byte(src))
-	if err == nil {
-		t.Fatal("expected an error for an unrecognized ## inside prose")
-	}
-	if !strings.Contains(err.Error(), "unknown section \"## Sub Goal\"") {
-		t.Errorf("unexpected error: %v", err)
-	}
-}
+// A --- inside a multi-line frontmatter value must not close the block.
+//
+// This is the one place where being lenient about the delimiter is a data-loss
+// bug rather than a convenience: YAML block scalars are always indented, so an
+// indented --- that terminated the frontmatter would truncate the document and
+// silently drop every field after it. The codec does this to its own output -
+// a description containing a --- line exports cleanly and reimports as a
+// different, shorter document - so a round-trip case is included alongside the
+// direct parses.
+func TestUnmarshalMarkdown_FenceOnlyAtColumnZero(t *testing.T) {
+	head := "---\ntype: frame [0.2]\nname: c\nversion: 1.0.0\nvisibility: internal\n"
 
-func TestUnmarshalMarkdown_H3InsideProseIsKept(t *testing.T) {
-	src := "---\ntype: frame [0.2]\nname: c\ndescription: d\nvisibility: internal\n---\n\n## Goals\n\n### Near term\n\nShip it.\n"
-	doc, err := frames.UnmarshalMarkdown([]byte(src))
-	if err != nil {
-		t.Fatalf("unmarshal: %v", err)
-	}
-	if doc.Slots.Goals != "### Near term\n\nShip it." {
-		t.Errorf("prose body not preserved: %q", doc.Slots.Goals)
-	}
-}
+	tests := []struct {
+		name string
+		src  string
 
-// normalizeProse strips trailing newlines from prose slots. A YAML block scalar
-// ("goals: |") always ends with one, whereas a markdown section is delimited by
-// the next heading rather than by trailing whitespace. That whitespace carries
-// no meaning in either form, so it is the one difference the round trip does not
-// preserve, and both sides are normalized before comparison.
-func normalizeProse(d *frames.Doc) {
-	for _, sd := range frames.SlotTable {
-		if sd.Kind == frames.SlotProse {
-			d.Slots.SetProse(sd.Key, strings.TrimRight(d.Slots.Prose(sd.Key), "\n"))
+		wantDesc string
+		wantVer  string
+		wantBody string
+	}{
+		{
+			name:     "indented --- inside a block scalar is content",
+			src:      head + "description: |-\n  Line one\n  ---\n  Line two\n---\n\nBody.\n",
+			wantDesc: "Line one\n---\nLine two",
+			wantVer:  "1.0.0",
+			wantBody: "Body.",
+		},
+		{
+			name: "a block scalar before the required fields does not swallow them",
+			src: "---\ntype: frame [0.2]\ndescription: |-\n  Line one\n  ---\n  Line two\n" +
+				"name: c\nversion: 1.0.0\nvisibility: internal\n---\n\nBody.\n",
+			wantDesc: "Line one\n---\nLine two",
+			wantVer:  "1.0.0",
+			wantBody: "Body.",
+		},
+		{
+			name:     "a --- in the body stays in the body",
+			src:      head + "description: d\n---\n\nBefore.\n\n---\n\nAfter.\n",
+			wantDesc: "d",
+			wantVer:  "1.0.0",
+			wantBody: "Before.\n\n---\n\nAfter.",
+		},
+		{
+			name:     "trailing whitespace on the closing fence still closes",
+			src:      head + "description: d\n---   \n\nBody.\n",
+			wantDesc: "d",
+			wantVer:  "1.0.0",
+			wantBody: "Body.",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			doc, err := frames.UnmarshalMarkdown([]byte(tc.src))
+			if err != nil {
+				t.Fatalf("unmarshal: %v", err)
+			}
+			if doc.Description != tc.wantDesc {
+				t.Errorf("description = %q, want %q", doc.Description, tc.wantDesc)
+			}
+			if doc.Version != tc.wantVer {
+				t.Errorf("version = %q, want %q: a field after the block scalar was lost", doc.Version, tc.wantVer)
+			}
+			if doc.Body != tc.wantBody {
+				t.Errorf("body = %q, want %q", doc.Body, tc.wantBody)
+			}
+		})
+	}
+
+	t.Run("a document the codec itself wrote survives its own round trip", func(t *testing.T) {
+		orig := &frames.Doc{
+			Name:        "c",
+			Description: "Line one\n---\nLine two",
+			Version:     "1.0.0",
+			Visibility:  "internal",
+			Maintainer:  "platform team",
+			Body:        "## Rules\n\n- be kind",
 		}
-	}
+		md, err := frames.MarshalMarkdown(orig)
+		if err != nil {
+			t.Fatalf("marshal: %v", err)
+		}
+		got, err := frames.UnmarshalMarkdown(md)
+		if err != nil {
+			t.Fatalf("reparse: %v\n%s", err, md)
+		}
+		if !reflect.DeepEqual(got, orig) {
+			t.Errorf("round trip lost content\n got: %+v\nwant: %+v\nmarkdown:\n%s", got, orig, md)
+		}
+		// The failure this guards against was silent: the reparsed document was
+		// invalid for a field the author never touched.
+		if err := frames.Validate(got); err != nil {
+			t.Errorf("reparsed document does not validate: %v", err)
+		}
+	})
 }

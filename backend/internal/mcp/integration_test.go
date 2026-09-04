@@ -88,7 +88,7 @@ func seedOrgAndReadableFrame(t *testing.T, mem *store.Memory) {
 		},
 		Version: &framesv1.FrameVersion{
 			Version:     "1.0.0",
-			Content:     []byte("name: alpha\ndescription: Alpha frame\nversion: 1.0.0\nslots:\n  rules:\n    - r1\n"),
+			Content:     []byte("name: alpha\ndescription: Alpha frame\nversion: 1.0.0\nbody: |\n  r1\n"),
 			PublishedAt: timestamppb.Now(),
 		},
 		Grants:     []store.Grant{{SubjectType: "org", SubjectID: "o1", Permission: "read"}},
@@ -273,7 +273,7 @@ func TestMCPWritesEnforceRBAC(t *testing.T) {
 		"name":        "brand-voice",
 		"description": "How we write",
 		"version":     "1.0.0",
-		"rules":       []any{"Cite benchmarks."},
+		"body":        "## Rules\n\n- Cite benchmarks.",
 	}
 
 	t.Run("a viewer cannot create a frame", func(t *testing.T) {
@@ -322,7 +322,7 @@ func TestMCPWritesEnforceRBAC(t *testing.T) {
 		// not the version-uniqueness check.
 		second := map[string]any{
 			"name": "brand-voice", "description": "How we write", "version": "2.0.0",
-			"rules": []any{"Cite benchmarks."},
+			"body": "## Rules\n\n- Cite benchmarks.",
 		}
 		text, isErr := callTool(t, cs, "create_frame", second)
 		if !isErr {
@@ -343,7 +343,7 @@ func TestMCPWritesEnforceRBAC(t *testing.T) {
 			"description":  "How we write, revised",
 			"version":      "1.1.0",
 			"base_version": "1.0.0",
-			"rules":        []any{"Cite benchmarks.", "Avoid jargon."},
+			"body":         "## Rules\n\n- Cite benchmarks.\n- Avoid jargon.",
 			"changelog":    "added a rule",
 		}
 		text, isErr := callTool(t, cs, "update_frame", updated)
@@ -367,7 +367,7 @@ func TestMCPWritesEnforceRBAC(t *testing.T) {
 			"description":  "hijacked",
 			"version":      "2.0.0",
 			"base_version": "1.0.0",
-			"rules":        []any{"mine now"},
+			"body":         "## Rules\n\n- mine now",
 		})
 		if !isErr {
 			t.Fatalf("edit permission was bypassed: %q", text)
@@ -382,7 +382,7 @@ func TestMCPWritesEnforceRBAC(t *testing.T) {
 		text, isErr := callTool(t, cs, "update_frame", map[string]any{
 			"name": "ghost", "description": "x",
 			"version": "1.0.0", "base_version": "1.0.0",
-			"rules": []any{"r"},
+			"body": "- r",
 		})
 		if !isErr {
 			t.Fatalf("update of an unknown frame succeeded: %q", text)
@@ -398,7 +398,7 @@ func TestMCPWritesEnforceRBAC(t *testing.T) {
 			"name":        "Not A Valid Name",
 			"description": "x",
 			"version":     "1.0.0",
-			"rules":       []any{"r"},
+			"body":        "- r",
 		})
 		if !isErr {
 			t.Fatalf("invalid name accepted: %q", text)
@@ -414,8 +414,8 @@ func TestMCPWritesEnforceRBAC(t *testing.T) {
 
 // An update must not destroy what the caller did not mention. Absent fields keep
 // their current values; supplied fields replace them; an explicitly empty list
-// clears. Without this, an AI that updates one slot silently wipes the Frame's
-// visibility, maintainer, and - worst - its inheritance edges.
+// clears. Without this, an AI that updates only the body silently wipes the
+// Frame's visibility, maintainer, and - worst - its inheritance edges.
 func TestMCPUpdatePreservesOmittedFields(t *testing.T) {
 	cs, mem := newWriteTestSession(t, "publisher")
 	ctx := context.Background()
@@ -423,26 +423,25 @@ func TestMCPUpdatePreservesOmittedFields(t *testing.T) {
 	// A parent to inherit from, then a child that pins it and carries metadata.
 	if _, isErr := callTool(t, cs, "create_frame", map[string]any{
 		"name": "base", "description": "Base", "version": "1.0.0",
-		"rules": []any{"from parent"},
+		"body": "## Rules\n\n- from parent",
 	}); isErr {
 		t.Fatal("create base failed")
 	}
 	if _, isErr := callTool(t, cs, "create_frame", map[string]any{
 		"name": "child", "description": "Child", "version": "1.0.0",
-		"rules":      []any{"from child"},
+		"body":       "## Rules\n\n- from child\n\n## Goals\n\nship the thing",
 		"visibility": "private",
 		"scope":      "company",
 		"maintainer": "platform team",
 		"extends":    []any{map[string]any{"ref": "openteams/base", "version": "1.0.0"}},
-		"goals":      "ship the thing",
 	}); isErr {
 		t.Fatal("create child failed")
 	}
 
-	// Update only the rules. Everything else must survive.
+	// Update only the body. Everything else must survive.
 	text, isErr := callTool(t, cs, "update_frame", map[string]any{
 		"name": "child", "version": "1.1.0", "base_version": "1.0.0",
-		"rules": []any{"from child", "and another"},
+		"body": "## Rules\n\n- from child\n- and another\n\n## Goals\n\nship the thing",
 	})
 	if isErr {
 		t.Fatalf("update failed: %q", text)
@@ -469,20 +468,18 @@ func TestMCPUpdatePreservesOmittedFields(t *testing.T) {
 	if len(doc.Extends) != 1 || doc.Extends[0].Ref != "openteams/base" || doc.Extends[0].Version != "1.0.0" {
 		t.Errorf("extends = %+v, want the pinned parent preserved: inheritance must survive an update", doc.Extends)
 	}
-	if doc.Slots.Goals != "ship the thing" {
-		t.Errorf("goals = %q, want the original prose preserved", doc.Slots.Goals)
+	if !strings.Contains(doc.Body, "ship the thing") {
+		t.Errorf("body = %q, want the original prose preserved", doc.Body)
 	}
 	if doc.Description != "Child" {
 		t.Errorf("description = %q, want Child", doc.Description)
 	}
 	// The parent's rule must NOT have been copied into the child.
-	if len(doc.Slots.Rules) != 2 {
-		t.Errorf("rules = %v, want exactly the two supplied (no inherited content flattened in)", doc.Slots.Rules)
+	if !strings.Contains(doc.Body, "and another") {
+		t.Errorf("body = %q, want the supplied rules", doc.Body)
 	}
-	for _, r := range doc.Slots.Rules {
-		if r == "from parent" {
-			t.Errorf("parent content was flattened into the child: %v", doc.Slots.Rules)
-		}
+	if strings.Contains(doc.Body, "from parent") {
+		t.Errorf("parent content was flattened into the child: %q", doc.Body)
 	}
 
 	t.Run("supplied fields replace, and an explicit empty list clears", func(t *testing.T) {
@@ -524,7 +521,7 @@ func mustFrameID(t *testing.T, mem *store.Memory, name string) string {
 }
 
 // The most likely instruction this tool will ever get is "add a rule to X".
-// Doing that requires reading the Frame's current rules, and if the only read
+// Doing that requires reading the Frame's current body, and if the only read
 // available returns the inheritance-composed form, the model has no choice but
 // to send the parent's content back as the child's own - which validates, looks
 // identical when composed, and silently detaches the child from its parent's
@@ -535,14 +532,13 @@ func TestMCPReadModifyWriteDoesNotFlattenInheritance(t *testing.T) {
 
 	if _, isErr := callTool(t, cs, "create_frame", map[string]any{
 		"name": "company-base", "description": "Company", "version": "1.0.0",
-		"rules": []any{"Use inclusive language."},
-		"goals": "Grow the platform.",
+		"body": "## Rules\n\n- Use inclusive language.\n\n## Goals\n\nGrow the platform.",
 	}); isErr {
 		t.Fatal("create parent failed")
 	}
 	if _, isErr := callTool(t, cs, "create_frame", map[string]any{
 		"name": "team-api", "description": "API team", "version": "1.0.0",
-		"rules":   []any{"Version every endpoint."},
+		"body":    "## Rules\n\n- Version every endpoint.",
 		"extends": []any{map[string]any{"ref": "openteams/company-base", "version": "1.0.0"}},
 	}); isErr {
 		t.Fatal("create child failed")
@@ -560,7 +556,7 @@ func TestMCPReadModifyWriteDoesNotFlattenInheritance(t *testing.T) {
 		t.Errorf("source read is missing the frame's own rule:\n%s", src)
 	}
 	if strings.Contains(src, "Grow the platform.") {
-		t.Errorf("source read leaked the parent's prose slot:\n%s", src)
+		t.Errorf("source read leaked the parent's prose:\n%s", src)
 	}
 
 	// The default read stays composed, which is what a consumer wants.
@@ -575,7 +571,7 @@ func TestMCPReadModifyWriteDoesNotFlattenInheritance(t *testing.T) {
 	// Editing from the source read leaves inheritance intact and un-flattened.
 	if _, isErr := callTool(t, cs, "update_frame", map[string]any{
 		"name": "team-api", "version": "1.1.0", "base_version": "1.0.0",
-		"rules": []any{"Version every endpoint.", "Prefer cursor pagination."},
+		"body": "## Rules\n\n- Version every endpoint.\n- Prefer cursor pagination.",
 	}); isErr {
 		t.Fatal("update failed")
 	}
@@ -587,13 +583,11 @@ func TestMCPReadModifyWriteDoesNotFlattenInheritance(t *testing.T) {
 	if err != nil {
 		t.Fatalf("parse: %v", err)
 	}
-	for _, r := range doc.Slots.Rules {
-		if r == "Use inclusive language." {
-			t.Errorf("the parent's rule was copied into the child: %v", doc.Slots.Rules)
-		}
+	if strings.Contains(doc.Body, "Use inclusive language.") {
+		t.Errorf("the parent's rule was copied into the child: %q", doc.Body)
 	}
-	if doc.Slots.Goals != "" {
-		t.Errorf("goals = %q, want empty: the parent's prose must not be frozen into the child", doc.Slots.Goals)
+	if strings.Contains(doc.Body, "Grow the platform.") {
+		t.Errorf("body = %q: the parent's prose must not be frozen into the child", doc.Body)
 	}
 	if len(doc.Extends) != 1 {
 		t.Errorf("extends = %+v, want the parent still pinned", doc.Extends)

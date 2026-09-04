@@ -23,7 +23,7 @@ const (
 
 type PublishFrameRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	Content       []byte                 `protobuf:"bytes,1,opt,name=content,proto3" json:"content,omitempty"` // full YAML; name/version/extends/excludes/slots parsed server-side
+	Content       []byte                 `protobuf:"bytes,1,opt,name=content,proto3" json:"content,omitempty"` // full YAML; metadata/extends/excludes/body parsed server-side
 	Changelog     string                 `protobuf:"bytes,2,opt,name=changelog,proto3" json:"changelog,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -662,7 +662,7 @@ func (x *ListFrameVersionsResponse) GetVersions() []*FrameVersionSummary {
 }
 
 // FieldViolation is one validation failure at a specific field path
-// (e.g. "slots.terminology[2].definition", matching backend validate.go paths).
+// (e.g. "extends[0].version", matching backend validate.go paths).
 type FieldViolation struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Field         string                 `protobuf:"bytes,1,opt,name=field,proto3" json:"field,omitempty"`
@@ -764,7 +764,7 @@ func (x *FieldViolations) GetViolations() []*FieldViolation {
 }
 
 // ConvertFrame translates between the two representations of the same frame:
-// the canonical slot YAML stored in frame_versions.content, and the single
+// the canonical YAML stored in frame_versions.content, and the single
 // Markdown file with YAML frontmatter defined by Frame Spec v0.2. It backs the
 // web app's Markdown editor, .frame.md import, and .frame.md export.
 type ConvertFrameRequest struct {

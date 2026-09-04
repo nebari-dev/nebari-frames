@@ -1,4 +1,5 @@
 @import "tailwindcss";
+@plugin "@tailwindcss/typography";
 
 @custom-variant dark (&:is(.dark *));
 
@@ -303,4 +304,21 @@
     background-color: var(--background);
     color: var(--foreground);
   }
+
+  /* Tailwind v4 defaults unspecified borders to currentColor; restore the
+     theme token so a bare `border` utility renders the design's border. */
+  *,
+  ::after,
+  ::before,
+  ::backdrop,
+  ::file-selector-button {
+    border-color: var(--border);
+  }
+}
+
+/* The typography plugin wraps inline code in literal backtick pseudo-elements;
+   our code style stands on its own. */
+.prose :where(code)::before,
+.prose :where(code)::after {
+  content: none;
 }

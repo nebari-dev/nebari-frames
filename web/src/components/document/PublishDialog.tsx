@@ -1,7 +1,17 @@
 import { useFormContext } from "react-hook-form";
-import { Dialog, DialogContent, DialogFooter, DialogTitle } from "@/components/ui/dialog";
+import { useId } from "react";
+import {
+  Dialog,
+  DialogClose,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { FieldError, useFieldError, errorProps } from "@/components/form/FieldError";
 
@@ -26,38 +36,52 @@ export function PublishDialog({
 }) {
   const { register } = useFormContext();
   const versionError = useFieldError("version");
+  const versionId = useId();
+  const changelogId = useId();
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-md">
-        <DialogTitle>Publish version</DialogTitle>
+        <DialogHeader>
+          <DialogTitle>Publish version</DialogTitle>
+          <DialogDescription>
+            Publishing adds a new immutable version to this Frame&apos;s history.
+          </DialogDescription>
+        </DialogHeader>
 
         {versionFromSource ? (
           <p className="text-sm text-muted-foreground">
-            The version number is taken from the document&apos;s <code>version:</code> frontmatter.
+            The version number is taken from the document&apos;s <code>version:</code>{" "}
+            frontmatter.
           </p>
         ) : (
-          <label className="block space-y-1">
-            <span className="text-sm font-medium">Version</span>
+          <div className="space-y-1.5">
+            <Label htmlFor={versionId}>Version</Label>
             <Input
+              id={versionId}
               {...register("version")}
               placeholder="1.0.0"
               className="w-40 font-mono"
               {...errorProps("version", versionError)}
             />
-          </label>
+          </div>
         )}
         <FieldError name="version" />
 
-        <label className="block space-y-1">
-          <span className="text-sm font-medium">Changelog</span>
-          <Textarea rows={3} {...register("changelog")} placeholder="What changed in this version?" />
-        </label>
+        <div className="space-y-1.5">
+          <Label htmlFor={changelogId}>Changelog</Label>
+          <Textarea
+            id={changelogId}
+            rows={3}
+            {...register("changelog")}
+            placeholder="What changed in this version?"
+          />
+        </div>
 
         <DialogFooter className="pt-2">
-          <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+          <DialogClose render={<Button type="button" variant="outline" />}>
             Cancel
-          </Button>
+          </DialogClose>
           <Button type="button" loading={pending} onClick={onConfirm}>
             Publish
           </Button>
