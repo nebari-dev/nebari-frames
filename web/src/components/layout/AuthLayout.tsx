@@ -21,7 +21,7 @@ export function AuthLayout({ title, description, children, className }: AuthLayo
   const { isDarkMode } = useTheme();
   const logo = brandLogo(isDarkMode);
   return (
-    <div className="grid min-h-screen place-items-center bg-background px-4">
+    <div className="grid min-h-screen place-items-center bg-canvas px-4">
       <div className="flex w-full max-w-sm flex-col items-center gap-6 motion-safe:animate-slide-up-fade">
         <div className="flex items-center gap-2.5">
           <img src={logo.src} alt={logo.alt} className="h-8 w-auto" />
