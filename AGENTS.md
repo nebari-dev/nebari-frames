@@ -25,6 +25,7 @@ make dev           # backend :8080 (dev mode, fixture-seeded) + Vite :5173 with 
 make dev-auth      # Keycloak in Docker :8081 + backend on :5173 serving the built SPA
 make dev-clean     # kill orphan dev servers, drop dev DB + WAL/SHM, tear down Keycloak
 make image         # docker build (linux/amd64)
+make e2e           # blackbox RPC suite against a deployed frames (needs FRAMES_E2E_BASE_URL + FRAMES_E2E_TOKEN)
 
 # One Go test / package
 go test ./backend/internal/frames -run TestResolve -race
@@ -45,8 +46,11 @@ CI (`.github/workflows/ci.yml`) gates on five jobs: `proto` (buf lint plus a sta
 `gen/`), `go` (golangci-lint pinned to v2.12 plus race tests), `web` (lint, typecheck, vitest),
 `chart` (helm lint, template renders, kubeconform pinned to v0.7.0), and `e2e-sandbox` (deploys the
 built image onto a kind Nebari sandbox via ArgoCD and exercises real Keycloak auth through the
-gateway). `docs.yml` also fails if the generated CLI reference is stale. Run the local
-equivalents before pushing.
+gateway). `e2e-sandbox` also provisions a dedicated Keycloak client and user, then runs the
+build-tagged blackbox RPC suite in `e2e/` (`make e2e`) against the deployed pod through the real
+gateway; that suite skips locally whenever `FRAMES_E2E_BASE_URL` and `FRAMES_E2E_TOKEN` are unset, so
+`make test` is unaffected. `docs.yml` also fails if the generated CLI reference is stale. Run the
+local equivalents before pushing.
 
 **Generated code is checked in.** After touching `proto/frames/v1/*.proto`, run `make proto` and
 commit `gen/`. After touching `cli/cmd/*`, run `go run ./tools/docs-gen` and commit

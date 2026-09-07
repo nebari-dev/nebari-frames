@@ -1,4 +1,4 @@
-.PHONY: proto lint test build build-web run-dev dev dev-auth dev-clean clean image
+.PHONY: proto lint test e2e build build-web run-dev dev dev-auth dev-clean clean image
 
 # Local dev runner: builds the SPA into the binary, then starts the server in
 # dev mode (no OIDC). The auth interceptor injects a fixed dev-user identity;
@@ -19,6 +19,12 @@ lint:
 
 test:
 	go test ./... -race -coverprofile=coverage.out
+
+# Blackbox suite against a deployed frames. Needs FRAMES_E2E_BASE_URL and
+# FRAMES_E2E_TOKEN; skips loudly without them. Not part of `make test`, which
+# must stay runnable with no cluster.
+e2e:
+	go test -tags e2e -count=1 -v ./e2e/...
 
 build:
 	CGO_ENABLED=0 go build -o nebari-frames-server ./backend/cmd/server
