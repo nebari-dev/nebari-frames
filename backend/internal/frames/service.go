@@ -203,7 +203,7 @@ func (s *Service) PublishDocRequest(ctx context.Context, doc *Doc, req PublishRe
 	}
 	content, err := Marshal(doc)
 	if err != nil {
-		return nil, nil, connect.NewError(connect.CodeInvalidArgument, err)
+		return nil, nil, connect.NewError(connect.CodeInternal, err)
 	}
 	return s.publish(ctx, caller, doc, content, req)
 }
