@@ -87,21 +87,14 @@ type Prefill struct {
 	Extends []ExtendRef
 }
 
-// prefillExtendRef is a narrower view of ExtendRef used only for marshalling:
-// prefill encoding omits version to keep templates' extend specs minimal.
-// Decoding through Parse preserves version normally.
-type prefillExtendRef struct {
-	Ref string `yaml:"ref"`
-}
-
 // prefillDoc is the serialized shape of a Prefill. Decoding goes through Parse,
 // which yields a full Doc and so catches identity fields a template must not
 // set; encoding uses this narrower type so those keys are omitted entirely
 // rather than emitted empty. The asymmetry is deliberate: it means a blob this
 // package writes is always one it will accept back.
 type prefillDoc struct {
-	Extends []prefillExtendRef `yaml:"extends,omitempty"`
-	Slots   Slots              `yaml:"slots"`
+	Extends []ExtendRef `yaml:"extends,omitempty"`
+	Slots   Slots       `yaml:"slots"`
 }
 
 // Template is one starter definition. Built-ins are compiled in; org templates
@@ -241,11 +234,7 @@ func ParsePrefill(content []byte) (Prefill, error) {
 // MarshalPrefill encodes a Prefill to the canonical YAML subset the API carries
 // and the CLI scaffold writes.
 func MarshalPrefill(p Prefill) ([]byte, error) {
-	extends := make([]prefillExtendRef, len(p.Extends))
-	for i, e := range p.Extends {
-		extends[i] = prefillExtendRef{Ref: e.Ref}
-	}
-	return yaml.Marshal(prefillDoc{Extends: extends, Slots: p.Slots})
+	return yaml.Marshal(prefillDoc{Extends: p.Extends, Slots: p.Slots})
 }
 
 // unmarshalStrict decodes YAML into v, rejecting unknown keys. Template

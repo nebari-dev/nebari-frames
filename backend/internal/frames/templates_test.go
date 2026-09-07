@@ -1,6 +1,7 @@
 package frames
 
 import (
+	"regexp"
 	"strings"
 	"testing"
 )
@@ -210,17 +211,27 @@ func TestPrefillRoundTripsWithoutIdentityKeys(t *testing.T) {
 	}
 	// Identity keys must not be emitted at all: ParsePrefill rejects them, so a
 	// blob this function produced has to survive being read back.
-	for _, key := range []string{"name:", "version:", "description:", "visibility:"} {
-		if strings.Contains(string(b), key) {
-			t.Errorf("marshalled prefill contains %q:\n%s", key, b)
+	//
+	// Anchored to the start of a line. A bare substring check would also match
+	// the nested `extends[].version` key, which is legitimate and must be kept:
+	// that field is the pinned parent version, and Validate rejects an extends
+	// ref without one.
+	for _, key := range []string{"name:", "version:", "description:", "visibility:", "scope:", "maintainer:", "excludes:"} {
+		if regexp.MustCompile(`(?m)^` + regexp.QuoteMeta(key)).Match(b) {
+			t.Errorf("marshalled prefill emits top-level %q:\n%s", key, b)
 		}
 	}
 	out, err := ParsePrefill(b)
 	if err != nil {
 		t.Fatalf("round trip rejected its own output: %v\n%s", err, b)
 	}
-	if out.Slots.Style != in.Slots.Style || len(out.Extends) != 1 {
-		t.Errorf("round trip lost content: %+v", out)
+	if out.Slots.Style != in.Slots.Style {
+		t.Errorf("round trip lost slot content: %+v", out.Slots)
+	}
+	// The pin specifically: dropping the version would leave every Frame seeded
+	// from a template with suggested parents unpublishable.
+	if len(out.Extends) != 1 || out.Extends[0].Ref != "acme/base" || out.Extends[0].Version != "1.0.0" {
+		t.Errorf("round trip lost the pinned parent: %+v", out.Extends)
 	}
 }
 
