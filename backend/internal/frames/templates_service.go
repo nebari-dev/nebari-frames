@@ -26,8 +26,8 @@ import (
 // requirementToProto converts the level for the wire. The proto enum has an
 // explicit UNSPECIFIED that maps to optional, so an older client that leaves
 // the field unset gets the permissive reading rather than an accidental
-// requirement. The reverse direction belongs to the write handlers in Task 8,
-// which is the only place anything decodes a caller-supplied level.
+// requirement. requirementFromProto below is the reverse direction, used by the
+// write handlers: they are the only place a caller-supplied level is decoded.
 func requirementToProto(r Requirement) framesv1.Requirement {
 	switch r {
 	case RequirementRecommended:
