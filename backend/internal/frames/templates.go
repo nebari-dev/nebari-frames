@@ -2,6 +2,7 @@ package frames
 
 import (
 	"bytes"
+	"encoding/json"
 	"fmt"
 	"strings"
 
@@ -235,6 +236,55 @@ func ParsePrefill(content []byte) (Prefill, error) {
 // and the CLI scaffold writes.
 func MarshalPrefill(p Prefill) ([]byte, error) {
 	return yaml.Marshal(prefillDoc{Extends: p.Extends, Slots: p.Slots})
+}
+
+// Field rules are persisted as JSON with the level written by name, never as the
+// enum's integer: reordering the Requirement constants must not silently
+// reinterpret every row already on disk. This is also why the wire enum has an
+// explicit UNSPECIFIED = 0.
+
+type fieldRuleJSON struct {
+	Level string `json:"level"`
+	Note  string `json:"note,omitempty"`
+}
+
+// MarshalFieldRules encodes rules for storage in frame_templates.field_rules.
+func MarshalFieldRules(rules map[string]FieldRule) ([]byte, error) {
+	out := make(map[string]fieldRuleJSON, len(rules))
+	for key, rule := range rules {
+		out[key] = fieldRuleJSON{Level: rule.Level.String(), Note: rule.Note}
+	}
+	return json.Marshal(out)
+}
+
+// ParseFieldRules decodes a stored field_rules blob. An unknown level is an
+// error rather than a fall back to optional, for the same reason the YAML
+// decoder refuses one: a requirement that quietly stops applying is worse than
+// a loud failure.
+func ParseFieldRules(b []byte) (map[string]FieldRule, error) {
+	if len(b) == 0 {
+		return map[string]FieldRule{}, nil
+	}
+	var raw map[string]fieldRuleJSON
+	if err := json.Unmarshal(b, &raw); err != nil {
+		return nil, fmt.Errorf("parse field rules: %w", err)
+	}
+	out := make(map[string]FieldRule, len(raw))
+	for key, rule := range raw {
+		var level Requirement
+		switch strings.ToLower(strings.TrimSpace(rule.Level)) {
+		case "", "optional":
+			level = RequirementOptional
+		case "recommended":
+			level = RequirementRecommended
+		case "required":
+			level = RequirementRequired
+		default:
+			return nil, fmt.Errorf("unknown requirement level %q for slot %q", rule.Level, key)
+		}
+		out[key] = FieldRule{Level: level, Note: rule.Note}
+	}
+	return out, nil
 }
 
 // unmarshalStrict decodes YAML into v, rejecting unknown keys. Template
