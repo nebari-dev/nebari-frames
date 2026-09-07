@@ -20,6 +20,7 @@ import { MarkdownSourceEditor } from "@/components/form/MarkdownSourceEditor";
 import { DocMetadataHeader } from "@/components/document/DocMetadataHeader";
 import { AddSectionMenu } from "@/components/document/AddSectionMenu";
 import { PublishDialog } from "@/components/document/PublishDialog";
+import { TemplatePicker } from "@/components/frame/TemplatePicker";
 import { Button } from "@/components/ui/button";
 import { Alert } from "@/components/ui/alert";
 import {
@@ -72,7 +73,7 @@ function SectionEditor({
 export function FrameAuthoringPage({ mode }: { mode: "create" | "edit" }) {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [formError, setFormError] = useState<string | null>(null);
 
   const methods = useForm<AuthoringForm>({
@@ -91,6 +92,14 @@ export function FrameAuthoringPage({ mode }: { mode: "create" | "edit" }) {
   );
   const [markdownSource, setMarkdownSource] = useState("");
   const [markdownErrors, setMarkdownErrors] = useState<string[]>([]);
+
+  const templateID = searchParams.get("template") ?? "";
+  // The picker is the first screen of the create flow. `?import=1` bypasses it:
+  // that path already has its source document, so asking for a starting shape
+  // would be nonsense. Edit mode never sees it - templates apply at creation.
+  const choosingTemplate = mode === "create" && !importing && templateID === "";
+
+  const templates = useQuery(FrameService.method.listFrameTemplates, {});
 
   // Sections the author added this session; content-bearing sections are
   // always visible regardless (which covers the async edit-mode prefill).
@@ -299,6 +308,17 @@ export function FrameAuthoringPage({ mode }: { mode: "create" | "edit" }) {
   };
 
   const title = mode === "edit" ? "Edit Frame" : importing ? "Import Frame" : "New Frame";
+
+  if (choosingTemplate) {
+    return (
+      <TemplatePicker
+        templates={templates.data?.templates ?? []}
+        // The choice goes in the URL rather than component state, so it is
+        // linkable and survives a reload, matching how `?import=1` works.
+        onPick={(id) => setSearchParams({ template: id }, { replace: true })}
+      />
+    );
+  }
 
   return (
     <FormProvider {...methods}>

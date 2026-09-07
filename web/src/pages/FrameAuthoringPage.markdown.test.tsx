@@ -47,8 +47,15 @@ beforeEach(() => {
   publishMock.mockReset();
 });
 
+// The real create path now starts at the template picker; these tests exercise
+// the authoring form itself, so they render past it with a template already
+// chosen in the URL, same as a user who just picked one.
 function renderCreate() {
-  return render(<MemoryRouter><FrameAuthoringPage mode="create" /></MemoryRouter>);
+  return render(
+    <MemoryRouter initialEntries={["/frames/new?template=builtin:blank"]}>
+      <FrameAuthoringPage mode="create" />
+    </MemoryRouter>,
+  );
 }
 
 // Markdown is a secondary mode behind the overflow menu, not a header toggle.

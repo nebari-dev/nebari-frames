@@ -30,8 +30,15 @@ function pointerClick(el: Element) {
   fireEvent.click(el);
 }
 
+// The real create path now starts at the template picker; these tests exercise
+// the authoring form itself, so they render past it with a template already
+// chosen in the URL, same as a user who just picked one.
 function renderCreate() {
-  render(<MemoryRouter><FrameAuthoringPage mode="create" /></MemoryRouter>);
+  render(
+    <MemoryRouter initialEntries={["/frames/new?template=builtin:blank"]}>
+      <FrameAuthoringPage mode="create" />
+    </MemoryRouter>,
+  );
 }
 
 async function fillIdentity() {
