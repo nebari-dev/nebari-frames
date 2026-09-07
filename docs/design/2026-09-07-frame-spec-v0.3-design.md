@@ -409,7 +409,7 @@ validate_frame.py [paths...] [--encoding auto|markdown|yaml|json]
 | 6 | Round-trips are lossless across encodings | A Frame with all ten refinements, a `guards` reference, and an `x-` extension element survives markdown to json to yaml to markdown with every element value identical | automated: `validate_frame.py --round-trip` on the fixture | *(empty)* |
 | 7 | The validator supports every documented encoding | The same Frame authored as `.md`, `.yaml` and `.json` normalizes to structurally identical element models (deep-equal) | automated: three-encoding fixture, normalized-model comparison | *(empty)* |
 | 8 | Both implementations' real behavior is expressible as a profile | Filled-in conformance profiles for Nebari Frames (transitive; pinned refs only; six refinements narrowed to non-repeatable; key-replace on `terminology`; slugified-title minting) and Collab (resolves nothing, declared per rule 7) both validate against the template and differ visibly. The template requires a declaration for every rule the model leaves to profiles: 4, 6's narrowings, 7, 9, and the identity rules in 6.5 | narrated: both profiles written, diff captured | *(empty)* |
-| 9 | `visibility` finally means something | The element carries a Definition, a Comment stating it is not an access control, and a closed vocabulary: the three things v0.2 never gave it | narrated: section read, quoted into evidence | *(empty)* |
+| 9 | `visibility` finally means something | The element carries a Definition, a Comment stating it is not an access control, and a registered vocabulary: the three things v0.2 never gave it | narrated: section read, quoted into evidence | *(empty)* |
 
 ### Excluded from this task's definition of done
 
