@@ -7,6 +7,7 @@
 | **Created** | 2026-09-07 |
 | **Last updated** | 2026-09-07 |
 | **Reviewers** | TBD (proposal targets `openteams-ai/frame-spec`) |
+| **Amended** | 2026-09-07, after the draft was written and reviewed: D13 and D14 added; section 4 and the model diagram updated to match openteams-ai/frame-spec#28. |
 | **Aligned against** | *Intelligence Hub Whitepaper* Revision 9 (`openteams-ai/inthub-whitepaper` at `9c28569`, 17 August 2026): sections 2, 3.3, 4.2 to 4.5, 5, 5.6, 6.1, 7.3 to 7.5, 8, and `GLOSSARY.md`; checked against the v8 PDF (6 August 2026) first, then the Revision 9 text and the v8-to-Revision-9 diff. *OpenTeams Open Source Product Strategy* v5 (20 August 2026): goals 1, 5, 6 and the execution priorities. |
 
 ## TL;DR
@@ -135,19 +136,15 @@ Applied to v0.2, `visibility` fails this test: required, undefined, and with no 
 
 ## 4. Deliverables
 
-Five documents plus a validator, mapping one-to-one onto the Singapore Framework's components so each is separately reviewable and mergeable in order.
+One specification document, a companion profile, and a validator. The document is written in the structure of an IETF Internet-Draft (introduction, conventions, data model, elements, composition, encodings, conformance profiles, implementation status, security considerations, IANA considerations, references, appendices) as plain GitHub-flavored Markdown, so that it renders where the repository is read. The Singapore Framework remains the completeness checklist the document is checked against, not its published form. A kramdown-rfc source that renders to xml2rfc text and HTML with zero warnings is retained outside the repository for the day the draft is submitted (D13).
 
-| Path | Singapore component | Normative |
+| Path | Content | Normative |
 |---|---|---|
-| `spec/frame-spec-0.3.md` Part 1 | Functional Requirements | No - promotes `docs/overview.md`, reconciled with whitepaper Revision 9 section 4.3, whose list has an eleventh category (Output Guards) that `overview.md` lacks |
-| `spec/frame-spec-0.3.md` Part 2 | Domain Model | **Yes** (drafted in section 5 below) |
-| `spec/frame-spec-0.3.md` Part 3 | Element Set | **Yes** (drafted in sections 6 and 7 below) |
-| `spec/profile/frame-core.csv` | Description Set Profile | **Yes** - DCTAP |
-| `spec/frame-spec-0.3.md` Part 4 | Usage Guidelines | No (outlined in section 8 below) |
-| `spec/encodings/markdown.md` | Encoding Syntax Guidelines | **Yes**, for documents claiming that encoding |
-| `spec/encodings/yaml.md` | Encoding Syntax Guidelines | **Yes**, as above |
-| `spec/encodings/json.md` | Encoding Syntax Guidelines | **Yes**, as above |
-| `tools/validate_frame.py` | (reference implementation) | No, but conformance-defining in practice |
+| `spec/frame-spec.md` | The working draft: the Internet-Draft structure above, with the three encodings as sections 6.2 to 6.4 and usage guidance folded into each element's Comment | **Yes** once released; this is the working-draft slot the repository already defines |
+| `spec/profile/frame-core.csv` | The element set as a DCTAP profile, byte-identical to the draft's Appendix B | **Yes**, with the draft |
+| `tools/validate_frame.py` | Reference validator for all three encodings, driven from the profile | No, but conformance-defining in practice |
+
+Opened as openteams-ai/frame-spec#28 together with an Apache-2.0 LICENSE and alignment of the repository's other documents. The sections below describe the design; the draft is the reference where they differ.
 
 ### 4.1 Profile columns
 
@@ -156,9 +153,9 @@ Five documents plus a validator, mapping one-to-one onto the Singapore Framework
 - `mapsTo` - the crosswalked term URI, or empty for a Frame-native element. Journey 2 checks that an empty value is always paired with a rationale in `note`.
 - `refines` - the element this one refines, which carries the dumb-down relation from section 6.2 into the machine-readable profile.
 
-Extra columns are consistent with DCTAP's intent: it defines a minimum set and expects profiles to be read by tools that ignore what they do not recognize. The two additions are declared in the profile's own header row and documented in Part 3.
+Extra columns are consistent with DCTAP's intent: it defines a minimum set and expects profiles to be read by tools that ignore what they do not recognize. The two additions are declared in the profile's own header row and documented in the draft's Appendix B.
 
-`spec/v0.2.md` stays frozen and untouched. `spec/encodings/markdown.md` absorbs it and cites it as its ancestor.
+`spec/v0.2.md` stays frozen and untouched. Section 6.2 of the draft is the Markdown encoding; it restates v0.2's requirements and cites v0.2 as normative.
 
 ## 5. Domain model
 
@@ -169,20 +166,25 @@ Frame                        the abstract artifact; persists across versions
   identifier, title, description, maintainer, scope, visibility,
   license, canonicalSource
   |
-  +-- FrameVersion           a revision                  [dcat:hasVersion]
-  |     version, status, versionNotes, issued             prov:wasRevisionOf
-  |     guidance + refinements                            dcat:previousVersion
-  |     guards                                            dcterms:requires
-  |     |
-  |     +-- Representation   a serialization             [dcat:Distribution]
-  |           mediaType, checksum, byteSize               spdx:checksum
-  |                                                       dcat:byteSize
-  +-- Composition            (relation, not entity)
-  |     ordered references to other Frames, child takes precedence
-  |     Frame-native: no existing standard term means this
   +-- derivedFrom            (relation)                  [prov:wasDerivedFrom]
-        this Frame was adapted or forked from that one
+  |     this Frame was adapted or forked from that one
+  |
+  +-- FrameVersion           a revision                  [dcat:hasVersion]
+        version, status, versionNotes, issued             prov:wasRevisionOf
+        guidance + refinements                            dcat:previousVersion
+        |
+        +-- composition      (relation) ordered references to other
+        |                    Frames; the declaring Frame has precedence.
+        |                    Frame-native: no standard term means this
+        +-- guards           (relation) Guards to run on output  [dcterms:requires]
+        |
+        +-- Representation   a serialization             [dcat:Distribution]
+              mediaType, checksum, byteSize               spdx:checksum
+                                                          dcat:byteSize
 ```
+
+`composition` and `guards` sit on the Frame Version because they can differ between revisions; `derivedFrom` sits on the Frame because lineage belongs to the Frame. This placement was corrected during the draft's review; the draft's Figure 1 is the reference.
+
 
 Three consequences worth stating explicitly in the spec:
 
@@ -221,10 +223,10 @@ Each element in the spec carries Name, Label, Definition, Comment, Obligation, R
 | `description` | SHOULD | no | `dcterms:description`, `schema:abstract` | No length limit. One or two sentences recommended. |
 | `version` | SHOULD | no | `dcat:version`, `schema:version` | The Frame's own revision, not the spec version. SemVer recommended. |
 | `versionNotes` | MAY | yes | `adms:versionNotes` | What changed. Our `changelog`. |
-| `status` | MAY | no | `schema:creativeWorkStatus` | Closed vocabulary: `draft`, `review`, `approved`, `deprecated`, `revoked`. |
+| `status` | MAY | no | `schema:creativeWorkStatus` | Registered values (SHOULD): `draft`, `review`, `approved`, `deprecated`, `revoked`. Unregistered values are preserved, never rejected (D14). |
 | `maintainer` | SHOULD | yes | `schema:maintainer`; secondary `schema:accountablePerson` (partial) | Definition is an exact match, and PR #20's `author` to `maintainer` rename already landed here. The maintainer is also the accountable party the whitepaper's "Owned" property requires: a Frame is "owned by and accountable to a human or a group of humans that intentionally manage it," and the Comment says so. `accountablePerson` is partial because its range is Person only, and a maintainer may be a team. |
 | `scope` | MAY | no | `dcterms:audience` (partial) | Where the Frame applies. Mapping is flagged partial rather than forced. |
-| `visibility` | MAY | no | `dcterms:accessRights`, `schema:conditionsOfAccess` | Declared intent. **MUST NOT be treated as an access control.** Closed vocabulary: `private`, `internal`, `shared`, `public`. |
+| `visibility` | MAY | no | `dcterms:accessRights`, `schema:conditionsOfAccess` | Declared intent. **MUST NOT be treated as an access control.** Registered values (SHOULD): `private`, `internal`, `shared`, `public`, which v0.2 listed as suggested. Unregistered values are preserved (D14). |
 | `license` | MAY | no | `dcterms:license` | Cheap to carry, and cross-organization exchange needs it. |
 | `issued` | MAY | no | `dcterms:issued` | When this version was published. Our `published_at`. ISO 8601. |
 | `canonicalSource` | MAY | no | `schema:sameAs`, `prov:specializationOf` | The authoritative location of this Frame, disambiguating identifiers that are unique only within one registry. Defined now so identifiers published today are not ambiguous later; **not emitted by Nebari Frames until a second registry exists to disambiguate against.** |
@@ -399,7 +401,7 @@ validate_frame.py [paths...] [--encoding auto|markdown|yaml|json]
 
 | # | Item | Proof | Check method | Evidence |
 |---|------|-------|--------------|----------|
-| 1 | Every valid v0.2 Frame is a valid v0.3 Frame | All 18 frontmatter-bearing `.md` files in `frame-spec/examples` pass validation, including the 9 carrying undefined `status`, the 2 with relative-path `inherits`, the 3 whose `## Terminology` bullets are not term/definition pairs, and the 2 whose bodies carry qualified headings such as `## Review Norms` (8 such headings) that must land in `guidance` | automated: `validate_frame.py frame-spec/examples/` exits 0 with 18 passed, 0 failed | *(empty)* |
+| 1 | Every valid v0.2 Frame is a valid v0.3 Frame | All 18 frontmatter-bearing `.md` files in `frame-spec/examples` pass validation, including the 9 carrying `status: stable`, an unregistered value that must be preserved, the 2 with relative-path `inherits`, the 3 whose `## Terminology` bullets are not term/definition pairs, and the 2 whose bodies carry qualified headings such as `## Review Norms` (8 such headings) that must land in `guidance` | automated: `validate_frame.py frame-spec/examples/` exits 0 with 18 passed, 0 failed | *(empty)* |
 | 2 | No element is invented without justification | Every element carries either a resolvable crosswalk URI or a written rationale for being Frame-native; zero silent gaps | automated: `validate_frame.py --self-check` fails on any element whose Maps-to is empty and whose Comment lacks a native-term rationale | *(empty)* |
 | 3 | The machine-readable profile matches the prose | Every element in section 6 appears in `frame-core.csv` with identical obligation and repeatability, and every CSV row appears in the prose | automated: `validate_frame.py --self-check` | *(empty)* |
 | 4 | An implementer can build a conformant reader from the spec alone | A reader written by an implementer with no access to this conversation, working only from the spec files, (a) accepts all 18 examples, (b) rejects `status: bogus` and `visibility: secret` as closed-vocabulary violations, and (c) given a Frame with a `## Rules` section, exposes that content as either `rules` or `guidance` and never drops it | narrated: dispatch a clean-context implementer agent, capture its reader and its run output against the three cases | *(empty)* |
@@ -432,6 +434,8 @@ validate_frame.py [paths...] [--encoding auto|markdown|yaml|json]
 | D10 | All refinements are repeatable at the model layer; profiles narrow | Make some refinements (e.g. `style`) non-repeatable in the model | Concatenation never loses content, so it is the safe default. Narrowing to non-repeatable is exactly the technical constraint DCAP permits a profile to add. Our profile narrows six of the ten, which is what the current implementation already does. |
 | D11 | Reference grammar is permissive: any string is a `<name>` | Strict grammar the validator enforces | A strict grammar would reject valid v0.2 Frames whose `inherits` values are arbitrary strings. The grammar exists so readers can declare what they resolve, not so validators can reject. |
 | D12 | `guards` is a metadata-level relation that composes by accumulation | Defer to a future version (the original N4); or make it an eleventh refinement | Both source documents require Guard references now, so deferral was a misalignment. As a refinement it would dumb-down into prose fed to the model, which is the wrong failure mode for a validation requirement. Accumulation follows the whitepaper's compliance example: a parent's Guard must not be droppable by a child's silence. |
+| D13 | The spec is one document in Internet-Draft structure, written as plain GitHub-flavored Markdown | Five Singapore-Framework files (the original plan); kramdown-rfc source rendered to xml2rfc text and HTML (the first pass) | The RFC checklist forced sections the five-file plan lacked: Security Considerations, IANA registries, media types, a formal reference grammar. kramdown-rfc rendered cleanly, but its source does not render on GitHub, which is where frame-spec is read. Plain Markdown keeps every RFC section and stays reviewable; the kramdown source is kept for eventual submission. |
+| D14 | Registered `status` and `visibility` values are SHOULD; unregistered values MUST be preserved | Closed MUST vocabularies (the first draft) | Nine of frame-spec's 18 examples carry `status: stable`, and v0.2 lists visibility values as suggested. A closed MUST set made this design's own compatibility claim false for the stewards' examples. SHOULD plus preservation keeps the claim true, matches v0.2's wording, and leaves the registries in place. |
 
 ## 12. Open questions
 
