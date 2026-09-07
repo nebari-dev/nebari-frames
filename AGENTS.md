@@ -89,6 +89,14 @@ store.Repository**.
   - `slots.go` - `SlotTable` is the single source of truth for slot keys, markdown headings, and
     content shape (terms / list / prose). Add or rename a slot here only; the `.frame.md` codec and
     the MCP composer both read it.
+  - `templates.go` / `builtins.go` - Frame templates: an authoring affordance, not Frames and not
+    a Frame Spec concept. A template carries prefill content plus a per-slot rule (required /
+    recommended / optional, with a note). Built-ins are embedded YAML parsed and validated at
+    package init, so a malformed starter panics at startup rather than failing at a user's first
+    click. `Check` reports required slots a document leaves empty; `publish` merges those with the
+    schema's own violations so an author sees everything at once. Checked on create only: nothing
+    is recorded on the Frame, so `required` is an authoring aid rather than ongoing governance.
+    See `docs/adr/0001-frame-templates-are-not-frames.md`.
   - `framemd.go` - the Frame Spec v0.2 `.frame.md` codec (YAML frontmatter plus one `##` section per
     slot). Round-trip fidelity matters: `examples/*.yaml` and `examples/*.frame.md` are checked-in
     conformance fixtures asserted by `examples_test.go`.
@@ -106,7 +114,10 @@ store.Repository**.
   cannot be shadowed by a case variant. The in-memory fake enforces the same unique constraints;
   where it cannot, tests reach for real SQLite and say why. Publishes go
   through `CreateFrameVersion`, which inserts the frame row, version, inheritance edges, and grants
-  atomically. **SQLite is single-writer, so the deployment is pinned to one replica.**
+  atomically.
+  `frame_templates` holds org-authored templates, with prefill and field rules as opaque blobs so
+  a change to `SlotTable` never touches the schema; built-ins are not rows.
+  **SQLite is single-writer, so the deployment is pinned to one replica.**
 - `backend/internal/mcp` is a thin protocol adapter over `frames.Service`, exposing frames as MCP
   resources under `nebari-frame://<org>/<name>[@<version>]` plus RFC 9728 metadata at
   `/.well-known/oauth-protected-resource`. It is also a write surface: `create_frame` and
@@ -152,5 +163,5 @@ store.Repository**.
   and keep new comments in the same register.
 - Always stop a dev loop with a single Ctrl-C. Killing it leaves the SQLite lock held and the next
   start fails with `disk I/O error` / `database is locked`; `make dev-clean` recovers.
-- Design docs in `docs/design/`, client connection guides in `docs/connect/`, manual QA scripts in
-  `docs/qa/`.
+- Design docs in `docs/design/`, architecture decision records in `docs/adr/`, client connection
+  guides in `docs/connect/`, manual QA scripts in `docs/qa/`.
