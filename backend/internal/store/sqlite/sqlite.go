@@ -541,6 +541,122 @@ func (r *Repository) FrameChildren(ctx context.Context, parentFrameID string) ([
 	return out, rows.Err()
 }
 
+// Frame templates. Prefill and field_rules are stored as written: this layer
+// does not know or care what is inside them, which is what keeps a slot change
+// out of this schema.
+
+const frameTemplateCols = `id, org_id, title, description, prefill, field_rules, created_by, created_at, updated_at`
+
+func (r *Repository) CreateFrameTemplate(ctx context.Context, t *store.FrameTemplate) error {
+	_, err := r.db.ExecContext(ctx,
+		`INSERT INTO frame_templates (`+frameTemplateCols+`) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		t.ID, t.OrgID, t.Title, t.Description, t.Prefill, t.FieldRules, t.CreatedBy,
+		t.CreatedAt.UTC().Format(time.RFC3339), t.UpdatedAt.UTC().Format(time.RFC3339))
+	if err != nil {
+		// Both the primary key and UNIQUE (org_id, title) land here. The handler
+		// needs a domain error to map, not a driver string.
+		if isUnique(err) {
+			return store.ErrAlreadyExists
+		}
+		return err
+	}
+	return nil
+}
+
+func (r *Repository) UpdateFrameTemplate(ctx context.Context, t *store.FrameTemplate) error {
+	// org_id is in the WHERE clause rather than checked beforehand, so a row in
+	// another org is simply not matched: no separate read, no race between the
+	// check and the write.
+	res, err := r.db.ExecContext(ctx,
+		`UPDATE frame_templates
+		    SET title = ?, description = ?, prefill = ?, field_rules = ?, updated_at = ?
+		  WHERE id = ? AND org_id = ?`,
+		t.Title, t.Description, t.Prefill, t.FieldRules,
+		t.UpdatedAt.UTC().Format(time.RFC3339), t.ID, t.OrgID)
+	if err != nil {
+		if isUnique(err) {
+			return store.ErrAlreadyExists
+		}
+		return err
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if n == 0 {
+		return store.ErrNotFound
+	}
+	return nil
+}
+
+func (r *Repository) DeleteFrameTemplate(ctx context.Context, orgID, id string) error {
+	res, err := r.db.ExecContext(ctx,
+		`DELETE FROM frame_templates WHERE id = ? AND org_id = ?`, id, orgID)
+	if err != nil {
+		return err
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if n == 0 {
+		return store.ErrNotFound
+	}
+	return nil
+}
+
+func (r *Repository) GetFrameTemplate(ctx context.Context, orgID, id string) (*store.FrameTemplate, error) {
+	row := r.db.QueryRowContext(ctx,
+		`SELECT `+frameTemplateCols+` FROM frame_templates WHERE id = ? AND org_id = ?`, id, orgID)
+	t, err := scanFrameTemplate(row)
+	if errors.Is(err, sql.ErrNoRows) {
+		// A row in another org is reported as absent, so existence does not leak.
+		return nil, store.ErrNotFound
+	}
+	if err != nil {
+		return nil, err
+	}
+	return t, nil
+}
+
+func (r *Repository) ListFrameTemplatesByOrg(ctx context.Context, orgID string) ([]*store.FrameTemplate, error) {
+	rows, err := r.db.QueryContext(ctx,
+		`SELECT `+frameTemplateCols+` FROM frame_templates WHERE org_id = ? ORDER BY title`, orgID)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = rows.Close() }()
+	out := []*store.FrameTemplate{}
+	for rows.Next() {
+		t, err := scanFrameTemplate(rows)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, t)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+// rowScanner is satisfied by both *sql.Row and *sql.Rows, so the column list is
+// written once. There is no existing scanner interface in this file: scanOrg and
+// scanMemberships each take a concrete type instead, one per shape they scan.
+type rowScanner interface{ Scan(dest ...any) error }
+
+func scanFrameTemplate(s rowScanner) (*store.FrameTemplate, error) {
+	var t store.FrameTemplate
+	var created, updated string
+	if err := s.Scan(&t.ID, &t.OrgID, &t.Title, &t.Description, &t.Prefill, &t.FieldRules,
+		&t.CreatedBy, &created, &updated); err != nil {
+		return nil, err
+	}
+	t.CreatedAt = ts(created).AsTime()
+	t.UpdatedAt = ts(updated).AsTime()
+	return &t, nil
+}
+
 func (r *Repository) DeleteFrame(ctx context.Context, frameID string) error {
 	tx, err := r.db.BeginTx(ctx, nil)
 	if err != nil {
