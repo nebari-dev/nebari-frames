@@ -22,9 +22,14 @@ const (
 )
 
 type PublishFrameRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Content       []byte                 `protobuf:"bytes,1,opt,name=content,proto3" json:"content,omitempty"` // full YAML; name/version/extends/excludes/slots parsed server-side
-	Changelog     string                 `protobuf:"bytes,2,opt,name=changelog,proto3" json:"changelog,omitempty"`
+	state     protoimpl.MessageState `protogen:"open.v1"`
+	Content   []byte                 `protobuf:"bytes,1,opt,name=content,proto3" json:"content,omitempty"` // full YAML; name/version/extends/excludes/slots parsed server-side
+	Changelog string                 `protobuf:"bytes,2,opt,name=changelog,proto3" json:"changelog,omitempty"`
+	// Optional. Names the template this Frame is being created from, so its
+	// required slots are checked. Used for validation and then discarded:
+	// nothing is recorded on the Frame, and the check applies on create only.
+	// Empty means no template and no checks.
+	TemplateId    string `protobuf:"bytes,3,opt,name=template_id,json=templateId,proto3" json:"template_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -69,6 +74,13 @@ func (x *PublishFrameRequest) GetContent() []byte {
 func (x *PublishFrameRequest) GetChangelog() string {
 	if x != nil {
 		return x.Changelog
+	}
+	return ""
+}
+
+func (x *PublishFrameRequest) GetTemplateId() string {
+	if x != nil {
+		return x.TemplateId
 	}
 	return ""
 }
@@ -1412,14 +1424,506 @@ func (*RemoveOrgMemberResponse) Descriptor() ([]byte, []int) {
 	return file_frames_v1_frame_service_proto_rawDescGZIP(), []int{26}
 }
 
+type ListFrameTemplatesRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListFrameTemplatesRequest) Reset() {
+	*x = ListFrameTemplatesRequest{}
+	mi := &file_frames_v1_frame_service_proto_msgTypes[27]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListFrameTemplatesRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListFrameTemplatesRequest) ProtoMessage() {}
+
+func (x *ListFrameTemplatesRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_frames_v1_frame_service_proto_msgTypes[27]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListFrameTemplatesRequest.ProtoReflect.Descriptor instead.
+func (*ListFrameTemplatesRequest) Descriptor() ([]byte, []int) {
+	return file_frames_v1_frame_service_proto_rawDescGZIP(), []int{27}
+}
+
+type ListFrameTemplatesResponse struct {
+	state     protoimpl.MessageState  `protogen:"open.v1"`
+	Templates []*FrameTemplateSummary `protobuf:"bytes,1,rep,name=templates,proto3" json:"templates,omitempty"`
+	// Whether the caller may create, edit, and delete org templates, so the SPA
+	// does not have to infer admin-ness itself. Mirrors ListFramesResponse.can_create.
+	CanManage     bool `protobuf:"varint,2,opt,name=can_manage,json=canManage,proto3" json:"can_manage,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListFrameTemplatesResponse) Reset() {
+	*x = ListFrameTemplatesResponse{}
+	mi := &file_frames_v1_frame_service_proto_msgTypes[28]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListFrameTemplatesResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListFrameTemplatesResponse) ProtoMessage() {}
+
+func (x *ListFrameTemplatesResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_frames_v1_frame_service_proto_msgTypes[28]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListFrameTemplatesResponse.ProtoReflect.Descriptor instead.
+func (*ListFrameTemplatesResponse) Descriptor() ([]byte, []int) {
+	return file_frames_v1_frame_service_proto_rawDescGZIP(), []int{28}
+}
+
+func (x *ListFrameTemplatesResponse) GetTemplates() []*FrameTemplateSummary {
+	if x != nil {
+		return x.Templates
+	}
+	return nil
+}
+
+func (x *ListFrameTemplatesResponse) GetCanManage() bool {
+	if x != nil {
+		return x.CanManage
+	}
+	return false
+}
+
+type GetFrameTemplateRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Id            string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetFrameTemplateRequest) Reset() {
+	*x = GetFrameTemplateRequest{}
+	mi := &file_frames_v1_frame_service_proto_msgTypes[29]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetFrameTemplateRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetFrameTemplateRequest) ProtoMessage() {}
+
+func (x *GetFrameTemplateRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_frames_v1_frame_service_proto_msgTypes[29]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetFrameTemplateRequest.ProtoReflect.Descriptor instead.
+func (*GetFrameTemplateRequest) Descriptor() ([]byte, []int) {
+	return file_frames_v1_frame_service_proto_rawDescGZIP(), []int{29}
+}
+
+func (x *GetFrameTemplateRequest) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+type GetFrameTemplateResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Template      *FrameTemplate         `protobuf:"bytes,1,opt,name=template,proto3" json:"template,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetFrameTemplateResponse) Reset() {
+	*x = GetFrameTemplateResponse{}
+	mi := &file_frames_v1_frame_service_proto_msgTypes[30]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetFrameTemplateResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetFrameTemplateResponse) ProtoMessage() {}
+
+func (x *GetFrameTemplateResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_frames_v1_frame_service_proto_msgTypes[30]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetFrameTemplateResponse.ProtoReflect.Descriptor instead.
+func (*GetFrameTemplateResponse) Descriptor() ([]byte, []int) {
+	return file_frames_v1_frame_service_proto_rawDescGZIP(), []int{30}
+}
+
+func (x *GetFrameTemplateResponse) GetTemplate() *FrameTemplate {
+	if x != nil {
+		return x.Template
+	}
+	return nil
+}
+
+type CreateFrameTemplateRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Title         string                 `protobuf:"bytes,1,opt,name=title,proto3" json:"title,omitempty"`
+	Description   string                 `protobuf:"bytes,2,opt,name=description,proto3" json:"description,omitempty"`
+	Prefill       []byte                 `protobuf:"bytes,3,opt,name=prefill,proto3" json:"prefill,omitempty"`
+	FieldRules    map[string]*FieldRule  `protobuf:"bytes,4,rep,name=field_rules,json=fieldRules,proto3" json:"field_rules,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *CreateFrameTemplateRequest) Reset() {
+	*x = CreateFrameTemplateRequest{}
+	mi := &file_frames_v1_frame_service_proto_msgTypes[31]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CreateFrameTemplateRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CreateFrameTemplateRequest) ProtoMessage() {}
+
+func (x *CreateFrameTemplateRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_frames_v1_frame_service_proto_msgTypes[31]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CreateFrameTemplateRequest.ProtoReflect.Descriptor instead.
+func (*CreateFrameTemplateRequest) Descriptor() ([]byte, []int) {
+	return file_frames_v1_frame_service_proto_rawDescGZIP(), []int{31}
+}
+
+func (x *CreateFrameTemplateRequest) GetTitle() string {
+	if x != nil {
+		return x.Title
+	}
+	return ""
+}
+
+func (x *CreateFrameTemplateRequest) GetDescription() string {
+	if x != nil {
+		return x.Description
+	}
+	return ""
+}
+
+func (x *CreateFrameTemplateRequest) GetPrefill() []byte {
+	if x != nil {
+		return x.Prefill
+	}
+	return nil
+}
+
+func (x *CreateFrameTemplateRequest) GetFieldRules() map[string]*FieldRule {
+	if x != nil {
+		return x.FieldRules
+	}
+	return nil
+}
+
+type CreateFrameTemplateResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Template      *FrameTemplate         `protobuf:"bytes,1,opt,name=template,proto3" json:"template,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *CreateFrameTemplateResponse) Reset() {
+	*x = CreateFrameTemplateResponse{}
+	mi := &file_frames_v1_frame_service_proto_msgTypes[32]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CreateFrameTemplateResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CreateFrameTemplateResponse) ProtoMessage() {}
+
+func (x *CreateFrameTemplateResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_frames_v1_frame_service_proto_msgTypes[32]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CreateFrameTemplateResponse.ProtoReflect.Descriptor instead.
+func (*CreateFrameTemplateResponse) Descriptor() ([]byte, []int) {
+	return file_frames_v1_frame_service_proto_rawDescGZIP(), []int{32}
+}
+
+func (x *CreateFrameTemplateResponse) GetTemplate() *FrameTemplate {
+	if x != nil {
+		return x.Template
+	}
+	return nil
+}
+
+type UpdateFrameTemplateRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Id            string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	Title         string                 `protobuf:"bytes,2,opt,name=title,proto3" json:"title,omitempty"`
+	Description   string                 `protobuf:"bytes,3,opt,name=description,proto3" json:"description,omitempty"`
+	Prefill       []byte                 `protobuf:"bytes,4,opt,name=prefill,proto3" json:"prefill,omitempty"`
+	FieldRules    map[string]*FieldRule  `protobuf:"bytes,5,rep,name=field_rules,json=fieldRules,proto3" json:"field_rules,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *UpdateFrameTemplateRequest) Reset() {
+	*x = UpdateFrameTemplateRequest{}
+	mi := &file_frames_v1_frame_service_proto_msgTypes[33]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *UpdateFrameTemplateRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*UpdateFrameTemplateRequest) ProtoMessage() {}
+
+func (x *UpdateFrameTemplateRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_frames_v1_frame_service_proto_msgTypes[33]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use UpdateFrameTemplateRequest.ProtoReflect.Descriptor instead.
+func (*UpdateFrameTemplateRequest) Descriptor() ([]byte, []int) {
+	return file_frames_v1_frame_service_proto_rawDescGZIP(), []int{33}
+}
+
+func (x *UpdateFrameTemplateRequest) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+func (x *UpdateFrameTemplateRequest) GetTitle() string {
+	if x != nil {
+		return x.Title
+	}
+	return ""
+}
+
+func (x *UpdateFrameTemplateRequest) GetDescription() string {
+	if x != nil {
+		return x.Description
+	}
+	return ""
+}
+
+func (x *UpdateFrameTemplateRequest) GetPrefill() []byte {
+	if x != nil {
+		return x.Prefill
+	}
+	return nil
+}
+
+func (x *UpdateFrameTemplateRequest) GetFieldRules() map[string]*FieldRule {
+	if x != nil {
+		return x.FieldRules
+	}
+	return nil
+}
+
+type UpdateFrameTemplateResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Template      *FrameTemplate         `protobuf:"bytes,1,opt,name=template,proto3" json:"template,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *UpdateFrameTemplateResponse) Reset() {
+	*x = UpdateFrameTemplateResponse{}
+	mi := &file_frames_v1_frame_service_proto_msgTypes[34]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *UpdateFrameTemplateResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*UpdateFrameTemplateResponse) ProtoMessage() {}
+
+func (x *UpdateFrameTemplateResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_frames_v1_frame_service_proto_msgTypes[34]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use UpdateFrameTemplateResponse.ProtoReflect.Descriptor instead.
+func (*UpdateFrameTemplateResponse) Descriptor() ([]byte, []int) {
+	return file_frames_v1_frame_service_proto_rawDescGZIP(), []int{34}
+}
+
+func (x *UpdateFrameTemplateResponse) GetTemplate() *FrameTemplate {
+	if x != nil {
+		return x.Template
+	}
+	return nil
+}
+
+type DeleteFrameTemplateRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Id            string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *DeleteFrameTemplateRequest) Reset() {
+	*x = DeleteFrameTemplateRequest{}
+	mi := &file_frames_v1_frame_service_proto_msgTypes[35]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DeleteFrameTemplateRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DeleteFrameTemplateRequest) ProtoMessage() {}
+
+func (x *DeleteFrameTemplateRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_frames_v1_frame_service_proto_msgTypes[35]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DeleteFrameTemplateRequest.ProtoReflect.Descriptor instead.
+func (*DeleteFrameTemplateRequest) Descriptor() ([]byte, []int) {
+	return file_frames_v1_frame_service_proto_rawDescGZIP(), []int{35}
+}
+
+func (x *DeleteFrameTemplateRequest) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+type DeleteFrameTemplateResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *DeleteFrameTemplateResponse) Reset() {
+	*x = DeleteFrameTemplateResponse{}
+	mi := &file_frames_v1_frame_service_proto_msgTypes[36]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DeleteFrameTemplateResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DeleteFrameTemplateResponse) ProtoMessage() {}
+
+func (x *DeleteFrameTemplateResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_frames_v1_frame_service_proto_msgTypes[36]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DeleteFrameTemplateResponse.ProtoReflect.Descriptor instead.
+func (*DeleteFrameTemplateResponse) Descriptor() ([]byte, []int) {
+	return file_frames_v1_frame_service_proto_rawDescGZIP(), []int{36}
+}
+
 var File_frames_v1_frame_service_proto protoreflect.FileDescriptor
 
 const file_frames_v1_frame_service_proto_rawDesc = "" +
 	"\n" +
-	"\x1dframes/v1/frame_service.proto\x12\tframes.v1\x1a\x15frames/v1/frame.proto\"M\n" +
+	"\x1dframes/v1/frame_service.proto\x12\tframes.v1\x1a\x15frames/v1/frame.proto\"n\n" +
 	"\x13PublishFrameRequest\x12\x18\n" +
 	"\acontent\x18\x01 \x01(\fR\acontent\x12\x1c\n" +
-	"\tchangelog\x18\x02 \x01(\tR\tchangelog\"q\n" +
+	"\tchangelog\x18\x02 \x01(\tR\tchangelog\x12\x1f\n" +
+	"\vtemplate_id\x18\x03 \x01(\tR\n" +
+	"templateId\"q\n" +
 	"\x14PublishFrameResponse\x12&\n" +
 	"\x05frame\x18\x01 \x01(\v2\x10.frames.v1.FrameR\x05frame\x121\n" +
 	"\aversion\x18\x02 \x01(\v2\x17.frames.v1.FrameVersionR\aversion\"\x13\n" +
@@ -1495,7 +1999,42 @@ const file_frames_v1_frame_service_proto_rawDesc = "" +
 	"\x16RemoveOrgMemberRequest\x12\x19\n" +
 	"\buser_sub\x18\x01 \x01(\tR\auserSub\x12\x14\n" +
 	"\x05email\x18\x02 \x01(\tR\x05email\"\x19\n" +
-	"\x17RemoveOrgMemberResponse2\xd1\a\n" +
+	"\x17RemoveOrgMemberResponse\"\x1b\n" +
+	"\x19ListFrameTemplatesRequest\"z\n" +
+	"\x1aListFrameTemplatesResponse\x12=\n" +
+	"\ttemplates\x18\x01 \x03(\v2\x1f.frames.v1.FrameTemplateSummaryR\ttemplates\x12\x1d\n" +
+	"\n" +
+	"can_manage\x18\x02 \x01(\bR\tcanManage\")\n" +
+	"\x17GetFrameTemplateRequest\x12\x0e\n" +
+	"\x02id\x18\x01 \x01(\tR\x02id\"P\n" +
+	"\x18GetFrameTemplateResponse\x124\n" +
+	"\btemplate\x18\x01 \x01(\v2\x18.frames.v1.FrameTemplateR\btemplate\"\x9b\x02\n" +
+	"\x1aCreateFrameTemplateRequest\x12\x14\n" +
+	"\x05title\x18\x01 \x01(\tR\x05title\x12 \n" +
+	"\vdescription\x18\x02 \x01(\tR\vdescription\x12\x18\n" +
+	"\aprefill\x18\x03 \x01(\fR\aprefill\x12V\n" +
+	"\vfield_rules\x18\x04 \x03(\v25.frames.v1.CreateFrameTemplateRequest.FieldRulesEntryR\n" +
+	"fieldRules\x1aS\n" +
+	"\x0fFieldRulesEntry\x12\x10\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\x12*\n" +
+	"\x05value\x18\x02 \x01(\v2\x14.frames.v1.FieldRuleR\x05value:\x028\x01\"S\n" +
+	"\x1bCreateFrameTemplateResponse\x124\n" +
+	"\btemplate\x18\x01 \x01(\v2\x18.frames.v1.FrameTemplateR\btemplate\"\xab\x02\n" +
+	"\x1aUpdateFrameTemplateRequest\x12\x0e\n" +
+	"\x02id\x18\x01 \x01(\tR\x02id\x12\x14\n" +
+	"\x05title\x18\x02 \x01(\tR\x05title\x12 \n" +
+	"\vdescription\x18\x03 \x01(\tR\vdescription\x12\x18\n" +
+	"\aprefill\x18\x04 \x01(\fR\aprefill\x12V\n" +
+	"\vfield_rules\x18\x05 \x03(\v25.frames.v1.UpdateFrameTemplateRequest.FieldRulesEntryR\n" +
+	"fieldRules\x1aS\n" +
+	"\x0fFieldRulesEntry\x12\x10\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\x12*\n" +
+	"\x05value\x18\x02 \x01(\v2\x14.frames.v1.FieldRuleR\x05value:\x028\x01\"S\n" +
+	"\x1bUpdateFrameTemplateResponse\x124\n" +
+	"\btemplate\x18\x01 \x01(\v2\x18.frames.v1.FrameTemplateR\btemplate\",\n" +
+	"\x1aDeleteFrameTemplateRequest\x12\x0e\n" +
+	"\x02id\x18\x01 \x01(\tR\x02id\"\x1d\n" +
+	"\x1bDeleteFrameTemplateResponse2\xc3\v\n" +
 	"\fFrameService\x12O\n" +
 	"\fPublishFrame\x12\x1e.frames.v1.PublishFrameRequest\x1a\x1f.frames.v1.PublishFrameResponse\x12I\n" +
 	"\n" +
@@ -1505,7 +2044,12 @@ const file_frames_v1_frame_service_proto_rawDesc = "" +
 	"\x05GetMe\x12\x17.frames.v1.GetMeRequest\x1a\x18.frames.v1.GetMeResponse\x12^\n" +
 	"\x11ListFrameVersions\x12#.frames.v1.ListFrameVersionsRequest\x1a$.frames.v1.ListFrameVersionsResponse\x12L\n" +
 	"\vDeleteFrame\x12\x1d.frames.v1.DeleteFrameRequest\x1a\x1e.frames.v1.DeleteFrameResponse\x12O\n" +
-	"\fConvertFrame\x12\x1e.frames.v1.ConvertFrameRequest\x1a\x1f.frames.v1.ConvertFrameResponse\x12U\n" +
+	"\fConvertFrame\x12\x1e.frames.v1.ConvertFrameRequest\x1a\x1f.frames.v1.ConvertFrameResponse\x12a\n" +
+	"\x12ListFrameTemplates\x12$.frames.v1.ListFrameTemplatesRequest\x1a%.frames.v1.ListFrameTemplatesResponse\x12[\n" +
+	"\x10GetFrameTemplate\x12\".frames.v1.GetFrameTemplateRequest\x1a#.frames.v1.GetFrameTemplateResponse\x12d\n" +
+	"\x13CreateFrameTemplate\x12%.frames.v1.CreateFrameTemplateRequest\x1a&.frames.v1.CreateFrameTemplateResponse\x12d\n" +
+	"\x13UpdateFrameTemplate\x12%.frames.v1.UpdateFrameTemplateRequest\x1a&.frames.v1.UpdateFrameTemplateResponse\x12d\n" +
+	"\x13DeleteFrameTemplate\x12%.frames.v1.DeleteFrameTemplateRequest\x1a&.frames.v1.DeleteFrameTemplateResponse\x12U\n" +
 	"\x0eListOrgMembers\x12 .frames.v1.ListOrgMembersRequest\x1a!.frames.v1.ListOrgMembersResponse\x12O\n" +
 	"\fAddOrgMember\x12\x1e.frames.v1.AddOrgMemberRequest\x1a\x1f.frames.v1.AddOrgMemberResponse\x12R\n" +
 	"\rSetMemberRole\x12\x1f.frames.v1.SetMemberRoleRequest\x1a .frames.v1.SetMemberRoleResponse\x12X\n" +
@@ -1525,87 +2069,120 @@ func file_frames_v1_frame_service_proto_rawDescGZIP() []byte {
 	return file_frames_v1_frame_service_proto_rawDescData
 }
 
-var file_frames_v1_frame_service_proto_msgTypes = make([]protoimpl.MessageInfo, 27)
+var file_frames_v1_frame_service_proto_msgTypes = make([]protoimpl.MessageInfo, 39)
 var file_frames_v1_frame_service_proto_goTypes = []any{
-	(*PublishFrameRequest)(nil),       // 0: frames.v1.PublishFrameRequest
-	(*PublishFrameResponse)(nil),      // 1: frames.v1.PublishFrameResponse
-	(*ListFramesRequest)(nil),         // 2: frames.v1.ListFramesRequest
-	(*ListFramesResponse)(nil),        // 3: frames.v1.ListFramesResponse
-	(*GetFrameRequest)(nil),           // 4: frames.v1.GetFrameRequest
-	(*GetFrameResponse)(nil),          // 5: frames.v1.GetFrameResponse
-	(*ResolveFrameRequest)(nil),       // 6: frames.v1.ResolveFrameRequest
-	(*ResolveFrameResponse)(nil),      // 7: frames.v1.ResolveFrameResponse
-	(*GetMeRequest)(nil),              // 8: frames.v1.GetMeRequest
-	(*GetMeResponse)(nil),             // 9: frames.v1.GetMeResponse
-	(*ListFrameVersionsRequest)(nil),  // 10: frames.v1.ListFrameVersionsRequest
-	(*ListFrameVersionsResponse)(nil), // 11: frames.v1.ListFrameVersionsResponse
-	(*FieldViolation)(nil),            // 12: frames.v1.FieldViolation
-	(*FieldViolations)(nil),           // 13: frames.v1.FieldViolations
-	(*ConvertFrameRequest)(nil),       // 14: frames.v1.ConvertFrameRequest
-	(*ConvertFrameResponse)(nil),      // 15: frames.v1.ConvertFrameResponse
-	(*DeleteFrameRequest)(nil),        // 16: frames.v1.DeleteFrameRequest
-	(*DeleteFrameResponse)(nil),       // 17: frames.v1.DeleteFrameResponse
-	(*DeleteBlocked)(nil),             // 18: frames.v1.DeleteBlocked
-	(*ListOrgMembersRequest)(nil),     // 19: frames.v1.ListOrgMembersRequest
-	(*ListOrgMembersResponse)(nil),    // 20: frames.v1.ListOrgMembersResponse
-	(*AddOrgMemberRequest)(nil),       // 21: frames.v1.AddOrgMemberRequest
-	(*AddOrgMemberResponse)(nil),      // 22: frames.v1.AddOrgMemberResponse
-	(*SetMemberRoleRequest)(nil),      // 23: frames.v1.SetMemberRoleRequest
-	(*SetMemberRoleResponse)(nil),     // 24: frames.v1.SetMemberRoleResponse
-	(*RemoveOrgMemberRequest)(nil),    // 25: frames.v1.RemoveOrgMemberRequest
-	(*RemoveOrgMemberResponse)(nil),   // 26: frames.v1.RemoveOrgMemberResponse
-	(*Frame)(nil),                     // 27: frames.v1.Frame
-	(*FrameVersion)(nil),              // 28: frames.v1.FrameVersion
-	(*FrameSummary)(nil),              // 29: frames.v1.FrameSummary
-	(*ParentRef)(nil),                 // 30: frames.v1.ParentRef
-	(*Permissions)(nil),               // 31: frames.v1.Permissions
-	(*Org)(nil),                       // 32: frames.v1.Org
-	(*FrameVersionSummary)(nil),       // 33: frames.v1.FrameVersionSummary
-	(*Membership)(nil),                // 34: frames.v1.Membership
+	(*PublishFrameRequest)(nil),         // 0: frames.v1.PublishFrameRequest
+	(*PublishFrameResponse)(nil),        // 1: frames.v1.PublishFrameResponse
+	(*ListFramesRequest)(nil),           // 2: frames.v1.ListFramesRequest
+	(*ListFramesResponse)(nil),          // 3: frames.v1.ListFramesResponse
+	(*GetFrameRequest)(nil),             // 4: frames.v1.GetFrameRequest
+	(*GetFrameResponse)(nil),            // 5: frames.v1.GetFrameResponse
+	(*ResolveFrameRequest)(nil),         // 6: frames.v1.ResolveFrameRequest
+	(*ResolveFrameResponse)(nil),        // 7: frames.v1.ResolveFrameResponse
+	(*GetMeRequest)(nil),                // 8: frames.v1.GetMeRequest
+	(*GetMeResponse)(nil),               // 9: frames.v1.GetMeResponse
+	(*ListFrameVersionsRequest)(nil),    // 10: frames.v1.ListFrameVersionsRequest
+	(*ListFrameVersionsResponse)(nil),   // 11: frames.v1.ListFrameVersionsResponse
+	(*FieldViolation)(nil),              // 12: frames.v1.FieldViolation
+	(*FieldViolations)(nil),             // 13: frames.v1.FieldViolations
+	(*ConvertFrameRequest)(nil),         // 14: frames.v1.ConvertFrameRequest
+	(*ConvertFrameResponse)(nil),        // 15: frames.v1.ConvertFrameResponse
+	(*DeleteFrameRequest)(nil),          // 16: frames.v1.DeleteFrameRequest
+	(*DeleteFrameResponse)(nil),         // 17: frames.v1.DeleteFrameResponse
+	(*DeleteBlocked)(nil),               // 18: frames.v1.DeleteBlocked
+	(*ListOrgMembersRequest)(nil),       // 19: frames.v1.ListOrgMembersRequest
+	(*ListOrgMembersResponse)(nil),      // 20: frames.v1.ListOrgMembersResponse
+	(*AddOrgMemberRequest)(nil),         // 21: frames.v1.AddOrgMemberRequest
+	(*AddOrgMemberResponse)(nil),        // 22: frames.v1.AddOrgMemberResponse
+	(*SetMemberRoleRequest)(nil),        // 23: frames.v1.SetMemberRoleRequest
+	(*SetMemberRoleResponse)(nil),       // 24: frames.v1.SetMemberRoleResponse
+	(*RemoveOrgMemberRequest)(nil),      // 25: frames.v1.RemoveOrgMemberRequest
+	(*RemoveOrgMemberResponse)(nil),     // 26: frames.v1.RemoveOrgMemberResponse
+	(*ListFrameTemplatesRequest)(nil),   // 27: frames.v1.ListFrameTemplatesRequest
+	(*ListFrameTemplatesResponse)(nil),  // 28: frames.v1.ListFrameTemplatesResponse
+	(*GetFrameTemplateRequest)(nil),     // 29: frames.v1.GetFrameTemplateRequest
+	(*GetFrameTemplateResponse)(nil),    // 30: frames.v1.GetFrameTemplateResponse
+	(*CreateFrameTemplateRequest)(nil),  // 31: frames.v1.CreateFrameTemplateRequest
+	(*CreateFrameTemplateResponse)(nil), // 32: frames.v1.CreateFrameTemplateResponse
+	(*UpdateFrameTemplateRequest)(nil),  // 33: frames.v1.UpdateFrameTemplateRequest
+	(*UpdateFrameTemplateResponse)(nil), // 34: frames.v1.UpdateFrameTemplateResponse
+	(*DeleteFrameTemplateRequest)(nil),  // 35: frames.v1.DeleteFrameTemplateRequest
+	(*DeleteFrameTemplateResponse)(nil), // 36: frames.v1.DeleteFrameTemplateResponse
+	nil,                                 // 37: frames.v1.CreateFrameTemplateRequest.FieldRulesEntry
+	nil,                                 // 38: frames.v1.UpdateFrameTemplateRequest.FieldRulesEntry
+	(*Frame)(nil),                       // 39: frames.v1.Frame
+	(*FrameVersion)(nil),                // 40: frames.v1.FrameVersion
+	(*FrameSummary)(nil),                // 41: frames.v1.FrameSummary
+	(*ParentRef)(nil),                   // 42: frames.v1.ParentRef
+	(*Permissions)(nil),                 // 43: frames.v1.Permissions
+	(*Org)(nil),                         // 44: frames.v1.Org
+	(*FrameVersionSummary)(nil),         // 45: frames.v1.FrameVersionSummary
+	(*Membership)(nil),                  // 46: frames.v1.Membership
+	(*FrameTemplateSummary)(nil),        // 47: frames.v1.FrameTemplateSummary
+	(*FrameTemplate)(nil),               // 48: frames.v1.FrameTemplate
+	(*FieldRule)(nil),                   // 49: frames.v1.FieldRule
 }
 var file_frames_v1_frame_service_proto_depIdxs = []int32{
-	27, // 0: frames.v1.PublishFrameResponse.frame:type_name -> frames.v1.Frame
-	28, // 1: frames.v1.PublishFrameResponse.version:type_name -> frames.v1.FrameVersion
-	29, // 2: frames.v1.ListFramesResponse.frames:type_name -> frames.v1.FrameSummary
-	27, // 3: frames.v1.GetFrameResponse.frame:type_name -> frames.v1.Frame
-	28, // 4: frames.v1.GetFrameResponse.version:type_name -> frames.v1.FrameVersion
-	30, // 5: frames.v1.GetFrameResponse.extends:type_name -> frames.v1.ParentRef
-	31, // 6: frames.v1.GetFrameResponse.permissions:type_name -> frames.v1.Permissions
-	32, // 7: frames.v1.GetMeResponse.org:type_name -> frames.v1.Org
-	33, // 8: frames.v1.ListFrameVersionsResponse.versions:type_name -> frames.v1.FrameVersionSummary
+	39, // 0: frames.v1.PublishFrameResponse.frame:type_name -> frames.v1.Frame
+	40, // 1: frames.v1.PublishFrameResponse.version:type_name -> frames.v1.FrameVersion
+	41, // 2: frames.v1.ListFramesResponse.frames:type_name -> frames.v1.FrameSummary
+	39, // 3: frames.v1.GetFrameResponse.frame:type_name -> frames.v1.Frame
+	40, // 4: frames.v1.GetFrameResponse.version:type_name -> frames.v1.FrameVersion
+	42, // 5: frames.v1.GetFrameResponse.extends:type_name -> frames.v1.ParentRef
+	43, // 6: frames.v1.GetFrameResponse.permissions:type_name -> frames.v1.Permissions
+	44, // 7: frames.v1.GetMeResponse.org:type_name -> frames.v1.Org
+	45, // 8: frames.v1.ListFrameVersionsResponse.versions:type_name -> frames.v1.FrameVersionSummary
 	12, // 9: frames.v1.FieldViolations.violations:type_name -> frames.v1.FieldViolation
-	34, // 10: frames.v1.ListOrgMembersResponse.members:type_name -> frames.v1.Membership
-	34, // 11: frames.v1.AddOrgMemberResponse.member:type_name -> frames.v1.Membership
-	34, // 12: frames.v1.SetMemberRoleResponse.member:type_name -> frames.v1.Membership
-	0,  // 13: frames.v1.FrameService.PublishFrame:input_type -> frames.v1.PublishFrameRequest
-	2,  // 14: frames.v1.FrameService.ListFrames:input_type -> frames.v1.ListFramesRequest
-	4,  // 15: frames.v1.FrameService.GetFrame:input_type -> frames.v1.GetFrameRequest
-	6,  // 16: frames.v1.FrameService.ResolveFrame:input_type -> frames.v1.ResolveFrameRequest
-	8,  // 17: frames.v1.FrameService.GetMe:input_type -> frames.v1.GetMeRequest
-	10, // 18: frames.v1.FrameService.ListFrameVersions:input_type -> frames.v1.ListFrameVersionsRequest
-	16, // 19: frames.v1.FrameService.DeleteFrame:input_type -> frames.v1.DeleteFrameRequest
-	14, // 20: frames.v1.FrameService.ConvertFrame:input_type -> frames.v1.ConvertFrameRequest
-	19, // 21: frames.v1.FrameService.ListOrgMembers:input_type -> frames.v1.ListOrgMembersRequest
-	21, // 22: frames.v1.FrameService.AddOrgMember:input_type -> frames.v1.AddOrgMemberRequest
-	23, // 23: frames.v1.FrameService.SetMemberRole:input_type -> frames.v1.SetMemberRoleRequest
-	25, // 24: frames.v1.FrameService.RemoveOrgMember:input_type -> frames.v1.RemoveOrgMemberRequest
-	1,  // 25: frames.v1.FrameService.PublishFrame:output_type -> frames.v1.PublishFrameResponse
-	3,  // 26: frames.v1.FrameService.ListFrames:output_type -> frames.v1.ListFramesResponse
-	5,  // 27: frames.v1.FrameService.GetFrame:output_type -> frames.v1.GetFrameResponse
-	7,  // 28: frames.v1.FrameService.ResolveFrame:output_type -> frames.v1.ResolveFrameResponse
-	9,  // 29: frames.v1.FrameService.GetMe:output_type -> frames.v1.GetMeResponse
-	11, // 30: frames.v1.FrameService.ListFrameVersions:output_type -> frames.v1.ListFrameVersionsResponse
-	17, // 31: frames.v1.FrameService.DeleteFrame:output_type -> frames.v1.DeleteFrameResponse
-	15, // 32: frames.v1.FrameService.ConvertFrame:output_type -> frames.v1.ConvertFrameResponse
-	20, // 33: frames.v1.FrameService.ListOrgMembers:output_type -> frames.v1.ListOrgMembersResponse
-	22, // 34: frames.v1.FrameService.AddOrgMember:output_type -> frames.v1.AddOrgMemberResponse
-	24, // 35: frames.v1.FrameService.SetMemberRole:output_type -> frames.v1.SetMemberRoleResponse
-	26, // 36: frames.v1.FrameService.RemoveOrgMember:output_type -> frames.v1.RemoveOrgMemberResponse
-	25, // [25:37] is the sub-list for method output_type
-	13, // [13:25] is the sub-list for method input_type
-	13, // [13:13] is the sub-list for extension type_name
-	13, // [13:13] is the sub-list for extension extendee
-	0,  // [0:13] is the sub-list for field type_name
+	46, // 10: frames.v1.ListOrgMembersResponse.members:type_name -> frames.v1.Membership
+	46, // 11: frames.v1.AddOrgMemberResponse.member:type_name -> frames.v1.Membership
+	46, // 12: frames.v1.SetMemberRoleResponse.member:type_name -> frames.v1.Membership
+	47, // 13: frames.v1.ListFrameTemplatesResponse.templates:type_name -> frames.v1.FrameTemplateSummary
+	48, // 14: frames.v1.GetFrameTemplateResponse.template:type_name -> frames.v1.FrameTemplate
+	37, // 15: frames.v1.CreateFrameTemplateRequest.field_rules:type_name -> frames.v1.CreateFrameTemplateRequest.FieldRulesEntry
+	48, // 16: frames.v1.CreateFrameTemplateResponse.template:type_name -> frames.v1.FrameTemplate
+	38, // 17: frames.v1.UpdateFrameTemplateRequest.field_rules:type_name -> frames.v1.UpdateFrameTemplateRequest.FieldRulesEntry
+	48, // 18: frames.v1.UpdateFrameTemplateResponse.template:type_name -> frames.v1.FrameTemplate
+	49, // 19: frames.v1.CreateFrameTemplateRequest.FieldRulesEntry.value:type_name -> frames.v1.FieldRule
+	49, // 20: frames.v1.UpdateFrameTemplateRequest.FieldRulesEntry.value:type_name -> frames.v1.FieldRule
+	0,  // 21: frames.v1.FrameService.PublishFrame:input_type -> frames.v1.PublishFrameRequest
+	2,  // 22: frames.v1.FrameService.ListFrames:input_type -> frames.v1.ListFramesRequest
+	4,  // 23: frames.v1.FrameService.GetFrame:input_type -> frames.v1.GetFrameRequest
+	6,  // 24: frames.v1.FrameService.ResolveFrame:input_type -> frames.v1.ResolveFrameRequest
+	8,  // 25: frames.v1.FrameService.GetMe:input_type -> frames.v1.GetMeRequest
+	10, // 26: frames.v1.FrameService.ListFrameVersions:input_type -> frames.v1.ListFrameVersionsRequest
+	16, // 27: frames.v1.FrameService.DeleteFrame:input_type -> frames.v1.DeleteFrameRequest
+	14, // 28: frames.v1.FrameService.ConvertFrame:input_type -> frames.v1.ConvertFrameRequest
+	27, // 29: frames.v1.FrameService.ListFrameTemplates:input_type -> frames.v1.ListFrameTemplatesRequest
+	29, // 30: frames.v1.FrameService.GetFrameTemplate:input_type -> frames.v1.GetFrameTemplateRequest
+	31, // 31: frames.v1.FrameService.CreateFrameTemplate:input_type -> frames.v1.CreateFrameTemplateRequest
+	33, // 32: frames.v1.FrameService.UpdateFrameTemplate:input_type -> frames.v1.UpdateFrameTemplateRequest
+	35, // 33: frames.v1.FrameService.DeleteFrameTemplate:input_type -> frames.v1.DeleteFrameTemplateRequest
+	19, // 34: frames.v1.FrameService.ListOrgMembers:input_type -> frames.v1.ListOrgMembersRequest
+	21, // 35: frames.v1.FrameService.AddOrgMember:input_type -> frames.v1.AddOrgMemberRequest
+	23, // 36: frames.v1.FrameService.SetMemberRole:input_type -> frames.v1.SetMemberRoleRequest
+	25, // 37: frames.v1.FrameService.RemoveOrgMember:input_type -> frames.v1.RemoveOrgMemberRequest
+	1,  // 38: frames.v1.FrameService.PublishFrame:output_type -> frames.v1.PublishFrameResponse
+	3,  // 39: frames.v1.FrameService.ListFrames:output_type -> frames.v1.ListFramesResponse
+	5,  // 40: frames.v1.FrameService.GetFrame:output_type -> frames.v1.GetFrameResponse
+	7,  // 41: frames.v1.FrameService.ResolveFrame:output_type -> frames.v1.ResolveFrameResponse
+	9,  // 42: frames.v1.FrameService.GetMe:output_type -> frames.v1.GetMeResponse
+	11, // 43: frames.v1.FrameService.ListFrameVersions:output_type -> frames.v1.ListFrameVersionsResponse
+	17, // 44: frames.v1.FrameService.DeleteFrame:output_type -> frames.v1.DeleteFrameResponse
+	15, // 45: frames.v1.FrameService.ConvertFrame:output_type -> frames.v1.ConvertFrameResponse
+	28, // 46: frames.v1.FrameService.ListFrameTemplates:output_type -> frames.v1.ListFrameTemplatesResponse
+	30, // 47: frames.v1.FrameService.GetFrameTemplate:output_type -> frames.v1.GetFrameTemplateResponse
+	32, // 48: frames.v1.FrameService.CreateFrameTemplate:output_type -> frames.v1.CreateFrameTemplateResponse
+	34, // 49: frames.v1.FrameService.UpdateFrameTemplate:output_type -> frames.v1.UpdateFrameTemplateResponse
+	36, // 50: frames.v1.FrameService.DeleteFrameTemplate:output_type -> frames.v1.DeleteFrameTemplateResponse
+	20, // 51: frames.v1.FrameService.ListOrgMembers:output_type -> frames.v1.ListOrgMembersResponse
+	22, // 52: frames.v1.FrameService.AddOrgMember:output_type -> frames.v1.AddOrgMemberResponse
+	24, // 53: frames.v1.FrameService.SetMemberRole:output_type -> frames.v1.SetMemberRoleResponse
+	26, // 54: frames.v1.FrameService.RemoveOrgMember:output_type -> frames.v1.RemoveOrgMemberResponse
+	38, // [38:55] is the sub-list for method output_type
+	21, // [21:38] is the sub-list for method input_type
+	21, // [21:21] is the sub-list for extension type_name
+	21, // [21:21] is the sub-list for extension extendee
+	0,  // [0:21] is the sub-list for field type_name
 }
 
 func init() { file_frames_v1_frame_service_proto_init() }
@@ -1624,7 +2201,7 @@ func file_frames_v1_frame_service_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_frames_v1_frame_service_proto_rawDesc), len(file_frames_v1_frame_service_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   27,
+			NumMessages:   39,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

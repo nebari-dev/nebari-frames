@@ -67,3 +67,48 @@ message FrameVersionSummary {
   string published_by = 3;
   google.protobuf.Timestamp published_at = 4;
 }
+
+// Requirement is how strongly a template wants a slot filled. Stricter than the
+// Frame schema, which requires no slot at all: an org uses it to hold its own
+// Frames to a house standard the spec does not impose.
+enum Requirement {
+  REQUIREMENT_UNSPECIFIED = 0;  // treated as optional
+  REQUIREMENT_OPTIONAL    = 1;
+  REQUIREMENT_RECOMMENDED = 2;
+  REQUIREMENT_REQUIRED    = 3;
+}
+
+// FieldRule is a template's expectation for one slot. `note` is the template
+// author's own guidance on what belongs there: the seeded authoring form shows
+// it in place of the generic per-slot hint, and an MCP client asks it as a
+// question. A message rather than a bare Requirement because widening a map's
+// value type later would be a breaking wire change.
+message FieldRule {
+  Requirement level = 1;
+  string note = 2;
+}
+
+// FrameTemplateSummary is what a picker needs: no prefill, so listing stays
+// cheap. `builtin` is computed server-side so no client has to parse an id.
+message FrameTemplateSummary {
+  string id = 1;
+  string title = 2;
+  string description = 3;
+  bool builtin = 4;
+}
+
+message FrameTemplate {
+  string id = 1;
+  string title = 2;
+  string description = 3;
+  bool builtin = 4;
+  // Canonical YAML carrying only `slots` and `extends`. Bytes rather than a
+  // structured message on purpose: a message mirroring the slot schema would be
+  // a second place to update whenever frames.SlotTable changes, which is what
+  // the reflective guards in the MCP tests exist to catch.
+  bytes prefill = 5;
+  // Slot key (terminology, rules, skills, prompts, tool_specs, goals, style,
+  // norms, architecture, business_process) -> rule. Keyed by string, so adding
+  // a slot does not change this shape either.
+  map<string, FieldRule> field_rules = 6;
+}
