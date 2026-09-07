@@ -2,6 +2,7 @@ package store
 
 import (
 	"context"
+	"sort"
 	"strings"
 	"sync"
 
@@ -10,14 +11,15 @@ import (
 
 // Memory is an in-memory Repository for development and tests.
 type Memory struct {
-	mu          sync.RWMutex
-	orgs        map[string]*framesv1.Org    // id -> org
-	slugToOrg   map[string]string           // slug -> id
-	memberships []*framesv1.Membership      // active + pending; active rows have non-empty UserSub
-	frames      map[string]*framesv1.Frame  // id -> frame
-	keyToFrame  map[string]string           // orgID+"/"+name -> id
-	versions    map[string]*frameVersionRow // frameID+"@"+version
-	grants      map[string][]Grant          // frameID -> grants
+	mu             sync.RWMutex
+	orgs           map[string]*framesv1.Org    // id -> org
+	slugToOrg      map[string]string           // slug -> id
+	memberships    []*framesv1.Membership      // active + pending; active rows have non-empty UserSub
+	frames         map[string]*framesv1.Frame  // id -> frame
+	keyToFrame     map[string]string           // orgID+"/"+name -> id
+	versions       map[string]*frameVersionRow // frameID+"@"+version
+	grants         map[string][]Grant          // frameID -> grants
+	frameTemplates map[string]*FrameTemplate   // id -> row
 }
 
 type frameVersionRow struct {
@@ -30,12 +32,13 @@ var _ Repository = (*Memory)(nil)
 
 func NewMemory() *Memory {
 	return &Memory{
-		orgs:       map[string]*framesv1.Org{},
-		slugToOrg:  map[string]string{},
-		frames:     map[string]*framesv1.Frame{},
-		keyToFrame: map[string]string{},
-		versions:   map[string]*frameVersionRow{},
-		grants:     map[string][]Grant{},
+		orgs:           map[string]*framesv1.Org{},
+		slugToOrg:      map[string]string{},
+		frames:         map[string]*framesv1.Frame{},
+		keyToFrame:     map[string]string{},
+		versions:       map[string]*frameVersionRow{},
+		grants:         map[string][]Grant{},
+		frameTemplates: map[string]*FrameTemplate{},
 	}
 }
 
@@ -369,4 +372,89 @@ func (m *Memory) DeleteFrame(_ context.Context, frameID string) error {
 		row.extends = kept
 	}
 	return nil
+}
+
+// copyFrameTemplate returns an independent copy. Callers mutate what they are
+// handed (a handler applies an update to it), so the store must not share its
+// own row - the byte slices included.
+func copyFrameTemplate(in *FrameTemplate) *FrameTemplate {
+	out := *in
+	out.Prefill = append([]byte(nil), in.Prefill...)
+	out.FieldRules = append([]byte(nil), in.FieldRules...)
+	return &out
+}
+
+// titleTaken reports whether another row in orgID already uses title. The real
+// schema enforces this with UNIQUE (org_id, title); the fake has to enforce it
+// too, or a test passes here and fails against SQLite.
+func (m *Memory) titleTaken(orgID, title, exceptID string) bool {
+	for _, row := range m.frameTemplates {
+		if row.OrgID == orgID && row.Title == title && row.ID != exceptID {
+			return true
+		}
+	}
+	return false
+}
+
+func (m *Memory) CreateFrameTemplate(_ context.Context, t *FrameTemplate) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if _, ok := m.frameTemplates[t.ID]; ok {
+		return ErrAlreadyExists
+	}
+	if m.titleTaken(t.OrgID, t.Title, "") {
+		return ErrAlreadyExists
+	}
+	m.frameTemplates[t.ID] = copyFrameTemplate(t)
+	return nil
+}
+
+func (m *Memory) UpdateFrameTemplate(_ context.Context, t *FrameTemplate) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	existing, ok := m.frameTemplates[t.ID]
+	if !ok || existing.OrgID != t.OrgID {
+		return ErrNotFound
+	}
+	if m.titleTaken(t.OrgID, t.Title, t.ID) {
+		return ErrAlreadyExists
+	}
+	m.frameTemplates[t.ID] = copyFrameTemplate(t)
+	return nil
+}
+
+func (m *Memory) DeleteFrameTemplate(_ context.Context, orgID, id string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	existing, ok := m.frameTemplates[id]
+	if !ok || existing.OrgID != orgID {
+		return ErrNotFound
+	}
+	delete(m.frameTemplates, id)
+	return nil
+}
+
+func (m *Memory) GetFrameTemplate(_ context.Context, orgID, id string) (*FrameTemplate, error) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	row, ok := m.frameTemplates[id]
+	if !ok || row.OrgID != orgID {
+		return nil, ErrNotFound
+	}
+	return copyFrameTemplate(row), nil
+}
+
+func (m *Memory) ListFrameTemplatesByOrg(_ context.Context, orgID string) ([]*FrameTemplate, error) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	out := []*FrameTemplate{}
+	for _, row := range m.frameTemplates {
+		if row.OrgID == orgID {
+			out = append(out, copyFrameTemplate(row))
+		}
+	}
+	// Deterministic order, so a picker does not reshuffle between requests.
+	// SQLite orders by title too.
+	sort.Slice(out, func(i, j int) bool { return out[i].Title < out[j].Title })
+	return out, nil
 }

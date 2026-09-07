@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"testing"
+	"time"
 
 	"github.com/nebari-dev/nebari-frames/backend/internal/store"
 	framesv1 "github.com/nebari-dev/nebari-frames/gen/go/frames/v1"
@@ -238,5 +239,189 @@ func TestMemory_CreateFrameVersionAndGrants(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, tt.run)
+	}
+}
+
+func TestMemoryFrameTemplateCRUD(t *testing.T) {
+	ctx := context.Background()
+	m := store.NewMemory()
+	row := &store.FrameTemplate{
+		ID: "t1", OrgID: "org-a", Title: "Brand Voice", Description: "How we sound",
+		Prefill: []byte("slots: {}\n"), FieldRules: []byte(`{"style":{"level":"required"}}`),
+		CreatedBy: "user-1", CreatedAt: time.Unix(0, 0).UTC(), UpdatedAt: time.Unix(0, 0).UTC(),
+	}
+	if err := m.CreateFrameTemplate(ctx, row); err != nil {
+		t.Fatalf("create: %v", err)
+	}
+
+	got, err := m.GetFrameTemplate(ctx, "org-a", "t1")
+	if err != nil {
+		t.Fatalf("get: %v", err)
+	}
+	if got.Title != "Brand Voice" || string(got.FieldRules) != `{"style":{"level":"required"}}` {
+		t.Errorf("round trip lost data: %+v", got)
+	}
+
+	// A caller in another org must not see it, and must not learn it exists.
+	if _, err := m.GetFrameTemplate(ctx, "org-b", "t1"); !errors.Is(err, store.ErrNotFound) {
+		t.Errorf("cross-org get error = %v, want ErrNotFound", err)
+	}
+	rows, err := m.ListFrameTemplatesByOrg(ctx, "org-b")
+	if err != nil {
+		t.Fatalf("list org-b: %v", err)
+	}
+	if len(rows) != 0 {
+		t.Errorf("org-b sees %d templates, want 0", len(rows))
+	}
+
+	rows, err = m.ListFrameTemplatesByOrg(ctx, "org-a")
+	if err != nil {
+		t.Fatalf("list org-a: %v", err)
+	}
+	if len(rows) != 1 || rows[0].ID != "t1" {
+		t.Fatalf("org-a list = %+v, want one row t1", rows)
+	}
+
+	row.Title = "Brand Voice v2"
+	row.UpdatedAt = time.Unix(60, 0).UTC()
+	if err := m.UpdateFrameTemplate(ctx, row); err != nil {
+		t.Fatalf("update: %v", err)
+	}
+	got, err = m.GetFrameTemplate(ctx, "org-a", "t1")
+	if err != nil {
+		t.Fatalf("get after update: %v", err)
+	}
+	if got.Title != "Brand Voice v2" {
+		t.Errorf("title = %q, want the updated one", got.Title)
+	}
+
+	if err := m.DeleteFrameTemplate(ctx, "org-a", "t1"); err != nil {
+		t.Fatalf("delete: %v", err)
+	}
+	if _, err := m.GetFrameTemplate(ctx, "org-a", "t1"); !errors.Is(err, store.ErrNotFound) {
+		t.Errorf("get after delete = %v, want ErrNotFound", err)
+	}
+}
+
+func TestMemoryFrameTemplateConstraints(t *testing.T) {
+	ctx := context.Background()
+	base := func(id, orgID, title string) *store.FrameTemplate {
+		return &store.FrameTemplate{ID: id, OrgID: orgID, Title: title, Prefill: []byte("slots: {}\n"), FieldRules: []byte("{}")}
+	}
+	tests := []struct {
+		name    string
+		seed    []*store.FrameTemplate
+		op      func(*store.Memory) error
+		wantErr error
+	}{
+		{
+			name: "duplicate title in the same org is rejected",
+			seed: []*store.FrameTemplate{base("t1", "org-a", "Brand Voice")},
+			op: func(m *store.Memory) error {
+				return m.CreateFrameTemplate(context.Background(), base("t2", "org-a", "Brand Voice"))
+			},
+			wantErr: store.ErrAlreadyExists,
+		},
+		{
+			name: "the same title in a different org is fine",
+			seed: []*store.FrameTemplate{base("t1", "org-a", "Brand Voice")},
+			op: func(m *store.Memory) error {
+				return m.CreateFrameTemplate(context.Background(), base("t2", "org-b", "Brand Voice"))
+			},
+		},
+		{
+			name: "duplicate id is rejected",
+			seed: []*store.FrameTemplate{base("t1", "org-a", "Brand Voice")},
+			op: func(m *store.Memory) error {
+				return m.CreateFrameTemplate(context.Background(), base("t1", "org-a", "Other"))
+			},
+			wantErr: store.ErrAlreadyExists,
+		},
+		{
+			name: "renaming onto another row's title is rejected",
+			seed: []*store.FrameTemplate{base("t1", "org-a", "Brand Voice"), base("t2", "org-a", "Engineering Norms")},
+			op: func(m *store.Memory) error {
+				return m.UpdateFrameTemplate(context.Background(), base("t2", "org-a", "Brand Voice"))
+			},
+			wantErr: store.ErrAlreadyExists,
+		},
+		{
+			name: "renaming a row to its own title is fine",
+			seed: []*store.FrameTemplate{base("t1", "org-a", "Brand Voice")},
+			op: func(m *store.Memory) error {
+				return m.UpdateFrameTemplate(context.Background(), base("t1", "org-a", "Brand Voice"))
+			},
+		},
+		{
+			name: "updating a missing row is not found",
+			op: func(m *store.Memory) error {
+				return m.UpdateFrameTemplate(context.Background(), base("nope", "org-a", "X"))
+			},
+			wantErr: store.ErrNotFound,
+		},
+		{
+			name: "updating another org's row is not found",
+			seed: []*store.FrameTemplate{base("t1", "org-a", "Brand Voice")},
+			op: func(m *store.Memory) error {
+				return m.UpdateFrameTemplate(context.Background(), base("t1", "org-b", "Brand Voice"))
+			},
+			wantErr: store.ErrNotFound,
+		},
+		{
+			name:    "deleting a missing row is not found",
+			op:      func(m *store.Memory) error { return m.DeleteFrameTemplate(context.Background(), "org-a", "nope") },
+			wantErr: store.ErrNotFound,
+		},
+		{
+			name:    "deleting another org's row is not found",
+			seed:    []*store.FrameTemplate{base("t1", "org-a", "Brand Voice")},
+			op:      func(m *store.Memory) error { return m.DeleteFrameTemplate(context.Background(), "org-b", "t1") },
+			wantErr: store.ErrNotFound,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			m := store.NewMemory()
+			for _, row := range tt.seed {
+				if err := m.CreateFrameTemplate(ctx, row); err != nil {
+					t.Fatalf("seeding %s: %v", row.ID, err)
+				}
+			}
+			err := tt.op(m)
+			if tt.wantErr == nil {
+				if err != nil {
+					t.Fatalf("unexpected error: %v", err)
+				}
+				return
+			}
+			if !errors.Is(err, tt.wantErr) {
+				t.Fatalf("err = %v, want %v", err, tt.wantErr)
+			}
+		})
+	}
+}
+
+func TestMemoryFrameTemplateReturnsCopies(t *testing.T) {
+	// A handler applying an update mutates the struct it was handed, so the
+	// store must not be sharing its own row.
+	ctx := context.Background()
+	m := store.NewMemory()
+	if err := m.CreateFrameTemplate(ctx, &store.FrameTemplate{
+		ID: "t1", OrgID: "org-a", Title: "Brand Voice",
+		Prefill: []byte("slots: {}\n"), FieldRules: []byte("{}"),
+	}); err != nil {
+		t.Fatalf("create: %v", err)
+	}
+	got, err := m.GetFrameTemplate(ctx, "org-a", "t1")
+	if err != nil {
+		t.Fatalf("get: %v", err)
+	}
+	got.Title = "clobbered"
+	again, err := m.GetFrameTemplate(ctx, "org-a", "t1")
+	if err != nil {
+		t.Fatalf("get again: %v", err)
+	}
+	if again.Title != "Brand Voice" {
+		t.Errorf("mutating the returned row changed the store: %q", again.Title)
 	}
 }
