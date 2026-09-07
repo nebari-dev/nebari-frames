@@ -30,4 +30,5 @@ and print the inheritance-resolved form of a Frame.
 * [frames publish](/reference/cli/frames_publish/)	 - Publish a Frame from a directory containing frame.yaml
 * [frames resolve](/reference/cli/frames_resolve/)	 - Print the inheritance-resolved form of a Frame
 * [frames show](/reference/cli/frames_show/)	 - Show a Frame's metadata and contents
+* [frames template](/reference/cli/frames_template/)	 - Browse Frame templates and scaffold a Frame from one
 

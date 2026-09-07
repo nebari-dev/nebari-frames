@@ -47,6 +47,7 @@ and print the inheritance-resolved form of a Frame.`,
 	addShowCmd(rootCmd)
 	addExtendsCmd(rootCmd)
 	addResolveCmd(rootCmd)
+	addTemplateCmd(rootCmd)
 	return rootCmd
 }
 
