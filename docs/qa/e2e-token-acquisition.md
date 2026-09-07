@@ -9,6 +9,12 @@ The Nebari Frames backend validates incoming tokens against Keycloak's OIDC conf
 2. Has the correct audience claim (frames-web)
 3. Is issued for an existing user in Keycloak
 
+## Important: Build Freshness
+
+The dev stack runs a prebuilt `./nebari-frames-server` binary at the repository root (gitignored) rather than building from the current source tree. This binary can become stale and serve code older than the working tree. If you are testing recently added server behavior, run `make build` before starting the stack, or you will test old code and misread the result as a missing feature.
+
+This document verifies token acceptance against GetMe and ListFrames endpoints because they exist in any build; these tests isolate the question of whether the backend accepts the token from the question of which build is running. Newer template RPCs were confirmed working separately against a freshly built server.
+
 ## Test Environment Setup
 
 ### Start the dev stack:
