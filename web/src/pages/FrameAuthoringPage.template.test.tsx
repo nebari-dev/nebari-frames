@@ -167,10 +167,9 @@ it("sends the chosen template id when publishing", async () => {
 
   await userEvent.type(screen.getByLabelText(/frame name/i), "vocab");
   await userEvent.type(screen.getByLabelText(/^description$/i), "Our terms");
-  // Version and changelog live in the publish dialog, so a publish takes two
-  // clicks: open it, then confirm. The brief's snippet had only the first
-  // click, which opens the dialog but never submits - matching create.test.tsx's
-  // publishViaDialog() sequence here so the mutation actually fires.
+  // The header button only opens the publish dialog; the dialog's own button
+  // is what actually submits, so clicking just the first would assert against
+  // a form that never published.
   await userEvent.click(screen.getByRole("button", { name: /publish…/i }));
   await userEvent.click(await screen.findByRole("button", { name: /^publish$/i }));
 

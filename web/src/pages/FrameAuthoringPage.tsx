@@ -345,7 +345,13 @@ export function FrameAuthoringPage({ mode }: { mode: "create" | "edit" }) {
       {
         onSuccess: (res) => {
           publish.mutate(
-            { content: res.yaml, changelog: methods.getValues("changelog") },
+            {
+              content: res.yaml,
+              changelog: methods.getValues("changelog"),
+              // Same rule as the document path: the check an author opted into
+              // must not depend on which editor tab they published from.
+              templateId: publishTemplateID({ mode, importing, templateID }),
+            },
             {
               onSuccess: () => {
                 let published = methods.getValues("name");
