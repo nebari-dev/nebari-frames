@@ -1,0 +1,13 @@
+id: builtin:engineering-norms
+title: Engineering Norms
+description: How your team expects software to be built, reviewed, and shipped.
+field_rules:
+  norms:
+    level: required
+    note: "Ways of working: review expectations, testing standards, what \"done\" means, and how work gets committed."
+  rules:
+    level: recommended
+    note: "Hard constraints, one per entry, that must hold regardless of context."
+  architecture:
+    level: recommended
+    note: "The structure worth knowing before changing anything: services, boundaries, and what depends on what."

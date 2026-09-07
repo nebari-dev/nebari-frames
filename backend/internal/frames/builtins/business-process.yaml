@@ -1,0 +1,13 @@
+id: builtin:business-process
+title: Business Process
+description: How a piece of work moves through your organization, stage by stage.
+field_rules:
+  business_process:
+    level: required
+    note: The stages work passes through, who owns each, and what has to be true before it moves on.
+  terminology:
+    level: recommended
+    note: Names for stages, artifacts, and roles, so an assistant uses your words rather than generic ones.
+  goals:
+    level: recommended
+    note: What a good outcome looks like at the end of this process.

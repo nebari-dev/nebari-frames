@@ -1,0 +1,10 @@
+id: builtin:domain-vocabulary
+title: Domain Vocabulary
+description: The terms of art your organization uses and what they actually mean here.
+field_rules:
+  terminology:
+    level: required
+    note: One entry per term. Define it the way an insider would explain it to a new colleague, not the way a dictionary would.
+  rules:
+    level: recommended
+    note: Usage constraints worth stating, such as a term that is often confused with another.
