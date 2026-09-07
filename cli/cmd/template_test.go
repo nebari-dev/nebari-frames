@@ -1,7 +1,9 @@
 package cmd
 
 import (
+	"bytes"
 	"context"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -10,6 +12,7 @@ import (
 	"connectrpc.com/connect"
 	"github.com/nebari-dev/nebari-frames/cli/internal/testutil"
 	framesv1 "github.com/nebari-dev/nebari-frames/gen/go/frames/v1"
+	"gopkg.in/yaml.v3"
 )
 
 func TestTemplateListCommand(t *testing.T) {
@@ -103,6 +106,86 @@ func TestTemplateInitWritesAScaffold(t *testing.T) {
 		if !strings.Contains(got, want) {
 			t.Errorf("scaffold missing the %q key:\n%s", want, got)
 		}
+	}
+}
+
+// TestTemplateInitScaffoldIsOneWellFormedDocument decodes the written scaffold
+// instead of substring-matching it. scaffoldBody trades a guarantee enforced
+// by construction (build a Doc, marshal it) for one that is merely trusted:
+// that the server's prefill bytes stay shaped as promised (no identity keys,
+// no document separator). If a prefill ever emitted a "---" document-start
+// marker, a YAML decoder reading the assembled scaffold would return only the
+// first document - the three identity lines this command writes - and every
+// slot and extend the template seeded would silently vanish. A substring
+// check would not notice; only decoding does.
+func TestTemplateInitScaffoldIsOneWellFormedDocument(t *testing.T) {
+	tmpl := &framesv1.FrameTemplate{
+		Id: "builtin:domain-vocabulary", Title: "Domain Vocabulary",
+		Description: "Terms.", Builtin: true,
+		Prefill: []byte("extends:\n  - ref: acme/base\n    version: \"1.0.0\"\n" +
+			"slots:\n  terminology:\n    - term: Frame\n      definition: A scoped context artifact.\n"),
+		FieldRules: map[string]*framesv1.FieldRule{
+			"terminology": {Level: framesv1.Requirement_REQUIREMENT_REQUIRED, Note: "One entry per term of art."},
+		},
+	}
+	url := testutil.NewStubServer(t, &testutil.StubService{GetTemplateFn: returns(tmpl)})
+	dir := t.TempDir()
+	runCmd(t, url, "template", "init", "--template", "builtin:domain-vocabulary", "--dir", dir)
+
+	b, err := os.ReadFile(filepath.Join(dir, "frame.yaml"))
+	if err != nil {
+		t.Fatalf("reading the scaffold: %v", err)
+	}
+
+	// Exactly one document: decoding a second time off the same stream must
+	// report EOF. This is the assertion that actually catches a document
+	// separator sneaking into the prefill; everything below it is just
+	// making sure the one document that exists has the right shape.
+	dec := yaml.NewDecoder(bytes.NewReader(b))
+	var doc map[string]any
+	if err := dec.Decode(&doc); err != nil {
+		t.Fatalf("decoding the scaffold: %v", err)
+	}
+	if err := dec.Decode(new(map[string]any)); err != io.EOF {
+		t.Fatalf("scaffold decoded as more than one YAML document (second Decode err = %v); "+
+			"the prefill must not split it in two", err)
+	}
+
+	for _, key := range []string{"name", "description", "version", "slots", "extends"} {
+		if _, ok := doc[key]; !ok {
+			t.Errorf("decoded scaffold missing top-level key %q: %#v", key, doc)
+		}
+	}
+
+	// The prefill's structural content, not its raw text, has to survive.
+	slots, ok := doc["slots"].(map[string]any)
+	if !ok {
+		t.Fatalf("slots is not a map: %#v", doc["slots"])
+	}
+	terminology, ok := slots["terminology"].([]any)
+	if !ok || len(terminology) != 1 {
+		t.Fatalf("slots.terminology = %#v, want exactly one entry", slots["terminology"])
+	}
+	entry, ok := terminology[0].(map[string]any)
+	if !ok || entry["term"] != "Frame" || entry["definition"] != "A scoped context artifact." {
+		t.Errorf("slots.terminology[0] = %#v, want the prefill's term and definition", terminology[0])
+	}
+
+	// No duplicate top-level key. A map decode would collapse a repeated key
+	// silently (the second assignment just overwrites the first in Go), so
+	// this needs the raw node tree, not the decoded map.
+	var node yaml.Node
+	if err := yaml.Unmarshal(b, &node); err != nil {
+		t.Fatalf("parsing the scaffold as a node tree: %v", err)
+	}
+	mapping := node.Content[0]
+	seen := make(map[string]bool, len(mapping.Content)/2)
+	for i := 0; i < len(mapping.Content); i += 2 {
+		key := mapping.Content[i].Value
+		if seen[key] {
+			t.Errorf("scaffold has a duplicate top-level key %q", key)
+		}
+		seen[key] = true
 	}
 }
 
