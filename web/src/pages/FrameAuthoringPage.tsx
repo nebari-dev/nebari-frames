@@ -9,6 +9,7 @@ import { FrameService } from "@gen/frames/v1/frame_service_pb";
 import { authoringFormSchema, emptyFrameDoc, suggestNextVersion } from "@/lib/authoring-schema";
 import { serializeFrameDoc, parseFrameContent } from "@/lib/frame-yaml";
 import { SLOT_SECTIONS, sectionHasContent, type SlotSectionDef } from "@/lib/slot-sections";
+import { seededSections, isRequiredSection, sectionHint, type TemplateRules } from "@/lib/templates";
 import { mapPublishError } from "@/lib/publish-errors";
 import { type AuthoringForm, formToDoc, docToForm } from "@/components/form/form-model";
 import { ExtendsEditor } from "@/components/form/ExtendsEditor";
@@ -38,29 +39,40 @@ const decode = (b: Uint8Array) => new TextDecoder().decode(b);
 // One editable section of the document: heading, the editor for its content
 // shape, and a remove control. Sections the author has not added simply are
 // not on the page - the document editor shows the document, not the schema.
+//
+// `hint` overrides `def.hint` when a template's rule carries a note for this
+// slot, and `removable` is false for a template-required section: deleting
+// one guarantees a publish failure, so the control is withheld rather than
+// offered and then punished.
 function SectionEditor({
   def,
+  hint,
+  removable,
   onRemove,
 }: {
   def: SlotSectionDef;
+  hint: string;
+  removable: boolean;
   onRemove: () => void;
 }) {
   return (
     <section className="group space-y-2 border-t border-border pt-4">
       <div className="flex items-center justify-between">
         <h2 className="text-lg font-semibold">{def.label}</h2>
-        <Button
-          type="button"
-          variant="ghost"
-          size="sm"
-          className="text-muted-foreground opacity-0 transition-opacity group-focus-within:opacity-100 group-hover:opacity-100"
-          onClick={onRemove}
-        >
-          <X className="size-4" />
-          Remove section
-        </Button>
+        {removable && (
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            className="text-muted-foreground opacity-0 transition-opacity group-focus-within:opacity-100 group-hover:opacity-100"
+            onClick={onRemove}
+          >
+            <X className="size-4" />
+            Remove section
+          </Button>
+        )}
       </div>
-      <p className="text-xs text-muted-foreground">{def.hint}</p>
+      <p className="text-xs text-muted-foreground">{hint}</p>
       {def.kind === "terms" && <TerminologyEditor />}
       {def.kind === "list" && (
         <ListEditor name={def.path as `slots.${"rules" | "skills" | "prompts"}`} label={def.label} />
@@ -100,6 +112,14 @@ export function FrameAuthoringPage({ mode }: { mode: "create" | "edit" }) {
   const choosingTemplate = mode === "create" && !importing && templateID === "";
 
   const templates = useQuery(FrameService.method.listFrameTemplates, {});
+  // Fetched only once a template is chosen. Disabled otherwise so the picker
+  // screen does not issue a pointless request.
+  const chosen = useQuery(
+    FrameService.method.getFrameTemplate,
+    { id: templateID },
+    { enabled: templateID !== "" },
+  );
+  const rules: TemplateRules = (chosen.data?.template?.fieldRules ?? {}) as TemplateRules;
 
   // Sections the author added this session; content-bearing sections are
   // always visible regardless (which covers the async edit-mode prefill).
@@ -126,6 +146,44 @@ export function FrameAuthoringPage({ mode }: { mode: "create" | "edit" }) {
     // reset only when the loaded version changes
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mode, editQ.data?.version?.digest]);
+
+  // Seeds the form once the chosen template arrives. This mirrors the edit
+  // path exactly: getFrameTemplate -> parseFrameContent -> docToForm are the
+  // same three steps that open an existing Frame, so there is no second
+  // parsing path to keep in step.
+  const [seeded, setSeeded] = useState(false);
+  useEffect(() => {
+    if (mode !== "create" || templateID === "" || seeded) return;
+    const tmpl = chosen.data?.template;
+    if (!tmpl) return;
+    try {
+      // The prefill is the canonical YAML subset the backend produced, so it
+      // goes through the same parse the edit flow uses.
+      const doc = parseFrameContent(tmpl.prefill);
+      methods.reset(docToForm({ ...doc, version: "1.0.0" }, ""));
+      // Sections the template asks for are on the page from the start rather
+      // than behind "+ Add section": the point of a template is that the
+      // author does not have to know which sections this kind of Frame needs.
+      // Unioned with whatever the prefill itself populated, so prefilled
+      // content is never hidden behind a collapsed section.
+      const fromRules = seededSections(rules).map((def) => def.key);
+      const fromPrefill = SLOT_SECTIONS.filter((def) => sectionHasContent(def, doc.slots)).map(
+        (def) => def.key,
+      );
+      // This is a callback reacting to an external system's data arriving
+      // (the template query resolving), which is the effect rule's own
+      // sanctioned use of setState-in-effect; the heuristic cannot tell that
+      // apart from deriving state from other state, hence the disable.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setAdded(new Set([...fromRules, ...fromPrefill]));
+    } catch {
+      setTimeout(() => setFormError("This template's starting content could not be loaded."), 0);
+    }
+    setSeeded(true);
+    // seed once per template choice; re-running on every `rules` identity
+    // change would fight the author's own edits after the initial seed
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [chosen.data, mode, templateID, seeded]);
 
   const slots = useWatch({ control: methods.control, name: "slots" }) as
     | AuthoringForm["slots"]
@@ -383,7 +441,13 @@ export function FrameAuthoringPage({ mode }: { mode: "create" | "edit" }) {
             </div>
 
             {visibleSections.map((def) => (
-              <SectionEditor key={def.key} def={def} onRemove={() => removeSection(def)} />
+              <SectionEditor
+                key={def.key}
+                def={def}
+                hint={sectionHint(rules, def)}
+                removable={!isRequiredSection(rules, def.key)}
+                onRemove={() => removeSection(def)}
+              />
             ))}
 
             <div className="border-t border-border pt-4">

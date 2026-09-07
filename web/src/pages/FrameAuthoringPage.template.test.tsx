@@ -19,6 +19,7 @@ vi.mock("@tanstack/react-query", async (importOriginal) => ({
 }));
 
 import { FrameAuthoringPage } from "./FrameAuthoringPage";
+import { FrameService } from "@gen/frames/v1/frame_service_pb";
 
 const templateList = {
   isLoading: false,
@@ -72,4 +73,88 @@ it("skips the picker when a template is already in the URL", () => {
 it("skips the picker for the .frame.md import path", () => {
   renderAt("/frames/new?import=1");
   expect(screen.queryByRole("heading", { name: /built-in/i })).not.toBeInTheDocument();
+});
+
+const vocabularyTemplate = {
+  id: "builtin:domain-vocabulary",
+  title: "Domain Vocabulary",
+  description: "Terms.",
+  builtin: true,
+  prefill: new TextEncoder().encode("slots: {}\n"),
+  fieldRules: {
+    terminology: { level: 3, note: "One entry per term of art." },
+    rules: { level: 2, note: "Usage constraints worth stating." },
+  },
+};
+
+const orgTemplateWithPrefill = {
+  id: "01JORGTEMPLATE0000000000AB",
+  title: "Our House Style",
+  description: "Ours.",
+  builtin: false,
+  prefill: new TextEncoder().encode(
+    "slots:\n  terminology:\n    - term: Frame\n      definition: A scoped context artifact.\n    - term: Slot\n      definition: One section of a Frame.\n",
+  ),
+  fieldRules: { terminology: { level: 3, note: "Keep these, add your own." } },
+};
+
+// Routes on the RPC descriptor's object identity rather than call order (the
+// convention already used in FrameAuthoringPage.edit.test.tsx and
+// FrameDetailPage.test.tsx), so the mock keeps answering correctly across the
+// re-renders a keystroke in the form causes.
+function mockQueries(template: unknown) {
+  useQueryMock.mockImplementation((method: unknown) => {
+    if (method === FrameService.method.getFrameTemplate) {
+      return { isLoading: false, error: null, data: { template } };
+    }
+    return { isLoading: false, error: null, data: templateList.data };
+  });
+}
+
+it("pre-adds the required and recommended sections and hides optional ones", () => {
+  mockQueries(vocabularyTemplate);
+  renderAt("/frames/new?template=builtin:domain-vocabulary");
+  expect(screen.getByRole("heading", { name: /^terminology$/i })).toBeInTheDocument();
+  expect(screen.getByRole("heading", { name: /^rules$/i })).toBeInTheDocument();
+  // Optional slots stay behind "+ Add section": a template narrows the
+  // decisions rather than reopening all ten.
+  expect(screen.queryByRole("heading", { name: /^architecture$/i })).not.toBeInTheDocument();
+});
+
+it("shows the template's note in place of the generic hint", () => {
+  mockQueries(vocabularyTemplate);
+  renderAt("/frames/new?template=builtin:domain-vocabulary");
+  expect(screen.getByText("One entry per term of art.")).toBeInTheDocument();
+  expect(screen.getByText("Usage constraints worth stating.")).toBeInTheDocument();
+});
+
+it("withholds the remove control on a required section but offers it on a recommended one", () => {
+  mockQueries(vocabularyTemplate);
+  renderAt("/frames/new?template=builtin:domain-vocabulary");
+  // Removing a required section guarantees a publish failure, so it is not
+  // offered. A recommended one is genuinely optional.
+  const removes = screen.getAllByRole("button", { name: /remove section/i });
+  expect(removes).toHaveLength(1);
+});
+
+it("populates prefilled content and lets it be edited", async () => {
+  mockQueries(orgTemplateWithPrefill);
+  renderAt("/frames/new?template=01JORGTEMPLATE0000000000AB");
+  expect(screen.getByDisplayValue("Frame")).toBeInTheDocument();
+  expect(screen.getByDisplayValue("A scoped context artifact.")).toBeInTheDocument();
+  expect(screen.getByDisplayValue("Slot")).toBeInTheDocument();
+  const term = screen.getByDisplayValue("Frame");
+  await userEvent.clear(term);
+  await userEvent.type(term, "Frame v2");
+  expect(screen.getByDisplayValue("Frame v2")).toBeInTheDocument();
+});
+
+it("seeds nothing when the template is blank", () => {
+  mockQueries({
+    id: "builtin:blank", title: "Blank", description: "Empty.", builtin: true,
+    prefill: new TextEncoder().encode("slots: {}\n"), fieldRules: {},
+  });
+  renderAt("/frames/new?template=builtin:blank");
+  expect(screen.getByLabelText(/frame name/i)).toBeInTheDocument();
+  expect(screen.queryByRole("heading", { name: /^terminology$/i })).not.toBeInTheDocument();
 });

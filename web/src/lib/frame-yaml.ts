@@ -27,7 +27,12 @@ export const VISIBILITY_VALUES = ["private", "internal", "shared", "public"] as 
 export const DEFAULT_VISIBILITY = "internal";
 
 export const frameDocSchema = z.object({
-  name: z.string(),
+  // A template's prefill is a strict subset of this schema that never sets
+  // identity fields (backend/internal/frames/templates.go ParsePrefill), so
+  // name must decode from an absent key the same way its sibling metadata
+  // fields already do - otherwise the one shared parser used by both the
+  // edit path and template seeding would reject every prefill.
+  name: z.string().default(""),
   description: z.string().default(""),
   version: z.string().default(""),
   visibility: z.string().default(""),
