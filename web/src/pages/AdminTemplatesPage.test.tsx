@@ -41,6 +41,15 @@ vi.mock("@tanstack/react-query", async (importOriginal) => ({
 }));
 
 import { AdminTemplatesPage } from "./AdminTemplatesPage";
+import { parseFrameContent } from "@/lib/frame-yaml";
+
+const templateListData = {
+  canManage: true,
+  templates: [
+    { id: "builtin:blank", title: "Blank", description: "Empty.", builtin: true },
+    { id: "t1", title: "Our House Style", description: "Ours.", builtin: false },
+  ],
+};
 
 beforeEach(() => {
   createMock.mockResolvedValue({ template: { id: "new" } });
@@ -49,13 +58,7 @@ beforeEach(() => {
   useQueryMock.mockReturnValue({
     isLoading: false,
     error: null,
-    data: {
-      canManage: true,
-      templates: [
-        { id: "builtin:blank", title: "Blank", description: "Empty.", builtin: true },
-        { id: "t1", title: "Our House Style", description: "Ours.", builtin: false },
-      ],
-    },
+    data: templateListData,
   });
 });
 
@@ -115,4 +118,54 @@ it("surfaces a duplicate-title error on the title field", async () => {
   await userEvent.type(screen.getByLabelText(/^description$/i), "Our terms");
   await userEvent.click(screen.getByRole("button", { name: /^create$/i }));
   expect(await screen.findByText(/already exists in this organization/i)).toBeInTheDocument();
+});
+
+// The row the org template's edit dialog fetches. Carries a suggested parent
+// and a field rule so there is something real for an edit to lose: update
+// replaces the stored row wholesale, so anything the form does not re-send
+// (extends has no editor on this page) must still survive the round trip.
+const existingOrgTemplate = {
+  id: "t1",
+  title: "Our House Style",
+  description: "Ours.",
+  builtin: false,
+  prefill: new TextEncoder().encode(
+    "extends:\n  - ref: acme/base\n    version: 1.0.0\nslots: {}\n",
+  ),
+  fieldRules: { terminology: { level: 2, note: "Keep these." } },
+};
+
+// Routes by RPC descriptor identity - the same convention as the mock above,
+// but reachable per-test so getFrameTemplate can answer with a real row
+// instead of falling through to the list fixture every other test relies on.
+function mockRowFetch(template: unknown) {
+  useQueryMock.mockImplementation((method: unknown) => {
+    if (method === FrameService.method.getFrameTemplate) {
+      return { isLoading: false, error: null, data: { template } };
+    }
+    return { isLoading: false, error: null, data: templateListData };
+  });
+}
+
+it("carries an existing extends suggestion through an edit that only changes the title", async () => {
+  mockRowFetch(existingOrgTemplate);
+  renderPage();
+  const orgRow = screen.getByText("Our House Style").closest("li, tr")!;
+  await userEvent.click(orgRow.querySelector('[data-testid="edit-template"]') as HTMLElement);
+
+  const titleInput = await screen.findByLabelText(/^title$/i);
+  await userEvent.clear(titleInput);
+  await userEvent.type(titleInput, "Renamed Style");
+  await userEvent.click(screen.getByRole("button", { name: /^save changes$/i }));
+
+  await waitFor(() => expect(updateMock).toHaveBeenCalled());
+  const arg = updateMock.mock.calls[0][0];
+  expect(arg.title).toBe("Renamed Style");
+  // The whole point: extends is not editable on this page, so the only way it
+  // survives an edit (which replaces the stored row wholesale) is by being
+  // carried through untouched. Decoding the actual bytes sent, rather than
+  // just checking prefill is non-empty, is what makes this assertion mean
+  // something.
+  const sentDoc = parseFrameContent(arg.prefill);
+  expect(sentDoc.extends).toEqual([{ ref: "acme/base", version: "1.0.0" }]);
 });

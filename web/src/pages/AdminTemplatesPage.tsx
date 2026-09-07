@@ -155,7 +155,14 @@ function TemplateFormDialog({
   });
 
   useEffect(() => {
-    if (target.mode !== "edit") return;
+    // Guarded on `ready`, not just `target.mode`: a query's `data` is not
+    // guaranteed to be the same object across renders (a mock's factory can
+    // rebuild it every call, and even the real client may on a background
+    // refetch), so keying the effect on its identity alone would re-seed the
+    // form - discarding whatever the admin had already typed - every time
+    // that reference changes. Once ready, this effect is a no-op for the rest
+    // of the dialog's lifetime.
+    if (target.mode !== "edit" || ready) return;
     const tmpl = rowQ.data?.template;
     if (!tmpl) return;
     try {
@@ -163,7 +170,7 @@ function TemplateFormDialog({
       // This effect reacts to the row query resolving (an external system's
       // data arriving), which is the effect rule's own sanctioned use of
       // setState-in-effect; the heuristic cannot tell that apart from deriving
-      // state from other state, hence the disables below.
+      // state from other state, hence the disable below.
       // eslint-disable-next-line react-hooks/set-state-in-effect
       setCarriedExtends(doc.extends);
       methods.reset({
@@ -177,10 +184,8 @@ function TemplateFormDialog({
       // Schedule outside the effect body to satisfy react-hooks/set-state-in-effect
       setTimeout(() => setFormError("This template's saved content could not be loaded for editing."), 0);
     }
-    // Seed once when the row arrives; re-running on every rowQ identity change
-    // would fight the admin's own edits mid-session.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [target.mode, rowQ.data]);
+  }, [target.mode, ready, rowQ.data]);
 
   const busy = createM.isPending || updateM.isPending;
 
@@ -403,7 +408,7 @@ export function AdminTemplatesPage() {
           <TemplateGroup
             heading="Built-in"
             templates={builtinTemplates}
-            canManage={false}
+            canManage={canManage}
             onEdit={(t) => setFormTarget({ mode: "edit", id: t.id })}
             onDelete={(t) => setDeleteTarget({ id: t.id, title: t.title })}
           />
