@@ -29,9 +29,12 @@ A template is an authoring affordance local to this implementation. It is not a
 Frame and not a Frame Spec concept: nothing in the wire format a `.frame.md`
 document exchanges with another system knows templates exist. A template has
 its own internal type (`Template` in `backend/internal/frames/templates.go`),
-no version, no RBAC beyond org membership, and it is copied once at Frame
-creation and then forgotten - editing or deleting a template afterward cannot
-reach back into any Frame already made from it.
+no version, and no per-item grants - org membership is what governs reads.
+Managing one is admin-only: create, update, and delete all require an admin
+caller, the same bar as member management rather than Frame authoring. A
+template is copied once at Frame creation and then forgotten - editing or
+deleting a template afterward cannot reach back into any Frame already made
+from it.
 
 Built-ins are compiled into the binary: `backend/internal/frames/builtins.go`
 embeds a directory of YAML files (`//go:embed builtins/*.yaml`) and parses them

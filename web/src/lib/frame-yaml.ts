@@ -2,10 +2,12 @@ import { parse as parseYaml, stringify as stringifyYaml } from "yaml";
 import { z } from "zod";
 
 // Mirrors backend/internal/frames/schema.go. Keep in sync with that file:
-// it is the canonical Frame content schema.
-const termSchema = z.object({ term: z.string(), definition: z.string() });
+// it is the canonical Frame content schema. Exported because it is also the
+// content-only shape a template's prefill validates against - the ten slot
+// keys should only ever be listed once in TypeScript.
+export const termSchema = z.object({ term: z.string(), definition: z.string() });
 
-const slotsSchema = z.object({
+export const slotsSchema = z.object({
   terminology: z.array(termSchema).optional(),
   rules: z.array(z.string()).optional(),
   skills: z.array(z.string()).optional(),

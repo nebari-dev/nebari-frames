@@ -7,6 +7,7 @@ import { expect, it, vi, beforeEach } from "vitest";
 // module-level code runs (unlike the mock-prefixed const workaround genuinely
 // local variables need), so this is safe to reference inside vi.mock's factory.
 import { FrameService } from "@gen/frames/v1/frame_service_pb";
+import { Requirement } from "@gen/frames/v1/frame_pb";
 
 const useQueryMock = vi.fn();
 const createMock = vi.fn();
@@ -93,7 +94,12 @@ it("creates a template with a title, a description, and a rule", async () => {
   const arg = createMock.mock.calls[0][0];
   expect(arg.title).toBe("Vocabulary");
   expect(arg.description).toBe("Our terms");
-  expect(Object.keys(arg.fieldRules ?? {}).length).toBeGreaterThan(0);
+  // The clicked radio is the first "required" on the page, which belongs to
+  // the terminology section (SLOT_SECTIONS' first entry). Asserting the exact
+  // slot and level - not just that some rule exists - is what would catch a
+  // regression that maps every level to the same one, or maps the click to
+  // the wrong slot key.
+  expect(arg.fieldRules.terminology).toEqual({ level: Requirement.REQUIRED, note: "" });
 });
 
 it("asks before deleting", async () => {

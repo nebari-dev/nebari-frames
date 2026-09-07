@@ -126,6 +126,12 @@ func (s *Service) ListFrameTemplates(ctx context.Context, _ *connect.Request[fra
 	// template sharing a built-in's title sits beside it rather than replacing
 	// it, because a precedence rule here would be a permanent source of "why am
 	// I seeing the wrong one". The UI groups them instead.
+	//
+	// This order is the contract `frames template list` presents and the one
+	// this API guarantees; it is not what a screen has to follow. The web
+	// picker (TemplatePicker) renders the org's group above built-ins, because
+	// grouping by origin reads better there - that choice does not make this
+	// order stale, it just means the CLI is this ordering's real consumer.
 	out := make([]*framesv1.FrameTemplateSummary, 0, len(rows)+6)
 	for _, tmpl := range BuiltinTemplates() {
 		out = append(out, templateSummaryToProto(&tmpl))

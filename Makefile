@@ -16,6 +16,10 @@ proto:
 
 lint:
 	golangci-lint run ./...
+	# e2e is built with a `//go:build e2e` tag so it stays out of `go build ./...`
+	# and out of a plain lint run; without this second invocation nothing ever
+	# lints it and it can silently rot.
+	golangci-lint run --build-tags e2e ./e2e/...
 
 test:
 	go test ./... -race -coverprofile=coverage.out

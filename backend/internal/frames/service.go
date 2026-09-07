@@ -193,9 +193,13 @@ func (s *Service) PublishDocFrom(ctx context.Context, doc *Doc, changelog string
 	})
 }
 
-// PublishDocRequest is the full-fidelity entry point. It marshals doc rather
-// than storing caller bytes, so comments and formatting survive a CLI or web
-// publish only on the Connect path, which passes its own content.
+// PublishDocRequest is for a caller that only has a decoded Doc, not the
+// author's original bytes: it re-marshals doc into canonical form itself,
+// which loses whatever comments and formatting the author's own bytes had.
+// Only PublishFrame (the Connect RPC handler) preserves those exactly, because
+// it passes req.Msg.Content straight into publish instead of going through
+// here. A future caller that needs the author's bytes to survive - the CLI
+// included - must route through PublishFrame, not this function.
 func (s *Service) PublishDocRequest(ctx context.Context, doc *Doc, req PublishRequest) (*framesv1.Frame, *framesv1.FrameVersion, error) {
 	caller, err := s.authorizePublish(ctx)
 	if err != nil {

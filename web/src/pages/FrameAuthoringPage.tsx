@@ -117,7 +117,13 @@ export function FrameAuthoringPage({ mode }: { mode: "create" | "edit" }) {
   // would be nonsense. Edit mode never sees it - templates apply at creation.
   const choosingTemplate = mode === "create" && !importing && templateID === "";
 
-  const templates = useQuery(FrameService.method.listFrameTemplates, {});
+  // Fetched only while the picker screen can actually render: edit mode and
+  // the `?import=1` path never show it, so there is nothing to list for.
+  const templates = useQuery(
+    FrameService.method.listFrameTemplates,
+    {},
+    { enabled: choosingTemplate },
+  );
   // Fetched only once a template is chosen. Disabled otherwise so the picker
   // screen does not issue a pointless request.
   const chosen = useQuery(

@@ -10,7 +10,7 @@ import { Requirement } from "@gen/frames/v1/frame_pb";
 import type { FrameTemplateSummary } from "@gen/frames/v1/frame_pb";
 import { Plus, Pencil, Trash2 } from "lucide-react";
 import { SLOT_SECTIONS, type SlotSectionDef } from "@/lib/slot-sections";
-import { parseFrameContent, serializeFramePrefill, type FrameDoc } from "@/lib/frame-yaml";
+import { parseFrameContent, serializeFramePrefill, slotsSchema, type FrameDoc } from "@/lib/frame-yaml";
 import { TerminologyEditor } from "@/components/form/TerminologyEditor";
 import { ListEditor } from "@/components/form/ListEditor";
 import { MarkdownField } from "@/components/form/MarkdownField";
@@ -26,23 +26,6 @@ import { Dialog, DialogClose, DialogContent, DialogFooter, DialogTitle } from "@
 
 const encode = (s: string) => new TextEncoder().encode(s);
 
-// Content-only schema for a template's prefill: no name/description/version -
-// duplicated from frame-yaml.ts's slotsSchema rather than reused, matching the
-// precedent authoring-schema.ts already sets of keeping the strict authoring
-// shape separate from the loose round-trip one.
-const termSchema = z.object({ term: z.string(), definition: z.string() });
-const slotsSchema = z.object({
-  terminology: z.array(termSchema).optional(),
-  rules: z.array(z.string()).optional(),
-  skills: z.array(z.string()).optional(),
-  prompts: z.array(z.string()).optional(),
-  tool_specs: z.string().optional(),
-  goals: z.string().optional(),
-  style: z.string().optional(),
-  norms: z.string().optional(),
-  architecture: z.string().optional(),
-  business_process: z.string().optional(),
-});
 const ruleEntrySchema = z.object({
   level: z.nativeEnum(Requirement).optional(),
   note: z.string().optional(),
