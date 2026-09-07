@@ -249,3 +249,231 @@ func TestParseFieldRulesRejectsUnknownLevel(t *testing.T) {
 		t.Errorf("err = %v, want it to name the slot", err)
 	}
 }
+
+func TestCreateFrameTemplate(t *testing.T) {
+	f, ctx := newTemplateFixture(t, "admin")
+	prefill, err := MarshalPrefill(Prefill{Slots: Slots{Style: "Plain sentences."}})
+	if err != nil {
+		t.Fatalf("marshal prefill: %v", err)
+	}
+	resp, err := f.svc.CreateFrameTemplate(ctx, connect.NewRequest(&framesv1.CreateFrameTemplateRequest{
+		Title: "Our House Style", Description: "How we sound", Prefill: prefill,
+		FieldRules: map[string]*framesv1.FieldRule{
+			"style": {Level: framesv1.Requirement_REQUIREMENT_REQUIRED, Note: "Voice and tone."},
+		},
+	}))
+	if err != nil {
+		t.Fatalf("create: %v", err)
+	}
+	got := resp.Msg.Template
+	if got.Id == "" || IsBuiltin(got.Id) {
+		t.Errorf("id = %q, want a non-builtin id", got.Id)
+	}
+	if got.Builtin {
+		t.Error("a created template is flagged builtin")
+	}
+	// It has to come back from a fresh read, not just from the create response.
+	fetched, err := f.svc.GetFrameTemplate(ctx, connect.NewRequest(&framesv1.GetFrameTemplateRequest{Id: got.Id}))
+	if err != nil {
+		t.Fatalf("get after create: %v", err)
+	}
+	if fetched.Msg.Template.FieldRules["style"].Level != framesv1.Requirement_REQUIREMENT_REQUIRED {
+		t.Errorf("stored level = %v", fetched.Msg.Template.FieldRules["style"].Level)
+	}
+	if fetched.Msg.Template.FieldRules["style"].Note != "Voice and tone." {
+		t.Errorf("stored note = %q", fetched.Msg.Template.FieldRules["style"].Note)
+	}
+}
+
+func TestCreateFrameTemplateValidation(t *testing.T) {
+	goodPrefill, err := MarshalPrefill(Prefill{Slots: Slots{Style: "x"}})
+	if err != nil {
+		t.Fatalf("marshal prefill: %v", err)
+	}
+	tests := []struct {
+		name     string
+		req      *framesv1.CreateFrameTemplateRequest
+		wantCode connect.Code
+		wantMsg  string
+	}{
+		{
+			name: "valid",
+			req:  &framesv1.CreateFrameTemplateRequest{Title: "T", Description: "D", Prefill: goodPrefill},
+		},
+		{
+			name:     "title is required",
+			req:      &framesv1.CreateFrameTemplateRequest{Description: "D", Prefill: goodPrefill},
+			wantCode: connect.CodeInvalidArgument, wantMsg: "title",
+		},
+		{
+			name:     "description is required",
+			req:      &framesv1.CreateFrameTemplateRequest{Title: "T", Prefill: goodPrefill},
+			wantCode: connect.CodeInvalidArgument, wantMsg: "description",
+		},
+		{
+			name: "prefill must not carry identity",
+			req: &framesv1.CreateFrameTemplateRequest{
+				Title: "T", Description: "D", Prefill: []byte("name: sneaky\nslots: {}\n"),
+			},
+			wantCode: connect.CodeInvalidArgument, wantMsg: "must not set name",
+		},
+		{
+			name: "an unknown slot in field_rules is refused",
+			req: &framesv1.CreateFrameTemplateRequest{
+				Title: "T", Description: "D", Prefill: goodPrefill,
+				FieldRules: map[string]*framesv1.FieldRule{"nosuchslot": {Level: framesv1.Requirement_REQUIREMENT_REQUIRED}},
+			},
+			wantCode: connect.CodeInvalidArgument, wantMsg: "unknown slot",
+		},
+		{
+			name: "empty prefill is accepted and means no seeded content",
+			req:  &framesv1.CreateFrameTemplateRequest{Title: "T", Description: "D"},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			f, ctx := newTemplateFixture(t, "admin")
+			_, err := f.svc.CreateFrameTemplate(ctx, connect.NewRequest(tt.req))
+			if tt.wantCode == 0 {
+				if err != nil {
+					t.Fatalf("unexpected error: %v", err)
+				}
+				return
+			}
+			if connect.CodeOf(err) != tt.wantCode {
+				t.Fatalf("code = %v (err %v), want %v", connect.CodeOf(err), err, tt.wantCode)
+			}
+			if tt.wantMsg != "" && !strings.Contains(err.Error(), tt.wantMsg) {
+				t.Errorf("err = %v, want it to mention %q", err, tt.wantMsg)
+			}
+		})
+	}
+}
+
+func TestCreateFrameTemplateDuplicateTitle(t *testing.T) {
+	f, ctx := newTemplateFixture(t, "admin")
+	req := &framesv1.CreateFrameTemplateRequest{Title: "Only One", Description: "D"}
+	if _, err := f.svc.CreateFrameTemplate(ctx, connect.NewRequest(req)); err != nil {
+		t.Fatalf("first create: %v", err)
+	}
+	_, err := f.svc.CreateFrameTemplate(ctx, connect.NewRequest(req))
+	if connect.CodeOf(err) != connect.CodeAlreadyExists {
+		t.Fatalf("code = %v (err %v), want AlreadyExists", connect.CodeOf(err), err)
+	}
+}
+
+func TestTemplateWritesAreAdminOnly(t *testing.T) {
+	roles := []struct {
+		role      string
+		wantAllow bool
+	}{
+		{role: "admin", wantAllow: true},
+		{role: "publisher", wantAllow: false},
+		{role: "viewer", wantAllow: false},
+	}
+	for _, tt := range roles {
+		t.Run(tt.role, func(t *testing.T) {
+			f, ctx := newTemplateFixture(t, tt.role)
+			seedOrgTemplate(t, f.repo, "t1", "org-a", "Existing", nil)
+
+			_, createErr := f.svc.CreateFrameTemplate(ctx, connect.NewRequest(
+				&framesv1.CreateFrameTemplateRequest{Title: "New", Description: "D"}))
+			_, updateErr := f.svc.UpdateFrameTemplate(ctx, connect.NewRequest(
+				&framesv1.UpdateFrameTemplateRequest{Id: "t1", Title: "Renamed", Description: "D"}))
+			_, deleteErr := f.svc.DeleteFrameTemplate(ctx, connect.NewRequest(
+				&framesv1.DeleteFrameTemplateRequest{Id: "t1"}))
+
+			for name, err := range map[string]error{"create": createErr, "update": updateErr, "delete": deleteErr} {
+				if tt.wantAllow {
+					if err != nil {
+						t.Errorf("%s as %s = %v, want success", name, tt.role, err)
+					}
+					continue
+				}
+				if connect.CodeOf(err) != connect.CodePermissionDenied {
+					t.Errorf("%s as %s: code = %v (err %v), want PermissionDenied", name, tt.role, connect.CodeOf(err), err)
+				}
+			}
+			// The control: a non-admin can still read, or the assertions above
+			// would pass for a caller who simply has no access at all.
+			if _, err := f.svc.ListFrameTemplates(ctx, connect.NewRequest(&framesv1.ListFrameTemplatesRequest{})); err != nil {
+				t.Errorf("list as %s = %v, want success", tt.role, err)
+			}
+		})
+	}
+}
+
+func TestBuiltinTemplatesAreImmutable(t *testing.T) {
+	f, ctx := newTemplateFixture(t, "admin")
+	_, updateErr := f.svc.UpdateFrameTemplate(ctx, connect.NewRequest(&framesv1.UpdateFrameTemplateRequest{
+		Id: BlankTemplateID, Title: "Hijacked", Description: "D",
+	}))
+	if connect.CodeOf(updateErr) != connect.CodeInvalidArgument {
+		t.Errorf("update builtin: code = %v (err %v), want InvalidArgument", connect.CodeOf(updateErr), updateErr)
+	}
+	_, deleteErr := f.svc.DeleteFrameTemplate(ctx, connect.NewRequest(&framesv1.DeleteFrameTemplateRequest{
+		Id: BlankTemplateID,
+	}))
+	if connect.CodeOf(deleteErr) != connect.CodeInvalidArgument {
+		t.Errorf("delete builtin: code = %v (err %v), want InvalidArgument", connect.CodeOf(deleteErr), deleteErr)
+	}
+	// The control: the same admin can mutate one of their own.
+	seedOrgTemplate(t, f.repo, "t1", "org-a", "Mine", nil)
+	if _, err := f.svc.DeleteFrameTemplate(ctx, connect.NewRequest(&framesv1.DeleteFrameTemplateRequest{Id: "t1"})); err != nil {
+		t.Errorf("delete own template = %v, want success", err)
+	}
+	// And the built-in is still there afterwards.
+	if _, ok := BuiltinTemplate(BlankTemplateID); !ok {
+		t.Error("the built-in vanished")
+	}
+}
+
+func TestUpdateAndDeleteAreOrgScoped(t *testing.T) {
+	f, ctx := newTemplateFixture(t, "admin")
+	seedOrgTemplate(t, f.repo, "theirs", "org-b", "Theirs", nil)
+	_, updateErr := f.svc.UpdateFrameTemplate(ctx, connect.NewRequest(&framesv1.UpdateFrameTemplateRequest{
+		Id: "theirs", Title: "Stolen", Description: "D",
+	}))
+	if connect.CodeOf(updateErr) != connect.CodeNotFound {
+		t.Errorf("update across orgs: code = %v (err %v), want NotFound", connect.CodeOf(updateErr), updateErr)
+	}
+	_, deleteErr := f.svc.DeleteFrameTemplate(ctx, connect.NewRequest(&framesv1.DeleteFrameTemplateRequest{Id: "theirs"}))
+	if connect.CodeOf(deleteErr) != connect.CodeNotFound {
+		t.Errorf("delete across orgs: code = %v (err %v), want NotFound", connect.CodeOf(deleteErr), deleteErr)
+	}
+	// The other org's row survived.
+	if _, err := f.repo.GetFrameTemplate(context.Background(), "org-b", "theirs"); err != nil {
+		t.Errorf("the other org's template was affected: %v", err)
+	}
+}
+
+func TestOrgTemplateIsVisibleToAnotherMember(t *testing.T) {
+	// Journey 5's "persist and are usable by org members" half. A second member
+	// of the same org, not the author, must see it.
+	f, ctx := newTemplateFixture(t, "admin")
+	created, err := f.svc.CreateFrameTemplate(ctx, connect.NewRequest(&framesv1.CreateFrameTemplateRequest{
+		Title: "Shared Standard", Description: "D",
+	}))
+	if err != nil {
+		t.Fatalf("create: %v", err)
+	}
+	if err := f.repo.UpsertMembership(context.Background(), &framesv1.Membership{
+		OrgId: "org-a", UserSub: "user-second", Role: "viewer", AddedAt: timestamppb.Now(),
+	}); err != nil {
+		t.Fatalf("second membership: %v", err)
+	}
+	otherCtx := auth.WithClaims(context.Background(), &auth.Claims{Subject: "user-second", Email: "s@example.com"})
+	resp, err := f.svc.ListFrameTemplates(otherCtx, connect.NewRequest(&framesv1.ListFrameTemplatesRequest{}))
+	if err != nil {
+		t.Fatalf("list as the second member: %v", err)
+	}
+	found := false
+	for _, s := range resp.Msg.Templates {
+		if s.Id == created.Msg.Template.Id {
+			found = true
+		}
+	}
+	if !found {
+		t.Error("a second member of the org cannot see the template")
+	}
+}

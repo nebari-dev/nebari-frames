@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
+	"time"
 
 	"connectrpc.com/connect"
 
@@ -155,23 +157,178 @@ func (s *Service) GetFrameTemplate(ctx context.Context, req *connect.Request[fra
 	return connect.NewResponse(&framesv1.GetFrameTemplateResponse{Template: pb}), nil
 }
 
-// TEMPORARY (Task 7): placeholder so the FrameServiceHandler assertion in service.go
-// compiles. Task 8 replaces this with the real handler. If you are reading this in
-// merged code, it escaped review.
-func (s *Service) CreateFrameTemplate(context.Context, *connect.Request[framesv1.CreateFrameTemplateRequest]) (*connect.Response[framesv1.CreateFrameTemplateResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("not implemented until Task 8"))
+// requirementFromProto reads the wire level. UNSPECIFIED maps to optional, so an
+// older client that leaves the field unset gets the permissive reading rather
+// than an accidental requirement.
+func requirementFromProto(r framesv1.Requirement) Requirement {
+	switch r {
+	case framesv1.Requirement_REQUIREMENT_RECOMMENDED:
+		return RequirementRecommended
+	case framesv1.Requirement_REQUIREMENT_REQUIRED:
+		return RequirementRequired
+	default:
+		return RequirementOptional
+	}
 }
 
-// TEMPORARY (Task 7): placeholder so the FrameServiceHandler assertion in service.go
-// compiles. Task 8 replaces this with the real handler. If you are reading this in
-// merged code, it escaped review.
-func (s *Service) UpdateFrameTemplate(context.Context, *connect.Request[framesv1.UpdateFrameTemplateRequest]) (*connect.Response[framesv1.UpdateFrameTemplateResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("not implemented until Task 8"))
+// fieldRulesFromProto converts and validates client-supplied rules. An unknown
+// slot key is refused: silently keeping a rule that can never fire would let an
+// admin believe they had imposed a standard they had not.
+func fieldRulesFromProto(in map[string]*framesv1.FieldRule) (map[string]FieldRule, error) {
+	out := make(map[string]FieldRule, len(in))
+	for key, rule := range in {
+		if _, ok := slotByKey(key); !ok {
+			return nil, fmt.Errorf("field_rules names unknown slot %q", key)
+		}
+		if rule == nil {
+			continue
+		}
+		out[key] = FieldRule{Level: requirementFromProto(rule.Level), Note: rule.Note}
+	}
+	return out, nil
 }
 
-// TEMPORARY (Task 7): placeholder so the FrameServiceHandler assertion in service.go
-// compiles. Task 8 replaces this with the real handler. If you are reading this in
-// merged code, it escaped review.
-func (s *Service) DeleteFrameTemplate(context.Context, *connect.Request[framesv1.DeleteFrameTemplateRequest]) (*connect.Response[framesv1.DeleteFrameTemplateResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("not implemented until Task 8"))
+// templateInput is the validated, decoded form of a create or update request.
+// Both RPCs take the same fields, so they share one validator: a rule that
+// applied on create but not on update would let an admin edit their way around
+// it.
+type templateInput struct {
+	title       string
+	description string
+	prefill     []byte
+	rules       []byte
+}
+
+func validateTemplateInput(title, description string, prefill []byte, rules map[string]*framesv1.FieldRule) (templateInput, error) {
+	title = strings.TrimSpace(title)
+	description = strings.TrimSpace(description)
+	if title == "" {
+		return templateInput{}, connect.NewError(connect.CodeInvalidArgument, errors.New("title is required"))
+	}
+	if description == "" {
+		return templateInput{}, connect.NewError(connect.CodeInvalidArgument, errors.New("description is required"))
+	}
+	// An empty prefill is legitimate and means "seed no content", which is what
+	// every built-in does. Normalize it to a parseable document so the stored
+	// blob is always something ParsePrefill accepts.
+	if len(prefill) == 0 {
+		empty, err := MarshalPrefill(Prefill{})
+		if err != nil {
+			return templateInput{}, connect.NewError(connect.CodeInternal, err)
+		}
+		prefill = empty
+	} else if _, err := ParsePrefill(prefill); err != nil {
+		return templateInput{}, connect.NewError(connect.CodeInvalidArgument, err)
+	}
+	decoded, err := fieldRulesFromProto(rules)
+	if err != nil {
+		return templateInput{}, connect.NewError(connect.CodeInvalidArgument, err)
+	}
+	rulesJSON, err := MarshalFieldRules(decoded)
+	if err != nil {
+		return templateInput{}, connect.NewError(connect.CodeInternal, err)
+	}
+	return templateInput{title: title, description: description, prefill: prefill, rules: rulesJSON}, nil
+}
+
+// respondWithRow reads back what was written and returns it, so a caller always
+// sees the stored form rather than an optimistic echo of its own request.
+func (s *Service) respondWithRow(ctx context.Context, orgID, id string) (*framesv1.FrameTemplate, error) {
+	row, err := s.repo.GetFrameTemplate(ctx, orgID, id)
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInternal, err)
+	}
+	tmpl, err := rowToTemplate(row)
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInternal, err)
+	}
+	return templateToProto(tmpl)
+}
+
+func (s *Service) CreateFrameTemplate(ctx context.Context, req *connect.Request[framesv1.CreateFrameTemplateRequest]) (*connect.Response[framesv1.CreateFrameTemplateResponse], error) {
+	caller, err := s.requireAdmin(ctx)
+	if err != nil {
+		return nil, err
+	}
+	in, err := validateTemplateInput(req.Msg.Title, req.Msg.Description, req.Msg.Prefill, req.Msg.FieldRules)
+	if err != nil {
+		return nil, err
+	}
+	now := time.Now().UTC()
+	row := &store.FrameTemplate{
+		ID: newID(), OrgID: caller.OrgID, Title: in.title, Description: in.description,
+		Prefill: in.prefill, FieldRules: in.rules, CreatedBy: caller.Subject,
+		CreatedAt: now, UpdatedAt: now,
+	}
+	if err := s.repo.CreateFrameTemplate(ctx, row); err != nil {
+		if errors.Is(err, store.ErrAlreadyExists) {
+			return nil, connect.NewError(connect.CodeAlreadyExists,
+				fmt.Errorf("a template titled %q already exists in this organization", in.title))
+		}
+		return nil, connect.NewError(connect.CodeInternal, err)
+	}
+	pb, err := s.respondWithRow(ctx, caller.OrgID, row.ID)
+	if err != nil {
+		return nil, err
+	}
+	return connect.NewResponse(&framesv1.CreateFrameTemplateResponse{Template: pb}), nil
+}
+
+func (s *Service) UpdateFrameTemplate(ctx context.Context, req *connect.Request[framesv1.UpdateFrameTemplateRequest]) (*connect.Response[framesv1.UpdateFrameTemplateResponse], error) {
+	caller, err := s.requireAdmin(ctx)
+	if err != nil {
+		return nil, err
+	}
+	// Built-ins are compiled in, so there is no row to change. Refused for an
+	// admin too: this is a property of the artifact, not a permission.
+	if IsBuiltin(req.Msg.Id) {
+		return nil, connect.NewError(connect.CodeInvalidArgument,
+			errors.New("built-in templates cannot be edited; create an organization template instead"))
+	}
+	in, err := validateTemplateInput(req.Msg.Title, req.Msg.Description, req.Msg.Prefill, req.Msg.FieldRules)
+	if err != nil {
+		return nil, err
+	}
+	// The store matches on id AND org, so a row in another org is simply not
+	// found. There is no read-then-write window to lose a race in.
+	err = s.repo.UpdateFrameTemplate(ctx, &store.FrameTemplate{
+		ID: req.Msg.Id, OrgID: caller.OrgID, Title: in.title, Description: in.description,
+		Prefill: in.prefill, FieldRules: in.rules, UpdatedAt: time.Now().UTC(),
+	})
+	switch {
+	case errors.Is(err, store.ErrNotFound):
+		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("no template %q", req.Msg.Id))
+	case errors.Is(err, store.ErrAlreadyExists):
+		return nil, connect.NewError(connect.CodeAlreadyExists,
+			fmt.Errorf("a template titled %q already exists in this organization", in.title))
+	case err != nil:
+		return nil, connect.NewError(connect.CodeInternal, err)
+	}
+	pb, err := s.respondWithRow(ctx, caller.OrgID, req.Msg.Id)
+	if err != nil {
+		return nil, err
+	}
+	return connect.NewResponse(&framesv1.UpdateFrameTemplateResponse{Template: pb}), nil
+}
+
+func (s *Service) DeleteFrameTemplate(ctx context.Context, req *connect.Request[framesv1.DeleteFrameTemplateRequest]) (*connect.Response[framesv1.DeleteFrameTemplateResponse], error) {
+	caller, err := s.requireAdmin(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if IsBuiltin(req.Msg.Id) {
+		return nil, connect.NewError(connect.CodeInvalidArgument,
+			errors.New("built-in templates cannot be deleted"))
+	}
+	// No dependency check, unlike DeleteFrame: a template is copied once at
+	// creation and nothing references it afterwards, so deleting one cannot
+	// affect any Frame made from it.
+	err = s.repo.DeleteFrameTemplate(ctx, caller.OrgID, req.Msg.Id)
+	if errors.Is(err, store.ErrNotFound) {
+		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("no template %q", req.Msg.Id))
+	}
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInternal, err)
+	}
+	return connect.NewResponse(&framesv1.DeleteFrameTemplateResponse{}), nil
 }
