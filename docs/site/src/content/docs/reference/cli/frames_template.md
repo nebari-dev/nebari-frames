@@ -22,5 +22,6 @@ Browse Frame templates and scaffold a Frame from one
 ### SEE ALSO
 
 * [frames](/reference/cli/frames/)	 - Publish, browse, and resolve Nebari Frames
+* [frames template init](/reference/cli/frames_template_init/)	 - Write a frame.yaml scaffold from a template, ready to fill in and publish
 * [frames template list](/reference/cli/frames_template_list/)	 - List the Frame templates you can start from
 

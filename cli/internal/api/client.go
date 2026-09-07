@@ -49,11 +49,14 @@ func (t *tokenRoundTripper) RoundTrip(req *http.Request) (*http.Response, error)
 	return t.base.RoundTrip(req)
 }
 
-// Publish publishes a new frame version. Returns the frame and the new version.
-func (c *Client) Publish(ctx context.Context, content []byte, changelog string) (*framesv1.Frame, *framesv1.FrameVersion, error) {
+// Publish publishes a new frame version. templateID is optional: when set, the
+// server checks that template's required slots, which only applies when the
+// Frame is being created.
+func (c *Client) Publish(ctx context.Context, content []byte, changelog, templateID string) (*framesv1.Frame, *framesv1.FrameVersion, error) {
 	resp, err := c.svc.PublishFrame(ctx, connect.NewRequest(&framesv1.PublishFrameRequest{
-		Content:   content,
-		Changelog: changelog,
+		Content:    content,
+		Changelog:  changelog,
+		TemplateId: templateID,
 	}))
 	if err != nil {
 		return nil, nil, err

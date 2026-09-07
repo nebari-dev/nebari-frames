@@ -10,7 +10,7 @@ import (
 )
 
 func addPublishCmd(root *cobra.Command) {
-	var dir, changelog string
+	var dir, changelog, templateID string
 	cmd := &cobra.Command{
 		Use:   "publish",
 		Short: "Publish a Frame from a directory containing frame.yaml",
@@ -26,7 +26,7 @@ func addPublishCmd(root *cobra.Command) {
 				}
 				return err
 			}
-			frame, version, err := getClientCtx(cmd.Context()).Publish(cmd.Context(), content, changelog)
+			frame, version, err := getClientCtx(cmd.Context()).Publish(cmd.Context(), content, changelog, templateID)
 			if err != nil {
 				if connect.CodeOf(err) == connect.CodeInvalidArgument {
 					return fmt.Errorf("frame.yaml is invalid: %w", err)
@@ -39,5 +39,7 @@ func addPublishCmd(root *cobra.Command) {
 	}
 	cmd.Flags().StringVar(&dir, "dir", "", "Directory containing frame.yaml")
 	cmd.Flags().StringVar(&changelog, "changelog", "", "Release notes for this version")
+	cmd.Flags().StringVar(&templateID, "template", "",
+		"Template this Frame is being created from; its required sections are checked")
 	root.AddCommand(cmd)
 }

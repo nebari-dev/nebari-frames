@@ -16,6 +16,7 @@ frames publish [flags]
       --changelog string   Release notes for this version
       --dir string         Directory containing frame.yaml
   -h, --help               help for publish
+      --template string    Template this Frame is being created from; its required sections are checked
 ```
 
 ### Options inherited from parent commands
