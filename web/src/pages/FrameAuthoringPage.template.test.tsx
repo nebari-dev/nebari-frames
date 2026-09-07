@@ -158,3 +158,56 @@ it("seeds nothing when the template is blank", () => {
   expect(screen.getByLabelText(/frame name/i)).toBeInTheDocument();
   expect(screen.queryByRole("heading", { name: /^terminology$/i })).not.toBeInTheDocument();
 });
+
+it("sends the chosen template id when publishing", async () => {
+  const mutateAsync = vi.fn().mockResolvedValue({ frame: { name: "vocab" }, version: { version: "1.0.0" } });
+  useMutationMock.mockReturnValue({ mutateAsync, isPending: false });
+  mockQueries(vocabularyTemplate);
+  renderAt("/frames/new?template=builtin:domain-vocabulary");
+
+  await userEvent.type(screen.getByLabelText(/frame name/i), "vocab");
+  await userEvent.type(screen.getByLabelText(/^description$/i), "Our terms");
+  // Version and changelog live in the publish dialog, so a publish takes two
+  // clicks: open it, then confirm. The brief's snippet had only the first
+  // click, which opens the dialog but never submits - matching create.test.tsx's
+  // publishViaDialog() sequence here so the mutation actually fires.
+  await userEvent.click(screen.getByRole("button", { name: /publish…/i }));
+  await userEvent.click(await screen.findByRole("button", { name: /^publish$/i }));
+
+  expect(mutateAsync).toHaveBeenCalled();
+  const arg = mutateAsync.mock.calls[0][0];
+  expect(arg.templateId).toBe("builtin:domain-vocabulary");
+});
+
+// The import and edit paths sending no template id is covered by
+// `publishTemplateID` in src/lib/templates.test.ts. It is asserted there rather
+// than here because a test that only checks the payload "if a submit happened"
+// passes when nothing happened at all, which proves nothing. The page's job is
+// to call the helper; the helper's job is to be right.
+
+it("puts a required-slot violation under that section", async () => {
+  const { ConnectError, Code } = await import("@connectrpc/connect");
+  const { FieldViolationsSchema } = await import("@gen/frames/v1/frame_service_pb");
+  const { create } = await import("@bufbuild/protobuf");
+  const detail = create(FieldViolationsSchema, {
+    violations: [{ field: "slots.terminology", message: 'required by the "Domain Vocabulary" template' }],
+  });
+  const err = new ConnectError("invalid", Code.InvalidArgument, undefined, [
+    { desc: FieldViolationsSchema, value: detail },
+  ]);
+  useMutationMock.mockReturnValue({ mutateAsync: vi.fn().mockRejectedValue(err), isPending: false });
+  mockQueries(vocabularyTemplate);
+  renderAt("/frames/new?template=builtin:domain-vocabulary");
+
+  await userEvent.type(screen.getByLabelText(/frame name/i), "vocab");
+  await userEvent.type(screen.getByLabelText(/^description$/i), "Our terms");
+  await userEvent.click(screen.getByRole("button", { name: /publish…/i }));
+  await userEvent.click(await screen.findByRole("button", { name: /^publish$/i }));
+
+  const message = await screen.findByText(/required by the "Domain Vocabulary" template/i);
+  expect(message).toBeInTheDocument();
+  // It has to be attached to the Terminology section, not floated to the top of
+  // the form: that placement is the whole point of the FieldViolations detail.
+  const section = screen.getByRole("heading", { name: /^terminology$/i }).closest("section");
+  expect(section).toContainElement(message);
+});

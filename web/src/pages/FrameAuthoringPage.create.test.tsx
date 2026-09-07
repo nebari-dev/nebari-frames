@@ -12,10 +12,14 @@ vi.mock("react-router", async (orig) => ({
   useNavigate: () => navigateMock,
 }));
 
+// The submit handler awaits mutateAsync rather than the callback-style
+// mutate(), so the mutation happens (or fails) on the promise this mock
+// returns, and templateId lands in the single request object rather than a
+// second onSuccess/onError argument.
 const mutateMock = vi.fn();
 vi.mock("@connectrpc/connect-query", () => ({
   useQuery: () => ({ data: { org: { slug: "openteams" } }, isLoading: false, error: null }),
-  useMutation: () => ({ mutate: mutateMock, isPending: false, isSuccess: false }),
+  useMutation: () => ({ mutateAsync: mutateMock, isPending: false, isSuccess: false }),
   createConnectQueryKey: () => ["k"],
 }));
 vi.mock("@tanstack/react-query", () => ({ useQueryClient: () => ({ invalidateQueries: vi.fn() }) }));
@@ -100,7 +104,7 @@ it("surfaces a server violation on the slot row that caused it", async () => {
   const err = new ConnectError("invalid", Code.InvalidArgument, undefined, [
     { desc: FieldViolationsSchema, value: fv },
   ]);
-  mutateMock.mockImplementation((_req, opts) => opts.onError(err));
+  mutateMock.mockRejectedValue(err);
 
   renderCreate();
   await fillIdentity();

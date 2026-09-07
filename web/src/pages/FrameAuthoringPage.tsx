@@ -9,7 +9,13 @@ import { FrameService } from "@gen/frames/v1/frame_service_pb";
 import { authoringFormSchema, emptyFrameDoc, suggestNextVersion } from "@/lib/authoring-schema";
 import { serializeFrameDoc, parseFrameContent } from "@/lib/frame-yaml";
 import { SLOT_SECTIONS, sectionHasContent, type SlotSectionDef } from "@/lib/slot-sections";
-import { seededSections, isRequiredSection, sectionHint, type TemplateRules } from "@/lib/templates";
+import {
+  seededSections,
+  isRequiredSection,
+  sectionHint,
+  publishTemplateID,
+  type TemplateRules,
+} from "@/lib/templates";
 import { mapPublishError } from "@/lib/publish-errors";
 import { type AuthoringForm, formToDoc, docToForm } from "@/components/form/form-model";
 import { ExtendsEditor } from "@/components/form/ExtendsEditor";
@@ -297,23 +303,28 @@ export function FrameAuthoringPage({ mode }: { mode: "create" | "edit" }) {
 
   // A publish failure closes the dialog only when the problem lives outside
   // it: a version conflict must be fixed where the version input is.
-  const onSubmit = (form: AuthoringForm) => {
+  const onSubmit = async (form: AuthoringForm) => {
     setFormError(null);
     const content = encode(serializeFrameDoc(formToDoc(form)));
-    publish.mutate(
-      { content, changelog: form.changelog },
-      {
-        onSuccess: () => afterPublish(form.name),
-        onError: (err: unknown) => {
-          const { fieldErrors, formError: fe } = mapPublishError(err);
-          for (const [path, message] of Object.entries(fieldErrors)) {
-            methods.setError(path as never, { type: "server", message });
-          }
-          setFormError(fe);
-          if (!fieldErrors.version) setPublishOpen(false);
-        },
-      },
-    );
+    try {
+      await publish.mutateAsync({
+        content,
+        changelog: form.changelog,
+        // publishTemplateID owns this rule (create only, and only when a
+        // template was actually chosen) and is unit-tested on its own; the
+        // page must call it rather than re-implement the condition inline,
+        // or the two can drift.
+        templateId: publishTemplateID({ mode, importing, templateID }),
+      });
+      afterPublish(form.name);
+    } catch (err) {
+      const { fieldErrors, formError: fe } = mapPublishError(err);
+      for (const [path, message] of Object.entries(fieldErrors)) {
+        methods.setError(path as never, { type: "server", message });
+      }
+      setFormError(fe);
+      if (!fieldErrors.version) setPublishOpen(false);
+    }
   };
 
   // Invalid form on publish: keep the dialog open only when the version itself
