@@ -82,3 +82,19 @@ export function serializeFrameDoc(doc: FrameDoc): string {
   out.slots = compactSlots(doc.slots);
   return stringifyYaml(out);
 }
+
+// Serializes a template prefill: the same slot compaction as serializeFrameDoc,
+// but the input type itself has no room for name/description/version - a
+// template seeds content, never identity, and backend/internal/frames/templates.go
+// ParsePrefill rejects a blob that sets any of them. Mirrors that package's own
+// prefillDoc, which for the same reason omits those keys from its encoder
+// rather than emitting them empty and relying on the decoder to catch it.
+export function serializeFramePrefill(input: {
+  slots: FrameDoc["slots"];
+  extends?: FrameDoc["extends"];
+}): string {
+  const out: Record<string, unknown> = {};
+  if (input.extends && input.extends.length > 0) out.extends = input.extends;
+  out.slots = compactSlots(input.slots);
+  return stringifyYaml(out);
+}
