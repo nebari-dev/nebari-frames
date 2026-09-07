@@ -404,24 +404,55 @@ func TestMemoryFrameTemplateConstraints(t *testing.T) {
 func TestMemoryFrameTemplateReturnsCopies(t *testing.T) {
 	// A handler applying an update mutates the struct it was handed, so the
 	// store must not be sharing its own row.
+	//
+	// The byte slices matter more than the scalars here. `out := *in` already
+	// isolates a string field, so asserting only on Title would pass even if the
+	// slice copies were deleted, and the aliasing bug this test exists to catch
+	// would walk straight back in. Both slices are therefore written through by
+	// index: indexing can only reach shared backing memory, whereas an append
+	// might quietly reallocate and prove nothing.
 	ctx := context.Background()
 	m := store.NewMemory()
-	if err := m.CreateFrameTemplate(ctx, &store.FrameTemplate{
+	const wantPrefill = "slots: {}\n"
+	const wantRules = `{"style":{"level":"required"}}`
+	input := &store.FrameTemplate{
 		ID: "t1", OrgID: "org-a", Title: "Brand Voice",
-		Prefill: []byte("slots: {}\n"), FieldRules: []byte("{}"),
-	}); err != nil {
+		Prefill: []byte(wantPrefill), FieldRules: []byte(wantRules),
+	}
+	if err := m.CreateFrameTemplate(ctx, input); err != nil {
 		t.Fatalf("create: %v", err)
 	}
+
+	// The write path too: a caller that keeps hold of what it passed to Create
+	// must not be able to reach into the stored row through it.
+	input.Title = "clobbered on the way in"
+	input.Prefill[0] = 'X'
+	input.FieldRules[0] = 'X'
+
 	got, err := m.GetFrameTemplate(ctx, "org-a", "t1")
 	if err != nil {
 		t.Fatalf("get: %v", err)
 	}
-	got.Title = "clobbered"
+	if got.Title != "Brand Voice" || string(got.Prefill) != wantPrefill || string(got.FieldRules) != wantRules {
+		t.Fatalf("Create aliased its input: %+v", got)
+	}
+
+	// And the read path.
+	got.Title = "clobbered on the way out"
+	got.Prefill[0] = 'Y'
+	got.FieldRules[0] = 'Y'
+
 	again, err := m.GetFrameTemplate(ctx, "org-a", "t1")
 	if err != nil {
 		t.Fatalf("get again: %v", err)
 	}
 	if again.Title != "Brand Voice" {
-		t.Errorf("mutating the returned row changed the store: %q", again.Title)
+		t.Errorf("mutating the returned title changed the store: %q", again.Title)
+	}
+	if string(again.Prefill) != wantPrefill {
+		t.Errorf("mutating the returned prefill changed the store: %q", again.Prefill)
+	}
+	if string(again.FieldRules) != wantRules {
+		t.Errorf("mutating the returned field rules changed the store: %q", again.FieldRules)
 	}
 }
