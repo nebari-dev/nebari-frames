@@ -269,14 +269,38 @@ jobs:
           # Prove it from inside the cluster. Without this the failure surfaces
           # 15 minutes later as an unexplained unhealthy Application, which is
           # how the upstream no-op went unnoticed in the first place.
-          kubectl delete pod dns-probe --ignore-not-found >/dev/null
-          OUT=$(kubectl run dns-probe --image=busybox:1.36 --restart=Never \
-            --attach --rm --quiet --image-pull-policy=IfNotPresent \
-            --command -- nslookup "keycloak.${DOMAIN}" 2>&1) || true
-          echo "${OUT}"
-          echo "${OUT}" | grep -qF "${GATEWAY_IP}" \
-            || { echo "::error::keycloak.${DOMAIN} does not resolve to ${GATEWAY_IP} from inside the cluster"; exit 1; }
-          echo "OK: keycloak.${DOMAIN} resolves to ${GATEWAY_IP} for pods"
+          #
+          # Wait rather than sampling once. `rollout status` reports the new
+          # CoreDNS pods Ready before the new Corefile is necessarily live in
+          # them: a ConfigMap mounted as a volume propagates on kubelet's sync
+          # interval, and CoreDNS reloads on a poll of its own. A single probe
+          # fired straight after the rollout therefore loses a race roughly half
+          # the time, and a lost race is indistinguishable from the real
+          # misconfiguration this check exists to catch. Retrying to a deadline
+          # makes slow propagation read as slow and leaves only genuine breakage
+          # reading as broken.
+          RESOLVED=0
+          for attempt in $(seq 1 24); do
+            kubectl delete pod dns-probe --ignore-not-found >/dev/null 2>&1
+            OUT=$(kubectl run dns-probe --image=busybox:1.36 --restart=Never \
+              --attach --rm --quiet --image-pull-policy=IfNotPresent \
+              --command -- nslookup "keycloak.${DOMAIN}" 2>&1) || true
+            if echo "${OUT}" | grep -qF "${GATEWAY_IP}"; then
+              RESOLVED=1
+              echo "OK: keycloak.${DOMAIN} resolves to ${GATEWAY_IP} for pods (attempt ${attempt})"
+              break
+            fi
+            echo "[${attempt}/24] keycloak.${DOMAIN} not resolving yet"
+            sleep 5
+          done
+          if [ "${RESOLVED}" != "1" ]; then
+            echo "::error::keycloak.${DOMAIN} does not resolve to ${GATEWAY_IP} from inside the cluster after 24 attempts"
+            echo "last probe output:"
+            echo "${OUT}"
+            echo "Corefile the ConfigMap currently holds:"
+            kubectl -n kube-system get configmap coredns -o jsonpath='{.data.Corefile}' || true
+            exit 1
+          fi
 
       - name: Provision the sandbox CA for the frames pod
         env:
