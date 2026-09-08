@@ -665,11 +665,40 @@ jobs:
           # the same trap applies here.
           [ -n "${FRAMES_E2E_TOKEN}" ] || { echo "::error::no token; the acquisition step failed"; exit 1; }
 
-          # Hand the CA to the suite explicitly rather than relying on
-          # SSL_CERT_FILE. The two are not interchangeable: curl accepts a trust
-          # anchor that Go rejects, so the provisioning steps above can succeed
-          # over curl while every RPC below fails to verify the same gateway.
-          export FRAMES_E2E_CA_CERT="${SSL_CERT_FILE}"
+          # Take the serving certificate from the cluster rather than from the
+          # path the sandbox action reports.
+          #
+          # That path holds a self-signed leaf (CA:FALSE, key usage Digital
+          # Signature and Key Encipherment) rather than an authority, and it is
+          # not even the certificate this gateway presents: pinning against it
+          # failed with a presented-versus-pinned mismatch. curl never noticed,
+          # because OpenSSL will anchor on a self-signed certificate by exact
+          # match and the provisioning calls above talk to a different host.
+          #
+          # Reading the secret over the authenticated kubeconfig means the
+          # expected identity is learned from a trusted channel, not from the
+          # connection being tested, which trusting-on-first-use would amount to.
+          GW_NS=$(kubectl get secret -A \
+            -o jsonpath='{range .items[?(@.metadata.name=="nebari-gateway-tls")]}{.metadata.namespace}{end}')
+          [ -n "${GW_NS}" ] || {
+            echo "::error::no nebari-gateway-tls secret in any namespace"
+            kubectl get secret -A 2>/dev/null | grep -i tls || true
+            exit 1
+          }
+          kubectl -n "${GW_NS}" get secret nebari-gateway-tls \
+            -o jsonpath='{.data.tls\.crt}' | base64 -d > /tmp/gateway-tls.crt
+          export FRAMES_E2E_CA_CERT=/tmp/gateway-tls.crt
+
+          # Fingerprints, so any future mismatch is explicable at a glance
+          # instead of costing another sandbox run to characterise.
+          echo "certificate fingerprints:"
+          printf '  action-reported path: %s\n' \
+            "$(openssl x509 -in "${SSL_CERT_FILE}" -noout -fingerprint -sha256 2>/dev/null | cut -d= -f2)"
+          printf '  %s/nebari-gateway-tls tls.crt: %s\n' "${GW_NS}" \
+            "$(openssl x509 -in /tmp/gateway-tls.crt -noout -fingerprint -sha256 2>/dev/null | cut -d= -f2)"
+          printf '  presented by the gateway: %s\n' \
+            "$(openssl s_client -connect frames.nebari.local:443 -servername frames.nebari.local \
+               </dev/null 2>/dev/null | openssl x509 -noout -fingerprint -sha256 2>/dev/null | cut -d= -f2)"
 
           # What the trust anchor actually is, printed before the suite runs.
           # "certificate signed by unknown authority" names no cause, and the
