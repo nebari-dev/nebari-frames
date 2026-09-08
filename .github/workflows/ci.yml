@@ -640,4 +640,25 @@ jobs:
           # the "Auth is really on" step exists to prevent for dev mode, and
           # the same trap applies here.
           [ -n "${FRAMES_E2E_TOKEN}" ] || { echo "::error::no token; the acquisition step failed"; exit 1; }
+
+          # Hand the CA to the suite explicitly rather than relying on
+          # SSL_CERT_FILE. The two are not interchangeable: curl accepts a trust
+          # anchor that Go rejects, so the provisioning steps above can succeed
+          # over curl while every RPC below fails to verify the same gateway.
+          export FRAMES_E2E_CA_CERT="${SSL_CERT_FILE}"
+
+          # What the trust anchor actually is, printed before the suite runs.
+          # "certificate signed by unknown authority" names no cause, and the
+          # cluster is gone by the time anyone reads the log, so a repeat would
+          # otherwise cost another full sandbox run to explain. Go requires a
+          # trust anchor to carry CA:TRUE; a self-signed leaf will verify under
+          # curl and be refused here, and that shows up below as CA:FALSE.
+          echo "trust anchor at ${FRAMES_E2E_CA_CERT}:"
+          openssl x509 -in "${FRAMES_E2E_CA_CERT}" -noout -subject -issuer -dates \
+            -ext basicConstraints,keyUsage 2>&1 || true
+          echo "chain the gateway actually presents:"
+          openssl s_client -connect frames.nebari.local:443 -servername frames.nebari.local \
+            -showcerts </dev/null 2>/dev/null \
+            | grep -E "^ *[0-9]+ s:|^ *i:|Verify return code" || true
+
           go test -tags e2e -count=1 -v ./e2e/...
