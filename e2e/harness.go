@@ -11,8 +11,11 @@
 package e2e
 
 import (
+	"bytes"
 	"crypto/tls"
 	"crypto/x509"
+	"encoding/pem"
+	"fmt"
 	"net/http"
 	"os"
 	"testing"
@@ -29,37 +32,73 @@ const (
 
 func baseURL() string { return os.Getenv(envBaseURL) }
 
-// transport trusts the CA named by FRAMES_E2E_CA_CERT in addition to the system
-// roots, falling back to the default transport when the variable is unset.
+// transport verifies the server against the certificate named by
+// FRAMES_E2E_CA_CERT, falling back to the default transport when unset.
 //
-// Trust is loaded here rather than left to SSL_CERT_FILE because the two are not
-// equivalent in practice. curl and Go disagree about what may serve as a trust
-// anchor - Go requires the CA basic constraint that curl will do without - so a
-// run can provision a token over curl and then fail every RPC with "certificate
-// signed by unknown authority" using the very same file. Reading the file here
-// turns that into a named failure against a named path instead of a puzzle.
+// Two shapes of certificate turn up here and they need different handling.
 //
-// Verification stays on. A suite that skips certificate checks is not exercising
-// the path it claims to.
+// A real CA becomes a trust anchor and Go verifies the chain normally.
+//
+// The Nebari sandbox gateway instead serves a SELF-SIGNED LEAF: subject equals
+// issuer, `CA:FALSE` marked critical, and a presented chain of one. That cannot
+// be a trust anchor. Go enforces basic constraints and refuses it, which is why
+// the same file verifies under curl (OpenSSL will anchor on a self-signed cert
+// by exact match) and fails under Go with "certificate signed by unknown
+// authority". There is no CA anywhere in that deployment to chain to.
+//
+// For that case the certificate is PINNED. InsecureSkipVerify turns off Go's
+// chain building, and VerifyPeerCertificate then applies a stricter test than a
+// chain would: the certificate the server presents must be byte-identical to the
+// one on disk. Any other certificate, expired or not, signed by anyone, fails.
+// This is pinning and it fails closed; it is not skipped verification, and the
+// suite would be worthless if it were.
 func transport(t *testing.T) http.RoundTripper {
 	t.Helper()
 	path := os.Getenv(envCACert)
 	if path == "" {
 		return http.DefaultTransport
 	}
-	pem, err := os.ReadFile(path)
+	pemBytes, err := os.ReadFile(path)
 	if err != nil {
 		t.Fatalf("%s=%q: %v", envCACert, path, err)
 	}
-	roots, err := x509.SystemCertPool()
+	block, _ := pem.Decode(pemBytes)
+	if block == nil {
+		t.Fatalf("%s=%q held no PEM block", envCACert, path)
+	}
+	cert, err := x509.ParseCertificate(block.Bytes)
 	if err != nil {
-		roots = x509.NewCertPool()
+		t.Fatalf("%s=%q is not a parseable certificate: %v", envCACert, path, err)
 	}
-	if !roots.AppendCertsFromPEM(pem) {
-		t.Fatalf("%s=%q held no PEM certificate", envCACert, path)
+
+	if cert.IsCA {
+		roots, err := x509.SystemCertPool()
+		if err != nil {
+			roots = x509.NewCertPool()
+		}
+		roots.AddCert(cert)
+		return &http.Transport{
+			TLSClientConfig: &tls.Config{RootCAs: roots, MinVersion: tls.VersionTLS12},
+		}
 	}
+
+	pinned := cert.Raw
 	return &http.Transport{
-		TLSClientConfig: &tls.Config{RootCAs: roots, MinVersion: tls.VersionTLS12},
+		TLSClientConfig: &tls.Config{
+			MinVersion: tls.VersionTLS12,
+			// Chain verification is replaced, not dropped: see VerifyPeerCertificate.
+			InsecureSkipVerify: true, //nolint:gosec // pinned below
+			VerifyPeerCertificate: func(rawCerts [][]byte, _ [][]*x509.Certificate) error {
+				for _, raw := range rawCerts {
+					if bytes.Equal(raw, pinned) {
+						return nil
+					}
+				}
+				return fmt.Errorf(
+					"server presented %d certificate(s), none matching the one pinned from %s",
+					len(rawCerts), path)
+			},
+		},
 	}
 }
 
