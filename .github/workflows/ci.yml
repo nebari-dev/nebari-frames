@@ -666,35 +666,51 @@ jobs:
           [ -n "${FRAMES_E2E_TOKEN}" ] || { echo "::error::no token; the acquisition step failed"; exit 1; }
 
           # Take the serving certificate from the cluster rather than from the
-          # path the sandbox action reports.
+          # path the sandbox action reports, which is a different certificate
+          # altogether: pinning against it failed with a presented-versus-pinned
+          # mismatch. curl never noticed, because OpenSSL anchors on a
+          # self-signed certificate by exact match and the provisioning calls
+          # above talk to a different host.
           #
-          # That path holds a self-signed leaf (CA:FALSE, key usage Digital
-          # Signature and Key Encipherment) rather than an authority, and it is
-          # not even the certificate this gateway presents: pinning against it
-          # failed with a presented-versus-pinned mismatch. curl never noticed,
-          # because OpenSSL will anchor on a self-signed certificate by exact
-          # match and the provisioning calls above talk to a different host.
+          # The subtlety is which secret. The nebari-operator gives each
+          # NebariApp its own Gateway listener with its own certificate, whose
+          # only SAN is that app's hostname, and Envoy serves it for that SNI.
+          # nebari-gateway-tls is merely the catch-all listener's certificate
+          # (SANs: apex, keycloak, argocd) and is NOT what frames.nebari.local
+          # presents - pinning it is what broke this job before. So resolve the
+          # certificate from the listener matching the hostname under test
+          # instead of naming a secret, which also survives a rename of the
+          # operator's "<app>-<namespace>-tls" convention.
           #
-          # Reading the secret over the authenticated kubeconfig means the
-          # expected identity is learned from a trusted channel, not from the
-          # connection being tested, which trusting-on-first-use would amount to.
-          GW_NS=$(kubectl get secret -A \
-            -o jsonpath='{range .items[?(@.metadata.name=="nebari-gateway-tls")]}{.metadata.namespace}{end}')
+          # Reading it over the authenticated kubeconfig means the expected
+          # identity is learned from a trusted channel, not from the connection
+          # being tested, which trusting-on-first-use would amount to.
+          GW_NS=$(kubectl get gateway -A \
+            -o jsonpath='{.items[?(@.metadata.name=="nebari-gateway")].metadata.namespace}')
           [ -n "${GW_NS}" ] || {
-            echo "::error::no nebari-gateway-tls secret in any namespace"
-            kubectl get secret -A 2>/dev/null | grep -i tls || true
+            echo "::error::no nebari-gateway Gateway in any namespace"
+            kubectl get gateway -A 2>/dev/null || true
             exit 1
           }
-          kubectl -n "${GW_NS}" get secret nebari-gateway-tls \
+          CERT_SECRET=$(kubectl -n "${GW_NS}" get gateway nebari-gateway \
+            -o jsonpath='{.spec.listeners[?(@.hostname=="frames.nebari.local")].tls.certificateRefs[0].name}')
+          [ -n "${CERT_SECRET}" ] || {
+            echo "::error::no Gateway listener for frames.nebari.local, so the operator never provisioned its certificate"
+            kubectl -n "${GW_NS}" get gateway nebari-gateway -o yaml || true
+            exit 1
+          }
+          echo "pinning ${GW_NS}/${CERT_SECRET} (listener for frames.nebari.local)"
+          kubectl -n "${GW_NS}" get secret "${CERT_SECRET}" \
             -o jsonpath='{.data.tls\.crt}' | base64 -d > /tmp/gateway-tls.crt
           export FRAMES_E2E_CA_CERT=/tmp/gateway-tls.crt
 
           # Fingerprints, so any future mismatch is explicable at a glance
-          # instead of costing another sandbox run to characterise.
+          # instead of costing another sandbox run to characterise. The last two
+          # must agree; the first is expected to differ.
           echo "certificate fingerprints:"
           printf '  action-reported path: %s\n' \
             "$(openssl x509 -in "${SSL_CERT_FILE}" -noout -fingerprint -sha256 2>/dev/null | cut -d= -f2)"
-          printf '  %s/nebari-gateway-tls tls.crt: %s\n' "${GW_NS}" \
+          printf '  %s/%s tls.crt (pinned): %s\n' "${GW_NS}" "${CERT_SECRET}" \
             "$(openssl x509 -in /tmp/gateway-tls.crt -noout -fingerprint -sha256 2>/dev/null | cut -d= -f2)"
           printf '  presented by the gateway: %s\n' \
             "$(openssl s_client -connect frames.nebari.local:443 -servername frames.nebari.local \
@@ -703,12 +719,12 @@ jobs:
           # What the trust anchor actually is, printed before the suite runs.
           # "certificate signed by unknown authority" names no cause, and the
           # cluster is gone by the time anyone reads the log, so a repeat would
-          # otherwise cost another full sandbox run to explain. Go requires a
-          # trust anchor to carry CA:TRUE; a self-signed leaf will verify under
-          # curl and be refused here, and that shows up below as CA:FALSE.
+          # otherwise cost another full sandbox run to explain. Expect a
+          # self-signed leaf (CA:FALSE) whose only SAN is the hostname under
+          # test; the harness pins that rather than chaining to it.
           echo "trust anchor at ${FRAMES_E2E_CA_CERT}:"
           openssl x509 -in "${FRAMES_E2E_CA_CERT}" -noout -subject -issuer -dates \
-            -ext basicConstraints,keyUsage 2>&1 || true
+            -ext basicConstraints,keyUsage,subjectAltName 2>&1 || true
           echo "chain the gateway actually presents:"
           openssl s_client -connect frames.nebari.local:443 -servername frames.nebari.local \
             -showcerts </dev/null 2>/dev/null \

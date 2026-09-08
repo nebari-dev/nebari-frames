@@ -39,14 +39,16 @@ func baseURL() string { return os.Getenv(envBaseURL) }
 //
 // A real CA becomes a trust anchor and Go verifies the chain normally.
 //
-// The Nebari sandbox gateway instead serves a SELF-SIGNED LEAF: subject equals
-// issuer, `CA:FALSE` marked critical, and a presented chain of one. That cannot
-// be a trust anchor. Go enforces basic constraints and refuses it, which is why
-// the same file verifies under curl (OpenSSL will anchor on a self-signed cert
-// by exact match) and fails under Go with "certificate signed by unknown
-// authority". There is no CA anywhere in that deployment to chain to.
+// The Nebari gateway instead serves a SELF-SIGNED LEAF: subject equals issuer,
+// `CA:FALSE` marked critical, and a presented chain of one. There is no CA
+// anywhere in that deployment to chain to. Go does accept such a certificate as
+// its own anchor: crypto/x509 short-circuits on `opts.Roots.contains(c)` and
+// returns a one-element chain without ever calling buildChains, so basic
+// constraints go unconsulted. But leaning on that means depending on an x509
+// internal to do what is really just an exact-match check.
 //
-// For that case the certificate is PINNED. InsecureSkipVerify turns off Go's
+// So that case is PINNED explicitly, stating the requirement in this code
+// instead of inheriting it from x509's. InsecureSkipVerify turns off Go's
 // chain building, and VerifyPeerCertificate then applies a stricter test than a
 // chain would: the certificate the server presents must be byte-identical to the
 // one on disk. Any other certificate, expired or not, signed by anyone, fails.

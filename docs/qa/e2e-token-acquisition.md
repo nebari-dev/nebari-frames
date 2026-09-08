@@ -131,7 +131,37 @@ curl -s -X POST \
 
 2. **Purpose-provisioned test client**: The production web client (`frames-web`) has `directAccessGrantsEnabled: false` to enforce the PKCE flow. A separate test client (`frames-test`) with password grant enabled is required for automated tests.
 
-3. **Local dev testing only**: This procedure uses the local dev Keycloak realm and was proven only against that setup. A cluster's operator-provisioned OIDC identity provider may have different configuration, issuer URLs, audience requirements, or claim mappings. Apply these principles but validate against your actual OIDC configuration.
+3. **Also proven on a cluster**: this procedure began as local-dev-only, but the same shape now works against an operator-provisioned realm; see the section below for the two differences that matter. Issuer URLs, audience requirements, and claim mappings still vary between deployments, so validate against your actual OIDC configuration.
+
+## Against a Real Cluster
+
+Verified 2026-09-08 on a kind cluster running nebari-infrastructure-core, and mirrored by the `e2e-sandbox` CI job. Two things differ from local dev: which identity the backend expects, and which certificate the gateway serves.
+
+**The audience is the operator's SPA client, not a name you can predict.** The chart wires `OIDC_CLIENT_ID` to the `spa-client-id` key of the secret the operator writes (`<nebariapp>-oidc-client`), so that is what the token's `aud` must contain. Read it from the secret rather than re-deriving the `<ns>-<app>-spa` naming convention, so a convention change fails loudly at the read instead of silently at token validation:
+
+```bash
+kubectl -n nebari-frames get secret nebari-frames-nebari-frames-oidc-client \
+  -o jsonpath='{.data.spa-client-id}' | base64 -d
+```
+
+The operator's SPA client has `directAccessGrantsEnabled: false`, so tests still need their own client whose audience mapper points at that id.
+
+Keycloak's declarative user profile is enabled by default on the realm and marks `firstName`/`lastName` required. A user created without them is left incomplete and the password grant refuses with `Account is not fully set up`, which names no specific unmet condition. Set both, and set `requiredActions: []` explicitly so a realm default such as `UPDATE_PASSWORD` cannot block the grant the same way.
+
+**TLS: pin the app's own certificate, not the gateway's.** The nebari-operator gives each NebariApp its own Gateway listener with its own certificate whose only SAN is that app's hostname, and Envoy serves it for that SNI. `nebari-gateway-tls` is only the catch-all listener's certificate (SANs: apex, keycloak, argocd). Pinning it for an app hostname fails with a presented-versus-pinned mismatch. Resolve the certificate from the listener under test:
+
+```bash
+GW_NS=$(kubectl get gateway -A \
+  -o jsonpath='{.items[?(@.metadata.name=="nebari-gateway")].metadata.namespace}')
+CERT_SECRET=$(kubectl -n "${GW_NS}" get gateway nebari-gateway \
+  -o jsonpath='{.spec.listeners[?(@.hostname=="frames.example.com")].tls.certificateRefs[0].name}')
+kubectl -n "${GW_NS}" get secret "${CERT_SECRET}" \
+  -o jsonpath='{.data.tls\.crt}' | base64 -d > gateway-tls.crt
+```
+
+These certificates are self-signed leaves (`CA:FALSE`), issued by a self-signed cert-manager ClusterIssuer, with no CA anywhere to chain to. Go does accept such a certificate as its own trust anchor - `crypto/x509` short-circuits on `opts.Roots.contains(c)` and returns a one-element chain without consulting basic constraints - so "unknown authority" from a bundle built this way means the certificate is the *wrong* one, not that Go rejected a non-CA. `e2e/harness.go` pins instead of chaining for this case; see its comment.
+
+Note that the pod's own trust bundle (`trustBundle.configMapName`, surfaced as `SSL_CERT_FILE`) is a separate concern, and `SSL_CERT_FILE` *replaces* Go's root pool rather than extending it. It must therefore carry public roots plus the private CA, or TLS to anything publicly signed breaks.
 
 ## Troubleshooting
 
