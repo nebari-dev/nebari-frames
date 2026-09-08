@@ -582,10 +582,17 @@ jobs:
           E2E_PASSWORD=$(openssl rand -hex 24)
           echo "::add-mask::${E2E_PASSWORD}"
 
+          # firstName and lastName are not decoration. Keycloak's declarative
+          # user profile is on by default and marks both required, so a user
+          # created without them is left incomplete and the password grant
+          # refuses with "Account is not fully set up" even though the account
+          # exists and the password was accepted. requiredActions is cleared
+          # explicitly for the same reason: a realm default such as
+          # UPDATE_PASSWORD would block the grant the same way.
           CREATE_USER_CODE=$(curl -s --cacert "${CACERT}" -o /tmp/create-user.json -w '%{http_code}' \
             -X POST "${KC_BASE}/admin/realms/${REALM}/users" \
             -H "Authorization: Bearer ${ADMIN_TOKEN}" -H 'Content-Type: application/json' \
-            -d '{"username":"frames-e2e","email":"e2e@example.com","emailVerified":true,"enabled":true}')
+            -d '{"username":"frames-e2e","email":"e2e@example.com","emailVerified":true,"enabled":true,"firstName":"Frames","lastName":"E2E","requiredActions":[]}')
           [ "${CREATE_USER_CODE}" = "201" ] \
             || { echo "::error::user provisioning failed (HTTP ${CREATE_USER_CODE})"; cat /tmp/create-user.json; exit 1; }
 
@@ -606,7 +613,18 @@ jobs:
             -d username=frames-e2e -d "password=${E2E_PASSWORD}")
           ACCESS_TOKEN=$(echo "${TOKEN_RESPONSE}" | jq -r '.access_token')
           [ -n "${ACCESS_TOKEN}" ] && [ "${ACCESS_TOKEN}" != "null" ] \
-            || { echo "::error::password grant failed: ${TOKEN_RESPONSE}"; exit 1; }
+            || {
+              echo "::error::password grant failed: ${TOKEN_RESPONSE}"
+              # "Account is not fully set up" says nothing about WHICH condition
+              # is unmet, and the account is gone once the cluster is torn down.
+              # Dump what the server thinks is outstanding so the next failure
+              # is diagnosable from the log alone.
+              echo "user record as Keycloak sees it:"
+              curl -s --cacert "${CACERT}" "${KC_BASE}/admin/realms/${REALM}/users/${USER_ID}" \
+                -H "Authorization: Bearer ${ADMIN_TOKEN}" \
+                | jq '{enabled, emailVerified, requiredActions, firstName, lastName}'
+              exit 1
+            }
 
           echo "::add-mask::${ACCESS_TOKEN}"
           echo "access_token=${ACCESS_TOKEN}" >> "$GITHUB_OUTPUT"
