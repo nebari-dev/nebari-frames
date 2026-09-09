@@ -17,6 +17,7 @@ import {
   type TemplateRules,
 } from "@/lib/templates";
 import { mapPublishError } from "@/lib/publish-errors";
+import { freshData } from "@/lib/query-freshness";
 import { type AuthoringForm, formToDoc, docToForm } from "@/components/form/form-model";
 import { ExtendsEditor } from "@/components/form/ExtendsEditor";
 import { ExcludesEditor } from "@/components/form/ExcludesEditor";
@@ -132,11 +133,8 @@ export function FrameAuthoringPage({ mode }: { mode: "create" | "edit" }) {
   const chosen = useQuery(
     FrameService.method.getFrameTemplate,
     { id: templateID },
-    // `refetchOnMount: "always"` pairs with the isFetchedAfterMount guard on
-    // the seed below - the same pair the template edit dialog uses. Neither
-    // half works alone: without the option, the guard only happens to pass
-    // because no global staleTime is set (web/src/lib/query.ts), and the day
-    // one is added the seed would silently stop running.
+    // Paired with freshData() on the seed below; see that helper for why
+    // neither half works alone.
     { enabled: publishesTemplate, refetchOnMount: "always" },
   );
   const rules: TemplateRules = (chosen.data?.template?.fieldRules ?? {}) as TemplateRules;
@@ -167,32 +165,20 @@ export function FrameAuthoringPage({ mode }: { mode: "create" | "edit" }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mode, editQ.data?.version?.digest]);
 
+  // Keyed per template rather than per mount, because `?template=` is URL
+  // state and this page does not remount when it changes.
+  const [seededFor, setSeededFor] = useState<string | null>(null);
+  // The template whose stored prefill would not decode. Keyed by id for the
+  // same reason, so picking another template does not inherit its failure.
+  const [unreadableFor, setUnreadableFor] = useState<string | null>(null);
+
   // Seeds the form once the chosen template arrives. This mirrors the edit
   // path exactly: getFrameTemplate -> parseFrameContent -> docToForm are the
   // same three steps that open an existing Frame, so there is no second
   // parsing path to keep in step.
-  // Which template seeded this form, not merely whether one did. Returning to
-  // the picker without a remount is possible (the load-failure screen below
-  // clears the id), and a boolean latch would then hold the first template's
-  // content while every publish carried the second one's id - checking its
-  // required slots against content the author never saw it ask for.
-  const [seededFor, setSeededFor] = useState<string | null>(null);
   useEffect(() => {
     if (mode !== "create" || templateID === "" || seededFor === templateID) return;
-    // Only a prefill this mount fetched may seed the form. React Query returns
-    // a cached row for the key synchronously and refetches behind it, so an
-    // edit made in the admin page since it was cached would be invisible here.
-    if (!chosen.isFetchedAfterMount) return;
-    // A fetch that FAILED satisfies the guard above: query-core counts data
-    // updates and error updates alike (isFetchedAfterMount is
-    // `dataUpdateCount > initial || errorUpdateCount > initial`), and its error
-    // reducer keeps whatever data was already cached, flagging it invalidated
-    // rather than clearing it. So without this, a forced refetch that fails
-    // over an already-cached row would seed from that row - the stale content
-    // this whole mechanism exists to refuse - and then latch, hiding the error
-    // for the rest of the session.
-    if (chosen.error) return;
-    const tmpl = chosen.data?.template;
+    const tmpl = freshData(chosen)?.template;
     if (!tmpl) return;
     try {
       // The prefill is the canonical YAML subset the backend produced, so it
@@ -214,12 +200,16 @@ export function FrameAuthoringPage({ mode }: { mode: "create" | "edit" }) {
       // apart from deriving state from other state, hence the disable.
       // eslint-disable-next-line react-hooks/set-state-in-effect
       setAdded(new Set([...fromRules, ...fromPrefill]));
+      // Latched inside the try: a prefill that did not decode seeded nothing,
+      // and calling it seeded would leave the author on a defaults-only form
+      // with the id still in the URL and still sent by every publish.
+      setSeededFor(templateID);
     } catch {
-      setTimeout(() => setFormError("This template's starting content could not be loaded."), 0);
+      // Scheduled outside the effect body to satisfy react-hooks/set-state-in-effect
+      setTimeout(() => setUnreadableFor(templateID), 0);
     }
-    setSeededFor(templateID);
-    // seed once per template choice; re-running on every `rules` identity
-    // change would fight the author's own edits after the initial seed
+    // `rules` is deliberately absent: it is derived from chosen.data, which is
+    // here, and listing it would re-run this effect on every identity change.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [chosen.data, chosen.error, chosen.isFetchedAfterMount, mode, templateID, seededFor]);
 
@@ -435,7 +425,8 @@ export function FrameAuthoringPage({ mode }: { mode: "create" | "edit" }) {
   // A template that cannot be read is a dead end, not a blank form: the id
   // stays in the URL and every publish carries it, so the server refuses each
   // one for a template the author cannot see. Say so, and offer the two ways
-  // out - retry, or go back and pick another.
+  // out - retry, or go back and pick another. Both failures land here: the
+  // fetch failing, and its stored content not decoding.
   //
   // Only while there is nothing to show. Once the prefill has seeded a form the
   // author is typing into, this template is demonstrably readable and the id is
@@ -443,14 +434,15 @@ export function FrameAuthoringPage({ mode }: { mode: "create" | "edit" }) {
   // refresh, a delete in another session), and replacing the form over one
   // would throw away unsaved work to report a problem that no longer blocks
   // anything.
-  if (chosen.error && seededFor !== templateID) {
+  if ((chosen.error || unreadableFor === templateID) && seededFor !== templateID) {
     return (
       <div className="mx-auto max-w-3xl space-y-4 py-6">
         <Alert variant="destructive">
           <AlertTitle>This template could not be loaded</AlertTitle>
           <AlertDescription>
-            It may have been deleted, it may belong to another organization, or the registry
-            could not be reached.
+            {chosen.error
+              ? "It may have been deleted, it may belong to another organization, or the registry could not be reached."
+              : "Its starting content could not be read."}
           </AlertDescription>
         </Alert>
         <div className="flex gap-2">

@@ -365,3 +365,29 @@ it("does not seed from a cached prefill when the fetch that ran on mount failed"
   // Nothing was seeded, so this is still the dead end it looks like.
   expect(screen.getByText(/could not be loaded/i)).toBeInTheDocument();
 });
+
+it("treats a template whose stored content will not decode as a dead end", async () => {
+  // The fetch succeeds, so nothing is wrong with the id as far as the query is
+  // concerned - but nothing was seeded either. Calling that "seeded" would
+  // leave the author on a defaults-only form with the id still in the URL and
+  // still sent by every publish, whose required-slot check they never saw.
+  useQueryMock.mockImplementation((method: unknown) => {
+    if (method === FrameService.method.getFrameTemplate) {
+      return {
+        isLoading: false,
+        error: null,
+        isFetchedAfterMount: true,
+        data: { template: { ...orgTemplateWithPrefill, prefill: new TextEncoder().encode("slots: [not a mapping\n") } },
+        refetch: vi.fn(),
+      };
+    }
+    return templateList;
+  });
+  renderAt("/frames/new?template=01JORGTEMPLATE0000000000AB");
+
+  expect(await screen.findByText(/could not be loaded/i)).toBeInTheDocument();
+  expect(screen.getByText(/starting content could not be read/i)).toBeInTheDocument();
+  // The two ways out, same as a failed fetch.
+  expect(screen.getByRole("button", { name: /choose a different template/i })).toBeInTheDocument();
+  expect(screen.queryByLabelText(/frame name/i)).not.toBeInTheDocument();
+});

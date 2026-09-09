@@ -101,7 +101,9 @@ store.Repository**.
     in `ParsePrefill`: that decoder is also the read path (`rowToTemplate` runs every stored row
     through it), so a rule enforced there would make an already-stored row unreadable rather than
     merely unpublishable. Starters arrive through two doors - the write RPCs and `loadBuiltins` at
-    package init - and a content rule has to guard both.
+    package init. Built-ins carry rules and notes but no content: `builtinFile` has no `prefill`
+    key, and `TestBuiltinFileCarriesNoPrefill` fails if one is added without running the content
+    check in `loadBuiltins`, so that door cannot open unguarded.
   - `framemd.go` - the Frame Spec v0.2 `.frame.md` codec (YAML frontmatter plus one `##` section per
     slot). Round-trip fidelity matters: `examples/*.yaml` and `examples/*.frame.md` are checked-in
     conformance fixtures asserted by `examples_test.go`.
@@ -145,12 +147,14 @@ store.Repository**.
   - Seeding a form from server data comes in two shapes. A form that may re-seed keys its `reset`
     on an identity that changes when the data does (the authoring page's edit path keys on
     `version.digest`). A form that seeds once and then belongs to the author - a template prefill,
-    the template edit dialog - must pin `refetchOnMount: "always"`, gate the seed on
-    `isFetchedAfterMount`, refuse to seed while `error` is set, and latch on what it seeded from
-    rather than on a boolean. All four go together: React Query hands back a cached row
-    synchronously and refetches behind it, counts a *failed* fetch in `isFetchedAfterMount`, and
-    never clears cached data on error - so any one of them missing is a form that quietly seeds
-    from a stale row and then saves it back.
+    the template edit dialog - must pin `refetchOnMount: "always"` on the query and take its data
+    from `freshData()` (`web/src/lib/query-freshness.ts`), which is where the reasoning lives:
+    React Query returns a cached row synchronously and refetches behind it, counts a *failed*
+    fetch in `isFetchedAfterMount`, and never clears cached data on error. Where the latch lives
+    depends on where the form's identity comes from: the template edit dialog is keyed and mounted
+    per target, so a boolean is its identity, while the authoring page's template comes from
+    `?template=` and can change while the page stays mounted, so it latches on the id it seeded
+    from.
   - Two schemas cover the same slot keys on purpose. `frame-yaml.ts` decodes whatever is stored
     (lenient, because rows predate rules); `contentSlotsSchema` in `authoring-schema.ts` is what a
     human may submit, and every form that edits slot content resolves against it. The backend

@@ -1,6 +1,10 @@
 package frames
 
-import "testing"
+import (
+	"reflect"
+	"strings"
+	"testing"
+)
 
 func TestBuiltinTemplatesLoad(t *testing.T) {
 	got := BuiltinTemplates()
@@ -101,6 +105,29 @@ func TestBuiltinTemplatesAreCopiedPerCall(t *testing.T) {
 	for key, rule := range again.FieldRules {
 		if rule.Note == "clobbered" {
 			t.Fatalf("mutating a returned template changed the package copy at %q", key)
+		}
+	}
+}
+
+// Built-ins are the other door a starter can arrive through, and they skip the
+// write RPCs entirely - so the content rules a prefill is held to
+// (validateTemplateInput) would not apply to one shipped in a builtin file.
+// That is safe only because builtinFile has no prefill key: built-ins carry
+// rules and notes, never content. This asserts that premise structurally
+// rather than trusting a comment, in the same idiom internal/mcp uses to pin
+// its input structs to the slot table.
+//
+// If this fails, you added a prefill to built-in templates. Run contentErrors
+// over it in loadBuiltins before appending, so a malformed starter fails at
+// startup rather than at an author's first click
+// (docs/adr/0001-frame-templates-are-not-frames.md).
+func TestBuiltinFileCarriesNoPrefill(t *testing.T) {
+	ft := reflect.TypeOf(builtinFile{})
+	for i := range ft.NumField() {
+		field := ft.Field(i)
+		tag, name := field.Tag.Get("yaml"), strings.ToLower(field.Name)
+		if strings.Contains(tag, "prefill") || strings.Contains(name, "prefill") {
+			t.Fatalf("builtinFile now has a prefill field (%s); loadBuiltins must validate it", field.Name)
 		}
 	}
 }

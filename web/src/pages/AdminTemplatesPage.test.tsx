@@ -332,3 +332,28 @@ it("refuses to save a template whose terminology row is incomplete", async () =>
   expect(await screen.findByText(/must not be empty/i)).toBeInTheDocument();
   expect(createMock).not.toHaveBeenCalled();
 });
+
+it("shows why a duplicate term blocks saving instead of doing nothing", async () => {
+  // An array-level rule (the duplicate-term refine) is nested by
+  // @hookform/resolvers under `slots.terminology.root` rather than
+  // `slots.terminology`, because the path has registered children. A reader
+  // that only looks at `.message` finds nothing, so the form refuses to submit
+  // and says nothing about why - a Save button that does nothing at all.
+  createMock.mockClear();
+  renderPage();
+  await userEvent.click(screen.getByRole("button", { name: /new template/i }));
+  await userEvent.type(screen.getByLabelText(/^title$/i), "Vocabulary");
+  await userEvent.type(screen.getByLabelText(/^description$/i), "Our terms");
+
+  await userEvent.click(screen.getByRole("button", { name: /add term/i }));
+  await userEvent.type(screen.getAllByPlaceholderText("Term")[0], "Frame");
+  await userEvent.type(screen.getAllByPlaceholderText("Definition")[0], "One.");
+  await userEvent.click(screen.getByRole("button", { name: /add term/i }));
+  await userEvent.type(screen.getAllByPlaceholderText("Term")[1], "Frame");
+  await userEvent.type(screen.getAllByPlaceholderText("Definition")[1], "Two.");
+
+  await userEvent.click(screen.getByRole("button", { name: /^create$/i }));
+
+  expect(await screen.findByText(/duplicate term/i)).toBeInTheDocument();
+  expect(createMock).not.toHaveBeenCalled();
+});

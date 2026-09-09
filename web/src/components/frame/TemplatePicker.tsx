@@ -1,6 +1,6 @@
 import type { FrameTemplateSummary } from "@gen/frames/v1/frame_pb";
 import { Button } from "@/components/ui/button";
-import { Alert, AlertTitle, AlertDescription, AlertAction } from "@/components/ui/alert";
+import { Alert, AlertTitle, AlertAction } from "@/components/ui/alert";
 
 // Org templates and built-ins are shown in separate groups rather than merged
 // or shadowed. An org template sharing a built-in's title sits beside it: a
@@ -50,9 +50,8 @@ export function TemplatePicker({
   // ("there are no templates") to a question that was never answered.
   //
   // A flag rather than the server's message: read failures across this app
-  // state a fixed sentence (AdminFramesPage, AdminMembersPage, and this page's
-  // own list error), because the text on a failed read is storage or wiring
-  // detail and retrying is the only thing the reader can act on.
+  // state a fixed sentence, because the text on a failed read is storage or
+  // wiring detail and retrying is the only thing the reader can act on.
   failed?: boolean;
   onRetry?: () => void;
 }) {
@@ -67,8 +66,11 @@ export function TemplatePicker({
       </div>
       {failed ? (
         <Alert variant="destructive">
+          {/* No cause is stated: the client cannot tell an unreachable
+              registry from one that answered with an error, and the case that
+              prompted this - a database missing the templates table - is the
+              second. */}
           <AlertTitle>Templates could not be loaded</AlertTitle>
-          <AlertDescription>The registry could not be reached.</AlertDescription>
           {onRetry && (
             <AlertAction>
               <Button type="button" variant="outline" size="sm" onClick={onRetry}>

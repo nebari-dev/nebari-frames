@@ -12,6 +12,7 @@ import { Plus, Pencil, Trash2 } from "lucide-react";
 import { SLOT_SECTIONS, type SlotSectionDef } from "@/lib/slot-sections";
 import { parseFrameContent, serializeFramePrefill, type FrameDoc } from "@/lib/frame-yaml";
 import { contentSlotsSchema } from "@/lib/authoring-schema";
+import { freshData } from "@/lib/query-freshness";
 import { TerminologyEditor } from "@/components/form/TerminologyEditor";
 import { ListEditor } from "@/components/form/ListEditor";
 import { MarkdownField } from "@/components/form/MarkdownField";
@@ -126,10 +127,11 @@ function TemplateFormDialog({
   const rowQ = useQuery(
     FrameService.method.getFrameTemplate,
     { id: editingId },
-    // Always refetch when the dialog opens, and seed only from that fetch (see
-    // the effect below). Saving does not evict this row: invalidated data stays
-    // in the cache and only active queries refetch, so without this the second
-    // open of the same template would edit the copy from the first.
+    // Paired with freshData() on the seed below; see that helper for why
+    // neither half works alone. Saving does not evict this row - invalidated
+    // data stays in the cache and only active queries refetch - so without
+    // this pair the second open of a template would edit the copy from the
+    // first, and the next Save would write it back.
     { enabled: target.mode === "edit", refetchOnMount: "always" },
   );
   const createM = useMutation(FrameService.method.createFrameTemplate);
@@ -151,39 +153,16 @@ function TemplateFormDialog({
   });
 
   useEffect(() => {
-    // Guarded on `ready`, not just `target.mode`: a query's `data` is not
-    // guaranteed to be the same object across renders (a mock's factory can
-    // rebuild it every call, and even the real client may on a background
-    // refetch), so keying the effect on its identity alone would re-seed the
-    // form - discarding whatever the admin had already typed - every time
-    // that reference changes. Once ready, this effect is a no-op for the rest
-    // of the dialog's lifetime.
+    // `ready` is the latch, and a boolean is the right shape here: this dialog
+    // is mounted per target and keyed on it, so its identity cannot change
+    // while it lives. (The authoring page's template comes from the URL and
+    // can, which is why that one latches on the id it seeded from.) Latching
+    // at all matters because a query's `data` is not a stable object across
+    // renders, so re-seeding on its identity would discard whatever the admin
+    // had already typed.
     if (target.mode !== "edit" || ready) return;
-    // Only a row this mount fetched may seed the form. React Query returns
-    // whatever is already cached for the key synchronously - a copy left by an
-    // earlier open of this dialog, or by the create flow's own template fetch -
-    // and refetches behind it. Seeding from that copy and then latching `ready`
-    // is what silently reverts a previous edit on the next Save.
-    if (!rowQ.isFetchedAfterMount) return;
-    // A fetch that FAILED satisfies the guard above: query-core counts data
-    // updates and error updates alike (isFetchedAfterMount is
-    // `dataUpdateCount > initial || errorUpdateCount > initial`), and its error
-    // reducer keeps whatever data was already cached, flagging it invalidated
-    // rather than clearing it. So without this, a forced refetch that fails
-    // over an already-cached row would seed from that row - the stale content
-    // this whole mechanism exists to refuse - and then latch, hiding the error
-    // for the rest of the session.
-    if (rowQ.error) return;
-    const tmpl = rowQ.data?.template;
-    if (!tmpl) {
-      // A fetch that succeeded while carrying no row - the error case returned
-      // above, so this claim is only ever made about a successful fetch. Not
-      // something the RPC should produce, but if it does, `ready` would never
-      // flip and the dialog would sit on its skeleton with nothing to explain
-      // it. Scheduled outside the effect body, like the decode failure below.
-      setTimeout(() => setLoadError("The registry returned no content for it."), 0);
-      return;
-    }
+    const tmpl = freshData(rowQ)?.template;
+    if (!tmpl) return;
     try {
       const doc = parseFrameContent(tmpl.prefill);
       // This effect reacts to the row query resolving (an external system's
@@ -205,6 +184,7 @@ function TemplateFormDialog({
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [target.mode, ready, rowQ.data, rowQ.error, rowQ.isFetchedAfterMount]);
+
 
   const busy = createM.isPending || updateM.isPending;
 
@@ -451,6 +431,9 @@ export function AdminTemplatesPage() {
 
       {formTarget && (
         <TemplateFormDialog
+          // Keyed per target so a different template is a different mount,
+          // which is what lets the dialog latch its seed on a boolean.
+          key={formTarget.mode === "edit" ? formTarget.id : "create"}
           target={formTarget}
           onOpenChange={(open) => !open && setFormTarget(null)}
           onSaved={invalidate}
