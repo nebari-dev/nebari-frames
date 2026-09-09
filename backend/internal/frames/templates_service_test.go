@@ -477,3 +477,77 @@ func TestOrgTemplateIsVisibleToAnotherMember(t *testing.T) {
 		t.Error("a second member of the org cannot see the template")
 	}
 }
+
+// A prefill is spliced verbatim into `frames template init`'s scaffold and into
+// the authoring form, so content no publish would accept has to be refused
+// where the template is saved. Otherwise the failure lands on a different
+// author, at their first publish, naming a row they never wrote.
+func TestTemplateWritesRefusePrefillContentThatCannotBePublished(t *testing.T) {
+	tests := []struct {
+		name    string
+		prefill string
+		wantMsg string
+	}{
+		{
+			name:    "a blank list row",
+			prefill: "slots:\n  rules:\n    - \"\"\n",
+			wantMsg: "slots.rules[0]: must not be empty",
+		},
+		{
+			name:    "a terminology entry missing its definition",
+			prefill: "slots:\n  terminology:\n    - term: Frame\n      definition: \"\"\n",
+			wantMsg: "slots.terminology[0].definition: must not be empty",
+		},
+		{
+			name:    "an unpinned parent",
+			prefill: "extends:\n  - ref: acme/base\n    version: \"\"\nslots: {}\n",
+			wantMsg: "extends[0].version: must be pinned to a version",
+		},
+		{
+			name:    "content that publishes cleanly is accepted",
+			prefill: "slots:\n  rules:\n    - Never claim numbers without data\n",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Create and update share validateTemplateInput, and both are
+			// checked: an update replaces the stored row wholesale, so a rule
+			// enforced only on create would be a rule an update can walk past.
+			f, ctx := newTemplateFixture(t, "admin")
+			seedOrgTemplate(t, f.repo, "t1", "org-a", "Our House Style", nil)
+
+			for _, call := range []struct {
+				name string
+				run  func() error
+			}{
+				{"create", func() error {
+					_, err := f.svc.CreateFrameTemplate(ctx, connect.NewRequest(&framesv1.CreateFrameTemplateRequest{
+						Title: "New One", Description: "D", Prefill: []byte(tt.prefill),
+					}))
+					return err
+				}},
+				{"update", func() error {
+					_, err := f.svc.UpdateFrameTemplate(ctx, connect.NewRequest(&framesv1.UpdateFrameTemplateRequest{
+						Id: "t1", Title: "Renamed", Description: "D", Prefill: []byte(tt.prefill),
+					}))
+					return err
+				}},
+			} {
+				err := call.run()
+				if tt.wantMsg == "" {
+					if err != nil {
+						t.Errorf("%s: unexpected error: %v", call.name, err)
+					}
+					continue
+				}
+				if connect.CodeOf(err) != connect.CodeInvalidArgument {
+					t.Fatalf("%s: code = %v (err %v), want InvalidArgument", call.name, connect.CodeOf(err), err)
+				}
+				if !strings.Contains(err.Error(), tt.wantMsg) {
+					t.Errorf("%s: err = %v, want it to name %q", call.name, err, tt.wantMsg)
+				}
+			}
+		})
+	}
+}

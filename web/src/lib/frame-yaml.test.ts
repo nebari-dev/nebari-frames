@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parseFrameContent, serializeFrameDoc, type FrameDoc } from "./frame-yaml";
+import { parseFrameContent, serializeFrameDoc, serializeFramePrefill, type FrameDoc } from "./frame-yaml";
 
 const yamlDoc = `
 name: brand-voice
@@ -81,5 +81,40 @@ slots:
     expect(out).not.toMatch(/excludes/);
     // re-parse must succeed (no stray keys for KnownFields(true))
     expect(parseFrameContent(out).name).toBe("minimal");
+  });
+
+  it("drops blank list rows rather than serializing them", () => {
+    // A list editor leaves an empty row behind the moment an author adds one
+    // and thinks better of it. The backend refuses those rows
+    // (slots.rules[0]: must not be empty), so serializing them turns a stray
+    // keystroke into a publish failure pointing at a row nobody wrote - and in
+    // a template prefill it fails later, in the author's scaffold.
+    const doc: FrameDoc = {
+      name: "minimal",
+      description: "d",
+      version: "1.0.0",
+      visibility: "",
+      scope: "",
+      maintainer: "",
+      slots: {
+        rules: ["A real rule", "", "   "],
+        skills: [""],
+        prompts: ["Ask what changed"],
+      },
+    };
+    const parsed = parseFrameContent(serializeFrameDoc(doc));
+    expect(parsed.slots.rules).toEqual(["A real rule"]);
+    expect(parsed.slots.prompts).toEqual(["Ask what changed"]);
+    // A list left with nothing in it is not a list.
+    expect(parsed.slots.skills).toBeUndefined();
+  });
+
+  it("drops blank list rows from a template prefill too", () => {
+    const out = serializeFramePrefill({
+      slots: { rules: ["", "Keep it short"], skills: [] },
+    });
+    const parsed = parseFrameContent(out);
+    expect(parsed.slots.rules).toEqual(["Keep it short"]);
+    expect(parsed.slots.skills).toBeUndefined();
   });
 });

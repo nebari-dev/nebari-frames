@@ -54,14 +54,25 @@ export function parseFrameContent(content: Uint8Array | string): FrameDoc {
   return frameDocSchema.parse(raw);
 }
 
+// Rows an author added and left empty. The backend refuses them
+// (slots.rules[0]: must not be empty), so keeping them turns an abandoned
+// keystroke into a publish failure that names a row nobody wrote - and in a
+// template prefill, one that surfaces later in somebody else's scaffold.
+// Blank rows in the middle are dropped too: index gaps are not meaningful in
+// any of these slots.
+function withoutBlanks(items: string[] | undefined): string[] {
+  return (items ?? []).filter((s) => s.trim() !== "");
+}
+
 // Builds a plain object with keys in schema.go order, omitting empty values,
 // so the YAML round-trips through the backend Parse (KnownFields(true)).
 function compactSlots(s: FrameDoc["slots"]): Record<string, unknown> {
   const out: Record<string, unknown> = {};
   if (s.terminology && s.terminology.length > 0) out.terminology = s.terminology;
-  if (s.rules && s.rules.length > 0) out.rules = s.rules;
-  if (s.skills && s.skills.length > 0) out.skills = s.skills;
-  if (s.prompts && s.prompts.length > 0) out.prompts = s.prompts;
+  for (const key of ["rules", "skills", "prompts"] as const) {
+    const items = withoutBlanks(s[key]);
+    if (items.length > 0) out[key] = items;
+  }
   for (const key of ["tool_specs", "goals", "style", "norms", "architecture", "business_process"] as const) {
     const v = s[key];
     if (typeof v === "string" && v.trim() !== "") out[key] = v;

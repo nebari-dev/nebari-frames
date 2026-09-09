@@ -223,8 +223,20 @@ func validateTemplateInput(title, description string, prefill []byte, rules map[
 			return templateInput{}, connect.NewError(connect.CodeInternal, err)
 		}
 		prefill = empty
-	} else if _, err := ParsePrefill(prefill); err != nil {
-		return templateInput{}, connect.NewError(connect.CodeInvalidArgument, err)
+	} else {
+		decodedPrefill, err := ParsePrefill(prefill)
+		if err != nil {
+			return templateInput{}, connect.NewError(connect.CodeInvalidArgument, err)
+		}
+		// A starter that cannot be published is not a starter: these bytes are
+		// spliced verbatim into `frames template init`'s scaffold and into the
+		// authoring form, so a blank list row saved here becomes a publish
+		// failure - "slots.rules[0]: must not be empty" - in a file some other
+		// author was handed as ready to fill in. Held to the same content rules
+		// a Frame is, at the boundary where the bytes arrive.
+		if errs := contentErrors(&decodedPrefill.Slots, decodedPrefill.Extends); len(errs) > 0 {
+			return templateInput{}, connect.NewError(connect.CodeInvalidArgument, &ValidationError{Errors: errs})
+		}
 	}
 	decoded, err := fieldRulesFromProto(rules)
 	if err != nil {

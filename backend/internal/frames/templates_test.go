@@ -175,6 +175,16 @@ func TestParsePrefill(t *testing.T) {
 		{name: "maintainer is rejected", yaml: "maintainer: a@b.c\nslots: {}\n", wantErr: "must not set maintainer"},
 		{name: "excludes is rejected", yaml: "excludes:\n  - acme/other\nslots: {}\n", wantErr: "must not set excludes"},
 		{name: "an unknown key is rejected", yaml: "colour: red\nslots: {}\n", wantErr: "parse frame yaml"},
+		// Content is not judged here, on purpose. This decoder is the read path
+		// too (rowToTemplate runs every stored row through it), so refusing a
+		// blank row would make a template already saved with one unreadable
+		// instead of merely unpublishable. The write boundary refuses it -
+		// TestTemplateWritesRefusePrefillContentThatCannotBePublished.
+		{
+			name:     "a blank list row still decodes, so a stored row stays readable",
+			yaml:     "slots:\n  rules:\n    - \"\"\n  terminology:\n    - term: Frame\n      definition: \"\"\n",
+			wantTerm: "Frame",
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

@@ -229,6 +229,12 @@ func ParsePrefill(content []byte) (Prefill, error) {
 		return Prefill{}, fmt.Errorf(
 			"prefill must not set excludes: an exclusion belongs to a Frame, not to the template it started from")
 	}
+	// Content is deliberately NOT checked here. This is the read path as much
+	// as the write one (rowToTemplate decodes every stored row through it), so
+	// refusing a blank list row here would make a template already saved with
+	// one unreadable - GetFrameTemplate and the post-save read would both fail
+	// - rather than merely unpublishable. The check belongs at the write
+	// boundary, and lives in validateTemplateInput.
 	return Prefill{Slots: doc.Slots, Extends: doc.Extends}, nil
 }
 
