@@ -1025,3 +1025,83 @@ func TestService_NonAdvancingVersionIsAFieldViolation(t *testing.T) {
 		t.Errorf("no field violation on 'version'; details = %v", ce.Details())
 	}
 }
+
+// violationFields collects the field paths from every FieldViolations detail on
+// err. Returned as a set because callers only ever ask whether a field was
+// named, and the order details arrive in is not part of the contract.
+func violationFields(t *testing.T, err error) map[string]bool {
+	t.Helper()
+	var ce *connect.Error
+	if !errors.As(err, &ce) {
+		t.Fatalf("want *connect.Error, got %T (%v)", err, err)
+	}
+	got := map[string]bool{}
+	for _, d := range ce.Details() {
+		msg, derr := d.Value()
+		if derr != nil {
+			continue
+		}
+		if fv, ok := msg.(*framesv1.FieldViolations); ok {
+			for _, v := range fv.Violations {
+				got[v.Field] = true
+			}
+		}
+	}
+	return got
+}
+
+// A taken frame name and a republished version both come back as AlreadyExists,
+// and a client cannot tell them apart from the code alone. Only the first is a
+// problem with an input the author can see, so it names that input: without the
+// detail the web app has nothing but message text to route by, and it put every
+// AlreadyExists under the version field - where changing the version retried
+// straight back into the same error.
+func TestService_PublishDocAlreadyExistsNamesTheOffendingField(t *testing.T) {
+	tests := []struct {
+		name       string
+		version    string
+		intent     frames.PublishIntent
+		wantFields []string
+	}{
+		{
+			name:       "a name that is already taken is reported on name",
+			version:    "2.0.0",
+			intent:     frames.PublishCreate,
+			wantFields: []string{"name"},
+		},
+		{
+			// The version input is where this one is fixed, and the web app
+			// already defaults there, so no detail is needed - but it must not
+			// arrive claiming the name is at fault.
+			name:       "a republished version names no field",
+			version:    "1.0.0",
+			intent:     frames.PublishUpdate,
+			wantFields: nil,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			repo := store.NewMemory()
+			ctx := seedOrg(t, repo, "caller", "admin")
+			svc := frames.NewService(repo)
+			if _, _, err := svc.PublishDoc(ctx, docFor("brand-voice", "1.0.0", "seeded"), "seed", frames.PublishCreate); err != nil {
+				t.Fatalf("seed publish: %v", err)
+			}
+
+			_, _, err := svc.PublishDoc(ctx, docFor("brand-voice", tt.version, "a rule"), "", tt.intent)
+			if connect.CodeOf(err) != connect.CodeAlreadyExists {
+				t.Fatalf("code = %v (err %v), want AlreadyExists", connect.CodeOf(err), err)
+			}
+			got := violationFields(t, err)
+			if len(got) != len(tt.wantFields) {
+				t.Fatalf("violation fields = %v, want %v", got, tt.wantFields)
+			}
+			for _, want := range tt.wantFields {
+				if !got[want] {
+					t.Errorf("no violation for %q; got %v", want, got)
+				}
+			}
+		})
+	}
+}

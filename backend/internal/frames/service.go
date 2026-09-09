@@ -270,7 +270,7 @@ func (s *Service) publish(ctx context.Context, caller rbac.Caller, doc *Doc, con
 	case isNew && req.Intent == PublishUpdate:
 		return nil, nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("no frame named %q to update", doc.Name))
 	case !isNew && req.Intent == PublishCreate:
-		return nil, nil, connect.NewError(connect.CodeAlreadyExists, fmt.Errorf("a frame named %q already exists; update it instead", doc.Name))
+		return nil, nil, nameTakenErr(doc.Name)
 	}
 
 	now := timestamppb.Now()
@@ -722,6 +722,24 @@ func violationErr(err error) *connect.Error {
 		if detail, derr := connect.NewErrorDetail(fv); derr == nil {
 			cerr.AddDetail(detail)
 		}
+	}
+	return cerr
+}
+
+// nameTakenErr reports a create-intent publish onto a name that already exists.
+//
+// The detail matters as much as the code here: a republished version is also
+// AlreadyExists, so a client that has only the code and the message text cannot
+// tell the two apart, and the one input the author must change differs between
+// them. Naming the field lets a client put the message where the fix is.
+func nameTakenErr(name string) *connect.Error {
+	msg := fmt.Sprintf("a frame named %q already exists; update it instead", name)
+	cerr := connect.NewError(connect.CodeAlreadyExists, errors.New(msg))
+	fv := &framesv1.FieldViolations{
+		Violations: []*framesv1.FieldViolation{{Field: "name", Message: msg}},
+	}
+	if detail, derr := connect.NewErrorDetail(fv); derr == nil {
+		cerr.AddDetail(detail)
 	}
 	return cerr
 }
