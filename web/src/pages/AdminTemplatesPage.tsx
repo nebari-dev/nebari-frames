@@ -152,39 +152,38 @@ function TemplateFormDialog({
     defaultValues: emptyTemplateForm(),
   });
 
+  // Read here rather than inside the effect, so the effect depends on the value
+  // it uses instead of on the three query fields freshData happens to read.
+  const freshRow = freshData(rowQ)?.template;
   useEffect(() => {
-    // `ready` is the latch, and a boolean is the right shape here: this dialog
-    // is mounted per target and keyed on it, so its identity cannot change
-    // while it lives. (The authoring page's template comes from the URL and
-    // can, which is why that one latches on the id it seeded from.) Latching
-    // at all matters because a query's `data` is not a stable object across
-    // renders, so re-seeding on its identity would discard whatever the admin
-    // had already typed.
+    // A boolean latch, because this dialog is keyed and mounted per target, so
+    // its identity cannot change while it lives. Latching at all matters
+    // because a query's `data` is not a stable object across renders, and
+    // re-seeding on its identity would discard what the admin had typed.
     if (target.mode !== "edit" || ready) return;
-    const tmpl = freshData(rowQ)?.template;
-    if (!tmpl) return;
+    if (!freshRow) return;
     try {
-      const doc = parseFrameContent(tmpl.prefill);
+      const doc = parseFrameContent(freshRow.prefill);
       // This effect reacts to the row query resolving (an external system's
       // data arriving), which is the effect rule's own sanctioned use of
       // setState-in-effect; the heuristic cannot tell that apart from deriving
       // state from other state, hence the disable below.
+      // Reacting to an external system's data arriving, which is the effect
+      // rule's own sanctioned use of setState-in-effect.
       // eslint-disable-next-line react-hooks/set-state-in-effect
       setCarriedExtends(doc.extends);
       methods.reset({
-        title: tmpl.title,
-        description: tmpl.description,
+        title: freshRow.title,
+        description: freshRow.description,
         slots: doc.slots,
-        rules: tmpl.fieldRules as TemplateForm["rules"],
+        rules: freshRow.fieldRules as TemplateForm["rules"],
       });
       setReady(true);
     } catch {
-      // Schedule outside the effect body to satisfy react-hooks/set-state-in-effect
-      setTimeout(() => setLoadError("Its saved content could not be read."), 0);
+      setLoadError("Its saved content could not be read.");
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [target.mode, ready, rowQ.data, rowQ.error, rowQ.isFetchedAfterMount]);
-
+  }, [target.mode, ready, freshRow]);
 
   const busy = createM.isPending || updateM.isPending;
 
@@ -228,6 +227,8 @@ function TemplateFormDialog({
           rowQ.error || loadError ? (
             <Alert variant="destructive">
               <AlertTitle>This template could not be loaded</AlertTitle>
+              {/* No "another organization" clause, unlike the authoring page's:
+                  this dialog only ever opens rows from the admin's own org. */}
               <AlertDescription>
                 {loadError ?? "It may have been deleted, or the registry could not be reached."}
               </AlertDescription>
@@ -431,8 +432,10 @@ export function AdminTemplatesPage() {
 
       {formTarget && (
         <TemplateFormDialog
-          // Keyed per target so a different template is a different mount,
-          // which is what lets the dialog latch its seed on a boolean.
+          // Insurance rather than a fix for a live path: closing always sets
+          // formTarget to null, so the dialog already unmounts between
+          // targets. The key is what keeps that true - and the boolean latch
+          // sound - if this ever renders while another target is chosen.
           key={formTarget.mode === "edit" ? formTarget.id : "create"}
           target={formTarget}
           onOpenChange={(open) => !open && setFormTarget(null)}

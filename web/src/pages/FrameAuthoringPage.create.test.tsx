@@ -18,7 +18,26 @@ vi.mock("react-router", async (orig) => ({
 // second onSuccess/onError argument.
 const mutateMock = vi.fn();
 vi.mock("@connectrpc/connect-query", () => ({
-  useQuery: () => ({ data: { org: { slug: "openteams" } }, isLoading: false, error: null }),
+  useQuery: () => ({
+    // Rendering past the picker means a template was chosen AND fetched: the
+    // page withholds the form until the seed lands, because reset() would
+    // otherwise discard anything typed in the meantime. One object serves both
+    // readers - each looks at its own key.
+    data: {
+      org: { slug: "openteams" },
+      template: {
+        id: "builtin:blank",
+        title: "Blank",
+        description: "Empty.",
+        builtin: true,
+        prefill: new TextEncoder().encode("slots: {}\n"),
+        fieldRules: {},
+      },
+    },
+    isLoading: false,
+    error: null,
+    isFetchedAfterMount: true,
+  }),
   useMutation: () => ({ mutateAsync: mutateMock, isPending: false, isSuccess: false }),
   createConnectQueryKey: () => ["k"],
 }));

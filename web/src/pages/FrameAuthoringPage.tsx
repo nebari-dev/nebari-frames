@@ -30,6 +30,7 @@ import { AddSectionMenu } from "@/components/document/AddSectionMenu";
 import { PublishDialog } from "@/components/document/PublishDialog";
 import { TemplatePicker } from "@/components/frame/TemplatePicker";
 import { Button } from "@/components/ui/button";
+import { Skeleton } from "@/components/ui/skeleton";
 import { Alert, AlertTitle, AlertDescription } from "@/components/ui/alert";
 import {
   DropdownMenu,
@@ -165,8 +166,8 @@ export function FrameAuthoringPage({ mode }: { mode: "create" | "edit" }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mode, editQ.data?.version?.digest]);
 
-  // Keyed per template rather than per mount, because `?template=` is URL
-  // state and this page does not remount when it changes.
+  // Keyed per template, because `?template=` is URL state and this page does
+  // not remount when it changes.
   const [seededFor, setSeededFor] = useState<string | null>(null);
   // The template whose stored prefill would not decode. Keyed by id for the
   // same reason, so picking another template does not inherit its failure.
@@ -176,14 +177,18 @@ export function FrameAuthoringPage({ mode }: { mode: "create" | "edit" }) {
   // path exactly: getFrameTemplate -> parseFrameContent -> docToForm are the
   // same three steps that open an existing Frame, so there is no second
   // parsing path to keep in step.
+  // Read here rather than inside the effect, so the effect depends on the value
+  // it uses instead of on the three query fields freshData happens to read.
+  const freshTemplate = freshData(chosen)?.template;
   useEffect(() => {
-    if (mode !== "create" || templateID === "" || seededFor === templateID) return;
-    const tmpl = freshData(chosen)?.template;
-    if (!tmpl) return;
+    // publishesTemplate, not a fourth spelling of the same condition: the
+    // fetch, the seed and every publish read one rule.
+    if (!publishesTemplate || seededFor === templateID) return;
+    if (!freshTemplate) return;
     try {
       // The prefill is the canonical YAML subset the backend produced, so it
       // goes through the same parse the edit flow uses.
-      const doc = parseFrameContent(tmpl.prefill);
+      const doc = parseFrameContent(freshTemplate.prefill);
       methods.reset(docToForm({ ...doc, version: "1.0.0" }, ""));
       // Sections the template asks for are on the page from the start rather
       // than behind "+ Add section": the point of a template is that the
@@ -205,13 +210,13 @@ export function FrameAuthoringPage({ mode }: { mode: "create" | "edit" }) {
       // with the id still in the URL and still sent by every publish.
       setSeededFor(templateID);
     } catch {
-      // Scheduled outside the effect body to satisfy react-hooks/set-state-in-effect
-      setTimeout(() => setUnreadableFor(templateID), 0);
+      setUnreadableFor(templateID);
     }
-    // `rules` is deliberately absent: it is derived from chosen.data, which is
-    // here, and listing it would re-run this effect on every identity change.
+    // `rules` is deliberately absent: it comes from the same row as
+    // freshTemplate, and listing it would re-run this effect on every identity
+    // change.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [chosen.data, chosen.error, chosen.isFetchedAfterMount, mode, templateID, seededFor]);
+  }, [freshTemplate, publishesTemplate, templateID, seededFor]);
 
   const slots = useWatch({ control: methods.control, name: "slots" }) as
     | AuthoringForm["slots"]
@@ -446,9 +451,14 @@ export function FrameAuthoringPage({ mode }: { mode: "create" | "edit" }) {
           </AlertDescription>
         </Alert>
         <div className="flex gap-2">
-          <Button type="button" onClick={() => void chosen.refetch()}>
-            Try again
-          </Button>
+          {/* Only for a failed fetch. A prefill that will not decode fails the
+              same way every time - the stored bytes are the input - so a retry
+              there would just redraw this screen. */}
+          {chosen.error && (
+            <Button type="button" onClick={() => void chosen.refetch()}>
+              Try again
+            </Button>
+          )}
           <Button
             type="button"
             variant="outline"
@@ -457,6 +467,20 @@ export function FrameAuthoringPage({ mode }: { mode: "create" | "edit" }) {
             Choose a different template
           </Button>
         </div>
+      </div>
+    );
+  }
+
+  // A form that is about to be seeded must not be editable first. `reset`
+  // replaces form state wholesale, and `refetchOnMount: "always"` guarantees
+  // the seed arrives a round trip after this render - so anything the author
+  // typed in between would vanish. The template edit dialog withholds its form
+  // for the same reason.
+  if (publishesTemplate && seededFor !== templateID) {
+    return (
+      <div className="mx-auto max-w-3xl space-y-4 py-6">
+        <Skeleton className="h-8 w-64" />
+        <Skeleton className="h-64 w-full" />
       </div>
     );
   }

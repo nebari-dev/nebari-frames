@@ -27,6 +27,17 @@ const templateList = {
   error: null,
   isFetchedAfterMount: true,
   data: {
+    // A chosen template is also a fetched one - the page withholds the form
+    // until the seed lands - so this default carries the row alongside the
+    // list. Each reader looks at its own key.
+    template: {
+      id: "builtin:blank",
+      title: "Blank",
+      description: "Empty.",
+      builtin: true,
+      prefill: new TextEncoder().encode("slots: {}\n"),
+      fieldRules: {},
+    },
     canManage: false,
     templates: [
       { id: "builtin:blank", title: "Blank", description: "Empty.", builtin: true },
@@ -321,6 +332,11 @@ it("seeds the create form only from a prefill fetched after this mount", async (
 
   const { rerender } = renderAt("/frames/new?template=01JORGTEMPLATE0000000000AB");
   expect(screen.queryByDisplayValue("Stale")).not.toBeInTheDocument();
+  // And no editable form yet either: `reset` replaces form state wholesale, so
+  // anything typed in this window - which refetchOnMount: "always" guarantees
+  // is at least one round trip - would be silently discarded when the seed
+  // lands.
+  expect(screen.queryByLabelText(/frame name/i)).not.toBeInTheDocument();
 
   fetched = true;
   rerender(

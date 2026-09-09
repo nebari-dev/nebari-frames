@@ -101,9 +101,10 @@ store.Repository**.
     in `ParsePrefill`: that decoder is also the read path (`rowToTemplate` runs every stored row
     through it), so a rule enforced there would make an already-stored row unreadable rather than
     merely unpublishable. Starters arrive through two doors - the write RPCs and `loadBuiltins` at
-    package init. Built-ins carry rules and notes but no content: `builtinFile` has no `prefill`
-    key, and `TestBuiltinFileCarriesNoPrefill` fails if one is added without running the content
-    check in `loadBuiltins`, so that door cannot open unguarded.
+    package init. Built-ins carry rules and notes but no content at all: `builtinFile` has no
+    `prefill` key, so there is nothing for a content rule to check there.
+    `TestBuiltinFileCarriesNoPrefill` is a tripwire over that premise - add such a field and it
+    fails, telling you to run `contentErrors` in `loadBuiltins` and to replace the tripwire.
   - `framemd.go` - the Frame Spec v0.2 `.frame.md` codec (YAML frontmatter plus one `##` section per
     slot). Round-trip fidelity matters: `examples/*.yaml` and `examples/*.frame.md` are checked-in
     conformance fixtures asserted by `examples_test.go`.
@@ -155,6 +156,14 @@ store.Repository**.
     per target, so a boolean is its identity, while the authoring page's template comes from
     `?template=` and can change while the page stays mounted, so it latches on the id it seeded
     from.
+  - A form seeded from a query does not render editable before the seed lands. Both template
+    surfaces withhold it (a skeleton, or the dialog's), because `reset` replaces form state
+    wholesale and `refetchOnMount: "always"` guarantees the seed arrives a round trip after the
+    first render - so anything typed in between would vanish.
+  - `react-hooks/set-state-in-effect` reports at most one violation per effect, so a second
+    `setState` in the same effect can look clean while being the same construct. Do not read the
+    linter's silence as a constraint, and do not add a `setTimeout` claiming to satisfy a rule
+    that never fired - an unused `eslint-disable` is itself reported.
   - Two schemas cover the same slot keys on purpose. `frame-yaml.ts` decodes whatever is stored
     (lenient, because rows predate rules); `contentSlotsSchema` in `authoring-schema.ts` is what a
     human may submit, and every form that edits slot content resolves against it. The backend
