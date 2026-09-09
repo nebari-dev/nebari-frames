@@ -28,8 +28,16 @@ func addPublishCmd(root *cobra.Command) {
 			}
 			frame, version, err := getClientCtx(cmd.Context()).Publish(cmd.Context(), content, changelog, templateID)
 			if err != nil {
-				if connect.CodeOf(err) == connect.CodeInvalidArgument {
+				switch code := connect.CodeOf(err); {
+				case code == connect.CodeInvalidArgument:
 					return fmt.Errorf("frame.yaml is invalid: %w", err)
+				case code == connect.CodeAlreadyExists && templateID != "":
+					// --template asserts a new Frame, which is exactly what a
+					// second publish is not. The scaffold's header names the
+					// flag, so an author following it lands here with nothing
+					// in the server's message pointing at the flag.
+					return fmt.Errorf(
+						"%w (--template applies to a Frame's first version only; publish later versions without it)", err)
 				}
 				return authAware(err)
 			}

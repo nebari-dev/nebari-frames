@@ -227,3 +227,45 @@ func TestTemplateInitRequiresATemplate(t *testing.T) {
 		t.Fatalf("err = %v, want it to require --template", err)
 	}
 }
+
+// The header is instructions an author follows, and it persists into the
+// published content, so a command it names that only works once is a mistake
+// that outlives the scaffold: --template asserts a new Frame, and the server
+// refuses it as AlreadyExists on every publish after the first.
+func TestTemplateInitScaffoldScopesTheTemplateFlagToTheFirstPublish(t *testing.T) {
+	tmpl := &framesv1.FrameTemplate{
+		Id: "builtin:domain-vocabulary", Title: "Domain Vocabulary",
+		Description: "Terms.", Builtin: true,
+		Prefill: []byte("slots: {}\n"),
+	}
+	url := testutil.NewStubServer(t, &testutil.StubService{GetTemplateFn: returns(tmpl)})
+	dir := t.TempDir()
+	runCmd(t, url, "template", "init", "--template", "builtin:domain-vocabulary", "--dir", dir)
+
+	b, err := os.ReadFile(filepath.Join(dir, "frame.yaml"))
+	if err != nil {
+		t.Fatalf("reading the scaffold: %v", err)
+	}
+	got := string(b)
+
+	// Every publish command the header offers, in the order it offers them.
+	var cmds []string
+	for _, line := range strings.Split(got, "\n") {
+		if trimmed := strings.TrimLeft(line, "# "); strings.HasPrefix(trimmed, "frames publish") {
+			cmds = append(cmds, trimmed)
+		}
+	}
+	if len(cmds) != 2 {
+		t.Fatalf("want two publish commands (the first version and every later one), got %v:\n%s", cmds, got)
+	}
+	if !strings.Contains(cmds[0], "--template builtin:domain-vocabulary") {
+		t.Errorf("the first-version command does not pass the template: %q", cmds[0])
+	}
+	if strings.Contains(cmds[1], "--template") {
+		t.Errorf("the later-version command still passes --template: %q", cmds[1])
+	}
+	// And it has to say which is which, or two bare commands are just confusing.
+	if !strings.Contains(got, "first version") {
+		t.Errorf("the header does not say the flag belongs to the first version:\n%s", got)
+	}
+}

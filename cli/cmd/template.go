@@ -67,8 +67,16 @@ func scaffoldComment(t *framesv1.FrameTemplate) string {
 	if t.Description != "" {
 		fmt.Fprintf(&b, "# %s\n", t.Description)
 	}
-	b.WriteString("#\n# Fill in name, description, and version, then publish with:\n")
+	b.WriteString("#\n# Fill in name, description, and version, then publish the first version with:\n")
 	b.WriteString("#   frames publish --dir . --template " + t.Id + "\n")
+	// --template asserts a new Frame (it is what makes the requirement check
+	// run at all), so the server refuses it once the Frame exists. Naming only
+	// the first command would leave an author following a header that stops
+	// working - and, since these comments persist into the published content,
+	// stops working permanently.
+	b.WriteString("#\n# --template checks this template's requirements and asserts the Frame is new,\n")
+	b.WriteString("# so publish every later version without it:\n")
+	b.WriteString("#   frames publish --dir .\n")
 
 	// Required first: those are what will actually refuse the publish. Slot
 	// keys are sorted rather than walked in schema order, because that order
