@@ -333,3 +333,35 @@ it("seeds the create form only from a prefill fetched after this mount", async (
   expect(await screen.findByDisplayValue("Frame")).toBeInTheDocument();
 });
 
+
+it("does not seed from a cached prefill when the fetch that ran on mount failed", async () => {
+  // query-core counts a FAILED fetch in isFetchedAfterMount too
+  // (queryObserver: dataUpdateCount > initial || errorUpdateCount > initial),
+  // and its error reducer keeps whatever data was already cached. So this is
+  // the shape a forced refetch failure produces over a row an admin page had
+  // open moments earlier - and seeding from it would silently restore exactly
+  // the stale-content bug the guard exists to prevent, then latch and hide the
+  // error.
+  useQueryMock.mockImplementation((method: unknown) => {
+    if (method === FrameService.method.getFrameTemplate) {
+      return {
+        isLoading: false,
+        isFetchedAfterMount: true,
+        error: new ConnectError("connection lost", Code.Unavailable),
+        data: {
+          template: {
+            ...orgTemplateWithPrefill,
+            prefill: new TextEncoder().encode("slots:\n  terminology:\n    - term: Stale\n      definition: From the cache.\n"),
+          },
+        },
+        refetch: vi.fn(),
+      };
+    }
+    return templateList;
+  });
+  renderAt("/frames/new?template=01JORGTEMPLATE0000000000AB");
+
+  expect(screen.queryByDisplayValue("Stale")).not.toBeInTheDocument();
+  // Nothing was seeded, so this is still the dead end it looks like.
+  expect(screen.getByText(/could not be loaded/i)).toBeInTheDocument();
+});

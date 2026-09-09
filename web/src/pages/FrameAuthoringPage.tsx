@@ -183,6 +183,15 @@ export function FrameAuthoringPage({ mode }: { mode: "create" | "edit" }) {
     // a cached row for the key synchronously and refetches behind it, so an
     // edit made in the admin page since it was cached would be invisible here.
     if (!chosen.isFetchedAfterMount) return;
+    // A fetch that FAILED satisfies the guard above: query-core counts data
+    // updates and error updates alike (isFetchedAfterMount is
+    // `dataUpdateCount > initial || errorUpdateCount > initial`), and its error
+    // reducer keeps whatever data was already cached, flagging it invalidated
+    // rather than clearing it. So without this, a forced refetch that fails
+    // over an already-cached row would seed from that row - the stale content
+    // this whole mechanism exists to refuse - and then latch, hiding the error
+    // for the rest of the session.
+    if (chosen.error) return;
     const tmpl = chosen.data?.template;
     if (!tmpl) return;
     try {
@@ -212,7 +221,7 @@ export function FrameAuthoringPage({ mode }: { mode: "create" | "edit" }) {
     // seed once per template choice; re-running on every `rules` identity
     // change would fight the author's own edits after the initial seed
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [chosen.data, chosen.isFetchedAfterMount, mode, templateID, seededFor]);
+  }, [chosen.data, chosen.error, chosen.isFetchedAfterMount, mode, templateID, seededFor]);
 
   const slots = useWatch({ control: methods.control, name: "slots" }) as
     | AuthoringForm["slots"]

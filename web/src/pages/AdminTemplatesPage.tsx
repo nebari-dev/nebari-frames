@@ -10,7 +10,8 @@ import { Requirement } from "@gen/frames/v1/frame_pb";
 import type { FrameTemplateSummary } from "@gen/frames/v1/frame_pb";
 import { Plus, Pencil, Trash2 } from "lucide-react";
 import { SLOT_SECTIONS, type SlotSectionDef } from "@/lib/slot-sections";
-import { parseFrameContent, serializeFramePrefill, slotsSchema, type FrameDoc } from "@/lib/frame-yaml";
+import { parseFrameContent, serializeFramePrefill, type FrameDoc } from "@/lib/frame-yaml";
+import { contentSlotsSchema } from "@/lib/authoring-schema";
 import { TerminologyEditor } from "@/components/form/TerminologyEditor";
 import { ListEditor } from "@/components/form/ListEditor";
 import { MarkdownField } from "@/components/form/MarkdownField";
@@ -33,7 +34,11 @@ const ruleEntrySchema = z.object({
 const templateFormSchema = z.object({
   title: z.string().trim().min(1, "must not be empty"),
   description: z.string().trim().min(1, "must not be empty"),
-  slots: slotsSchema,
+  // The same content rules the authoring form applies, not frame-yaml's decode
+  // schema: a blank row an admin abandoned would otherwise reach the server,
+  // come back as a flattened message, and - since serialization drops empty
+  // rows - name a row index that no longer matches what is on screen.
+  slots: contentSlotsSchema,
   rules: z.record(z.string(), ruleEntrySchema).optional(),
 });
 type TemplateForm = z.infer<typeof templateFormSchema>;
@@ -160,12 +165,22 @@ function TemplateFormDialog({
     // and refetches behind it. Seeding from that copy and then latching `ready`
     // is what silently reverts a previous edit on the next Save.
     if (!rowQ.isFetchedAfterMount) return;
+    // A fetch that FAILED satisfies the guard above: query-core counts data
+    // updates and error updates alike (isFetchedAfterMount is
+    // `dataUpdateCount > initial || errorUpdateCount > initial`), and its error
+    // reducer keeps whatever data was already cached, flagging it invalidated
+    // rather than clearing it. So without this, a forced refetch that fails
+    // over an already-cached row would seed from that row - the stale content
+    // this whole mechanism exists to refuse - and then latch, hiding the error
+    // for the rest of the session.
+    if (rowQ.error) return;
     const tmpl = rowQ.data?.template;
     if (!tmpl) {
-      // A fetch that succeeded while carrying no row: not something the RPC
-      // should produce, but if it does, `ready` would never flip and the
-      // dialog would sit on its skeleton with nothing to explain it. Scheduled
-      // outside the effect body, like the decode failure below.
+      // A fetch that succeeded while carrying no row - the error case returned
+      // above, so this claim is only ever made about a successful fetch. Not
+      // something the RPC should produce, but if it does, `ready` would never
+      // flip and the dialog would sit on its skeleton with nothing to explain
+      // it. Scheduled outside the effect body, like the decode failure below.
       setTimeout(() => setLoadError("The registry returned no content for it."), 0);
       return;
     }
@@ -189,7 +204,7 @@ function TemplateFormDialog({
       setTimeout(() => setLoadError("Its saved content could not be read."), 0);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [target.mode, ready, rowQ.data, rowQ.isFetchedAfterMount]);
+  }, [target.mode, ready, rowQ.data, rowQ.error, rowQ.isFetchedAfterMount]);
 
   const busy = createM.isPending || updateM.isPending;
 

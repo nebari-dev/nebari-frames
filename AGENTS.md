@@ -96,7 +96,12 @@ store.Repository**.
     click. `Check` reports required slots a document leaves empty; `publish` merges those with the
     schema's own violations so an author sees everything at once. Checked on create only: nothing
     is recorded on the Frame, so `required` is an authoring aid rather than ongoing governance.
-    See `docs/adr/0001-frame-templates-are-not-frames.md`.
+    See `docs/adr/0001-frame-templates-are-not-frames.md`. A prefill is held to the same content
+    rules a Frame is (`contentErrors`), but at the write boundary (`validateTemplateInput`), never
+    in `ParsePrefill`: that decoder is also the read path (`rowToTemplate` runs every stored row
+    through it), so a rule enforced there would make an already-stored row unreadable rather than
+    merely unpublishable. Starters arrive through two doors - the write RPCs and `loadBuiltins` at
+    package init - and a content rule has to guard both.
   - `framemd.go` - the Frame Spec v0.2 `.frame.md` codec (YAML frontmatter plus one `##` section per
     slot). Round-trip fidelity matters: `examples/*.yaml` and `examples/*.frame.md` are checked-in
     conformance fixtures asserted by `examples_test.go`.
@@ -137,6 +142,23 @@ store.Repository**.
   `//go:embed` still compiles on a clean checkout. Auth guards live in `web/src/app/`
   (`RequireAuth`, `RequireMembership`, `RequireAdmin`); pages in `web/src/pages/`; RPC transport and
   domain helpers in `web/src/lib/`.
+  - Seeding a form from server data comes in two shapes. A form that may re-seed keys its `reset`
+    on an identity that changes when the data does (the authoring page's edit path keys on
+    `version.digest`). A form that seeds once and then belongs to the author - a template prefill,
+    the template edit dialog - must pin `refetchOnMount: "always"`, gate the seed on
+    `isFetchedAfterMount`, refuse to seed while `error` is set, and latch on what it seeded from
+    rather than on a boolean. All four go together: React Query hands back a cached row
+    synchronously and refetches behind it, counts a *failed* fetch in `isFetchedAfterMount`, and
+    never clears cached data on error - so any one of them missing is a form that quietly seeds
+    from a stale row and then saves it back.
+  - Two schemas cover the same slot keys on purpose. `frame-yaml.ts` decodes whatever is stored
+    (lenient, because rows predate rules); `contentSlotsSchema` in `authoring-schema.ts` is what a
+    human may submit, and every form that edits slot content resolves against it. The backend
+    splits the same two jobs the same way (`Parse` vs `contentErrors`).
+  - Error text splits by direction. A failed read states a fixed sentence - the server's message
+    there is storage or wiring detail and retrying is all the reader can do. A failed write shows
+    `ConnectError.rawMessage`, because it names what the caller must change; when it carries
+    `FieldViolations`, it belongs on the input instead.
 - `cli/` is the `frames` binary (Cobra plus Viper; config at `~/.config/frames/config.yaml`, env
   prefix `FRAMES_`, device-flow login).
 - `chart/` deploys onto a Nebari cluster; the nebari-operator provisions routing, TLS, and the OIDC

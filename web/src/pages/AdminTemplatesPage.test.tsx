@@ -280,3 +280,55 @@ it("keeps an in-progress edit when a later row fetch fails", async () => {
   expect(screen.getByLabelText(/^title$/i)).toHaveValue("Renamed Style");
   expect(screen.queryByText(/could not be loaded/i)).not.toBeInTheDocument();
 });
+
+it("does not seed the edit form from a cached row when the fetch failed, and says which failure it was", async () => {
+  // Same query-core shape as the authoring page's test: a failed fetch counts
+  // as "fetched after mount" and leaves the cached row in place.
+  const { ConnectError, Code } = await import("@connectrpc/connect");
+  useQueryMock.mockImplementation((method: unknown) => {
+    if (method === FrameService.method.getFrameTemplate) {
+      return {
+        isLoading: false,
+        isFetchedAfterMount: true,
+        error: new ConnectError("connection lost", Code.Unavailable),
+        data: { template: { ...existingOrgTemplate, title: "Stale Cached Title" } },
+      };
+    }
+    return { isLoading: false, error: null, isFetchedAfterMount: true, data: templateListData };
+  });
+  renderPage();
+  const orgRow = screen.getByText("Our House Style").closest("li, tr")!;
+  await userEvent.click(orgRow.querySelector('[data-testid="edit-template"]') as HTMLElement);
+
+  expect(await screen.findByText(/could not be loaded/i)).toBeInTheDocument();
+  expect(screen.queryByDisplayValue("Stale Cached Title")).not.toBeInTheDocument();
+  // The failure has to be reported as the failure it was: "no content" is a
+  // different claim, and asserting the exact sentence is what stops this test
+  // from passing whichever one appears.
+  expect(screen.getByText(/may have been deleted, or the registry could not be reached/i)).toBeInTheDocument();
+  expect(screen.queryByText(/returned no content/i)).not.toBeInTheDocument();
+});
+
+it("refuses to save a template whose terminology row is incomplete", async () => {
+  // Client-side, per row, rather than a server round trip: serialization drops
+  // rows that are entirely empty, so an incomplete row reported by the server
+  // can carry an index that no longer matches the form. The authoring form has
+  // always held content to these rules; the template dialog now does too.
+  // beforeEach re-stubs the mutation mocks but does not clear their call
+  // history, so this test counts only its own calls.
+  createMock.mockClear();
+  renderPage();
+  await userEvent.click(screen.getByRole("button", { name: /new template/i }));
+  await userEvent.type(screen.getByLabelText(/^title$/i), "Vocabulary");
+  await userEvent.type(screen.getByLabelText(/^description$/i), "Our terms");
+  await userEvent.click(screen.getByRole("button", { name: /add term/i }));
+  // Term filled, definition left blank: a row the admin meant to write and
+  // did not finish, which is exactly the row that must not be dropped
+  // silently and must not travel to the server either.
+  await userEvent.type(screen.getByPlaceholderText("Term"), "Frame");
+
+  await userEvent.click(screen.getByRole("button", { name: /^create$/i }));
+
+  expect(await screen.findByText(/must not be empty/i)).toBeInTheDocument();
+  expect(createMock).not.toHaveBeenCalled();
+});

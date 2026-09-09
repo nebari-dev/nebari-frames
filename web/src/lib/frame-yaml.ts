@@ -1,13 +1,18 @@
 import { parse as parseYaml, stringify as stringifyYaml } from "yaml";
 import { z } from "zod";
 
-// Mirrors backend/internal/frames/schema.go. Keep in sync with that file:
-// it is the canonical Frame content schema. Exported because it is also the
-// content-only shape a template's prefill validates against - the ten slot
-// keys should only ever be listed once in TypeScript.
-export const termSchema = z.object({ term: z.string(), definition: z.string() });
+// Mirrors backend/internal/frames/schema.go. Keep in sync with that file: it is
+// the canonical Frame content schema.
+//
+// Deliberately lenient about values - a term may decode empty here - because
+// this is the shape everything already stored has to parse through, including
+// rows written before a rule existed. What a human is allowed to submit is a
+// stricter schema over the same keys: contentSlotsSchema in authoring-schema.ts,
+// which both the authoring form and the template dialog resolve against. The
+// backend splits the same two jobs the same way (Parse vs contentErrors).
+const termSchema = z.object({ term: z.string(), definition: z.string() });
 
-export const slotsSchema = z.object({
+const slotsSchema = z.object({
   terminology: z.array(termSchema).optional(),
   rules: z.array(z.string()).optional(),
   skills: z.array(z.string()).optional(),

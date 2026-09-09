@@ -10,7 +10,14 @@ const termSchema = z.object({
 
 const nonEmptyList = z.array(z.string().trim().min(1, "must not be empty")).optional();
 
-const slotsSchema = z.object({
+// The content rules both authoring surfaces enforce, exported because a
+// template's prefill is edited with the same editors and stored through the
+// same schema as a Frame's slots: `frame-yaml.ts` carries the decode shape
+// (deliberately lenient, since it also has to read whatever is already
+// stored), and this is the shape a human is allowed to submit. Backend
+// counterpart: contentErrors in backend/internal/frames/validate.go, shared by
+// a publish and a template write for the same reason.
+export const contentSlotsSchema = z.object({
   terminology: z
     .array(termSchema)
     .optional()
@@ -50,7 +57,7 @@ export const authoringSchema = z.object({
   maintainer: z.string(),
   extends: z.array(extendSchema).optional(),
   excludes: z.array(z.string().trim().min(1)).optional(),
-  slots: slotsSchema,
+  slots: contentSlotsSchema,
 }) satisfies z.ZodType<FrameDoc>;
 
 // Resolver schema for the form: includes the version-scoped changelog. Used so
