@@ -582,3 +582,37 @@ func TestTemplateWritesRefusePrefillContentThatCannotBePublished(t *testing.T) {
 		})
 	}
 }
+
+// A success carrying no template would strand the web app's edit dialog on its
+// loading skeleton: "no row" is how that dialog spells "still fetching", so it
+// has nothing to report. Asserted across every id shape a caller can send,
+// because the invariant has to hold for the whole method, not just the happy
+// path.
+func TestGetFrameTemplateNeverSucceedsEmpty(t *testing.T) {
+	tests := []struct {
+		name string
+		id   string
+	}{
+		{name: "a built-in", id: BlankTemplateID},
+		{name: "the org's own row", id: "t1"},
+		{name: "another org's row", id: "t2"},
+		{name: "an id that does not exist", id: "01JNOPE0000000000000000000"},
+		{name: "an empty id", id: ""},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			f, ctx := newTemplateFixture(t, "admin")
+			seedOrgTemplate(t, f.repo, "t1", "org-a", "Ours", nil)
+			seedOrgTemplate(t, f.repo, "t2", "org-b", "Not Yours", nil)
+
+			resp, err := f.svc.GetFrameTemplate(ctx, connect.NewRequest(&framesv1.GetFrameTemplateRequest{Id: tt.id}))
+			if err != nil {
+				return // an error is a fine answer; an empty success is not
+			}
+			if resp.Msg.Template == nil {
+				t.Fatal("GetFrameTemplate returned a success with no template")
+			}
+		})
+	}
+}

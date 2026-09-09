@@ -269,6 +269,8 @@ it("offers a way out when the chosen template cannot be read", async () => {
 
   expect(screen.queryByLabelText(/frame name/i)).not.toBeInTheDocument();
   expect(screen.getByText(/could not be loaded/i)).toBeInTheDocument();
+  // A fetch can succeed on a second attempt, so the retry belongs here.
+  expect(screen.getByRole("button", { name: /try again/i })).toBeInTheDocument();
 
   // Back to the picker, with the bad id cleared from the URL rather than left
   // for the next publish to carry.
@@ -403,7 +405,9 @@ it("treats a template whose stored content will not decode as a dead end", async
 
   expect(await screen.findByText(/could not be loaded/i)).toBeInTheDocument();
   expect(screen.getByText(/starting content could not be read/i)).toBeInTheDocument();
-  // The two ways out, same as a failed fetch.
   expect(screen.getByRole("button", { name: /choose a different template/i })).toBeInTheDocument();
+  // But no retry: the stored bytes are the input, so a refetch returns the
+  // same content and redraws this same screen.
+  expect(screen.queryByRole("button", { name: /try again/i })).not.toBeInTheDocument();
   expect(screen.queryByLabelText(/frame name/i)).not.toBeInTheDocument();
 });

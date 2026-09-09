@@ -147,6 +147,11 @@ func (s *Service) ListFrameTemplates(ctx context.Context, _ *connect.Request[fra
 	}), nil
 }
 
+// GetFrameTemplate returns one template the caller may use. A response is
+// never successful and empty: either an error, or a Template. The web app's
+// edit dialog relies on that - it treats "no row" as still loading, so a
+// success carrying nothing would leave it on a loading skeleton forever rather
+// than reporting anything. TestGetFrameTemplateNeverSucceedsEmpty pins it.
 func (s *Service) GetFrameTemplate(ctx context.Context, req *connect.Request[framesv1.GetFrameTemplateRequest]) (*connect.Response[framesv1.GetFrameTemplateResponse], error) {
 	caller, err := s.resolveCaller(ctx)
 	if err != nil {
