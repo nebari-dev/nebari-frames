@@ -59,6 +59,9 @@ beforeEach(() => {
   useQueryMock.mockReturnValue({
     isLoading: false,
     error: null,
+    // The dialog seeds only from a row this mount fetched, so a mock that
+    // means "fresh data" has to say so.
+    isFetchedAfterMount: true,
     data: templateListData,
   });
 });
@@ -147,9 +150,9 @@ const existingOrgTemplate = {
 function mockRowFetch(template: unknown) {
   useQueryMock.mockImplementation((method: unknown) => {
     if (method === FrameService.method.getFrameTemplate) {
-      return { isLoading: false, error: null, data: { template } };
+      return { isLoading: false, error: null, isFetchedAfterMount: true, data: { template } };
     }
-    return { isLoading: false, error: null, data: templateListData };
+    return { isLoading: false, error: null, isFetchedAfterMount: true, data: templateListData };
   });
 }
 
@@ -174,4 +177,72 @@ it("carries an existing extends suggestion through an edit that only changes the
   // something.
   const sentDoc = parseFrameContent(arg.prefill);
   expect(sentDoc.extends).toEqual([{ ref: "acme/base", version: "1.0.0" }]);
+});
+
+it("seeds the edit form only from a row fetched after the dialog opened", async () => {
+  // React Query hands a cached row back synchronously when a query mounts and
+  // refetches in the background (invalidated data stays in the cache, and only
+  // ACTIVE queries are refetched, so saving does not evict it). A dialog that
+  // seeded from that copy and then latched would show pre-edit content on a
+  // second open, and Save would write it back over the first edit.
+  let fetched = false;
+  const freshRow = { ...existingOrgTemplate, title: "Renamed Style" };
+  useQueryMock.mockImplementation((method: unknown) => {
+    if (method === FrameService.method.getFrameTemplate) {
+      return fetched
+        ? { isLoading: false, error: null, isFetchedAfterMount: true, data: { template: freshRow } }
+        : { isLoading: false, error: null, isFetchedAfterMount: false, data: { template: existingOrgTemplate } };
+    }
+    return { isLoading: false, error: null, isFetchedAfterMount: true, data: templateListData };
+  });
+
+  const { rerender } = renderPage();
+  const orgRow = screen.getByText("Our House Style").closest("li, tr")!;
+  await userEvent.click(orgRow.querySelector('[data-testid="edit-template"]') as HTMLElement);
+
+  // Still loading as far as this dialog is concerned: the only row available
+  // is the one that was already in the cache, so no form is shown at all.
+  expect(screen.queryByLabelText(/^title$/i)).not.toBeInTheDocument();
+
+  fetched = true;
+  rerender(<MemoryRouter><AdminTemplatesPage /></MemoryRouter>);
+
+  await waitFor(() => expect(screen.getByLabelText(/^title$/i)).toHaveValue("Renamed Style"));
+});
+
+it("says why the edit form is missing when its row cannot be read", async () => {
+  // The dialog waits for a fetch of its own before seeding, so a failure that
+  // is not reported would leave the admin looking at a loading skeleton.
+  const { ConnectError, Code } = await import("@connectrpc/connect");
+  useQueryMock.mockImplementation((method: unknown) => {
+    if (method === FrameService.method.getFrameTemplate) {
+      return {
+        isLoading: false,
+        error: new ConnectError('no template "t1"', Code.NotFound),
+        isFetchedAfterMount: true,
+        data: undefined,
+      };
+    }
+    return { isLoading: false, error: null, isFetchedAfterMount: true, data: templateListData };
+  });
+  renderPage();
+  const orgRow = screen.getByText("Our House Style").closest("li, tr")!;
+  await userEvent.click(orgRow.querySelector('[data-testid="edit-template"]') as HTMLElement);
+
+  expect(await screen.findByText(/could not be loaded/i)).toBeInTheDocument();
+  expect(screen.getByText('no template "t1"')).toBeInTheDocument();
+  expect(screen.queryByLabelText(/^title$/i)).not.toBeInTheDocument();
+});
+
+it("says so when a stored template's content cannot be decoded", async () => {
+  // Stored bytes that no longer parse (hand-edited row, a format change).
+  // The seed cannot complete, so the form never renders - which is exactly
+  // why this message cannot live inside the form.
+  mockRowFetch({ ...existingOrgTemplate, prefill: new TextEncoder().encode("slots: [not a mapping\n") });
+  renderPage();
+  const orgRow = screen.getByText("Our House Style").closest("li, tr")!;
+  await userEvent.click(orgRow.querySelector('[data-testid="edit-template"]') as HTMLElement);
+
+  expect(await screen.findByText(/could not be read/i)).toBeInTheDocument();
+  expect(screen.queryByLabelText(/^title$/i)).not.toBeInTheDocument();
 });

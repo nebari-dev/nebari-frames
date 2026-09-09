@@ -29,7 +29,7 @@ import { AddSectionMenu } from "@/components/document/AddSectionMenu";
 import { PublishDialog } from "@/components/document/PublishDialog";
 import { TemplatePicker } from "@/components/frame/TemplatePicker";
 import { Button } from "@/components/ui/button";
-import { Alert } from "@/components/ui/alert";
+import { Alert, AlertTitle, AlertDescription } from "@/components/ui/alert";
 import {
   DropdownMenu,
   DropdownMenuTrigger,
@@ -124,12 +124,15 @@ export function FrameAuthoringPage({ mode }: { mode: "create" | "edit" }) {
     {},
     { enabled: choosingTemplate },
   );
-  // Fetched only once a template is chosen. Disabled otherwise so the picker
-  // screen does not issue a pointless request.
+  // Fetched only once a template is chosen, and only on the flow that will
+  // send its id: publishTemplateID owns that rule, so the fetch and the publish
+  // cannot disagree about whether this template matters. The import path and
+  // edit mode send nothing, so they ask for nothing.
+  const publishesTemplate = publishTemplateID({ mode, importing, templateID }) !== "";
   const chosen = useQuery(
     FrameService.method.getFrameTemplate,
     { id: templateID },
-    { enabled: templateID !== "" },
+    { enabled: publishesTemplate },
   );
   const rules: TemplateRules = (chosen.data?.template?.fieldRules ?? {}) as TemplateRules;
 
@@ -166,6 +169,10 @@ export function FrameAuthoringPage({ mode }: { mode: "create" | "edit" }) {
   const [seeded, setSeeded] = useState(false);
   useEffect(() => {
     if (mode !== "create" || templateID === "" || seeded) return;
+    // Only a prefill this mount fetched may seed the form. React Query returns
+    // a cached row for the key synchronously and refetches behind it, so an
+    // edit made in the admin page since it was cached would be invisible here.
+    if (!chosen.isFetchedAfterMount) return;
     const tmpl = chosen.data?.template;
     if (!tmpl) return;
     try {
@@ -195,7 +202,7 @@ export function FrameAuthoringPage({ mode }: { mode: "create" | "edit" }) {
     // seed once per template choice; re-running on every `rules` identity
     // change would fight the author's own edits after the initial seed
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [chosen.data, mode, templateID, seeded]);
+  }, [chosen.data, chosen.isFetchedAfterMount, mode, templateID, seeded]);
 
   const slots = useWatch({ control: methods.control, name: "slots" }) as
     | AuthoringForm["slots"]
@@ -394,10 +401,45 @@ export function FrameAuthoringPage({ mode }: { mode: "create" | "edit" }) {
     return (
       <TemplatePicker
         templates={templates.data?.templates ?? []}
+        // A failed list would otherwise draw the heading and no cards, which
+        // reads as "your org has no templates" rather than "the request
+        // failed" - and the built-ins are compiled in, so it is never true.
+        error={templates.error ? templates.error.rawMessage : null}
+        onRetry={() => void templates.refetch()}
         // The choice goes in the URL rather than component state, so it is
         // linkable and survives a reload, matching how `?import=1` works.
         onPick={(id) => setSearchParams({ template: id }, { replace: true })}
       />
+    );
+  }
+
+  // A template that cannot be read is a dead end, not a blank form: the id
+  // stays in the URL and every publish carries it, so the server refuses each
+  // one for a template the author cannot see. Say so, and offer the two ways
+  // out - retry, or go back and pick another.
+  if (chosen.error) {
+    return (
+      <div className="mx-auto max-w-3xl space-y-4 py-6">
+        <Alert variant="destructive">
+          <AlertTitle>This template could not be loaded</AlertTitle>
+          <AlertDescription>
+            <p>{chosen.error.rawMessage}</p>
+            <p>It may have been deleted, or belong to another organization.</p>
+          </AlertDescription>
+        </Alert>
+        <div className="flex gap-2">
+          <Button type="button" onClick={() => void chosen.refetch()}>
+            Try again
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => setSearchParams({}, { replace: true })}
+          >
+            Choose a different template
+          </Button>
+        </div>
+      </div>
     );
   }
 

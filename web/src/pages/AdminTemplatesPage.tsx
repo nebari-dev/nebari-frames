@@ -21,7 +21,7 @@ import { Card } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { Alert } from "@/components/ui/alert";
+import { Alert, AlertTitle, AlertDescription } from "@/components/ui/alert";
 import { Dialog, DialogClose, DialogContent, DialogFooter, DialogTitle } from "@/components/ui/dialog";
 
 const encode = (s: string) => new TextEncoder().encode(s);
@@ -121,7 +121,11 @@ function TemplateFormDialog({
   const rowQ = useQuery(
     FrameService.method.getFrameTemplate,
     { id: editingId },
-    { enabled: target.mode === "edit" },
+    // Always refetch when the dialog opens, and seed only from that fetch (see
+    // the effect below). Saving does not evict this row: invalidated data stays
+    // in the cache and only active queries refetch, so without this the second
+    // open of the same template would edit the copy from the first.
+    { enabled: target.mode === "edit", refetchOnMount: "always" },
   );
   const createM = useMutation(FrameService.method.createFrameTemplate);
   const updateM = useMutation(FrameService.method.updateFrameTemplate);
@@ -131,6 +135,10 @@ function TemplateFormDialog({
   // template already carried in from elsewhere (the CLI, or a future editor).
   const [carriedExtends, setCarriedExtends] = useState<FrameDoc["extends"]>(undefined);
   const [ready, setReady] = useState(target.mode === "create");
+  // Why there is no form to show. Distinct from formError, which is rendered
+  // inside the form and so cannot report a failure that kept the form off the
+  // page in the first place.
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   const methods = useForm<TemplateForm>({
     resolver: zodResolver(templateFormSchema),
@@ -146,6 +154,12 @@ function TemplateFormDialog({
     // that reference changes. Once ready, this effect is a no-op for the rest
     // of the dialog's lifetime.
     if (target.mode !== "edit" || ready) return;
+    // Only a row this mount fetched may seed the form. React Query returns
+    // whatever is already cached for the key synchronously - a copy left by an
+    // earlier open of this dialog, or by the create flow's own template fetch -
+    // and refetches behind it. Seeding from that copy and then latching `ready`
+    // is what silently reverts a previous edit on the next Save.
+    if (!rowQ.isFetchedAfterMount) return;
     const tmpl = rowQ.data?.template;
     if (!tmpl) return;
     try {
@@ -165,10 +179,10 @@ function TemplateFormDialog({
       setReady(true);
     } catch {
       // Schedule outside the effect body to satisfy react-hooks/set-state-in-effect
-      setTimeout(() => setFormError("This template's saved content could not be loaded for editing."), 0);
+      setTimeout(() => setLoadError("Its saved content could not be read."), 0);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [target.mode, ready, rowQ.data]);
+  }, [target.mode, ready, rowQ.data, rowQ.isFetchedAfterMount]);
 
   const busy = createM.isPending || updateM.isPending;
 
@@ -202,7 +216,16 @@ function TemplateFormDialog({
     <Dialog open onOpenChange={onOpenChange}>
       <DialogContent className="max-h-[85vh] max-w-2xl overflow-y-auto">
         <DialogTitle>{target.mode === "edit" ? "Edit template" : "New template"}</DialogTitle>
-        {!ready ? (
+        {rowQ.error || loadError ? (
+          // Seeding waits for a fetch of its own, so anything that stops the
+          // seed - a failed request, or content that will not decode - has to
+          // be said here. Both used to leave the dialog on its loading
+          // skeleton for as long as the admin cared to wait.
+          <Alert variant="destructive">
+            <AlertTitle>This template could not be loaded</AlertTitle>
+            <AlertDescription>{rowQ.error ? rowQ.error.rawMessage : loadError}</AlertDescription>
+          </Alert>
+        ) : !ready ? (
           <Skeleton className="h-48 w-full" />
         ) : (
           <FormProvider {...methods}>

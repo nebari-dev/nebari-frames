@@ -1,5 +1,6 @@
 import type { FrameTemplateSummary } from "@gen/frames/v1/frame_pb";
 import { Button } from "@/components/ui/button";
+import { Alert, AlertTitle, AlertDescription, AlertAction } from "@/components/ui/alert";
 
 // Org templates and built-ins are shown in separate groups rather than merged
 // or shadowed. An org template sharing a built-in's title sits beside it: a
@@ -39,9 +40,16 @@ function Group({
 export function TemplatePicker({
   templates,
   onPick,
+  error,
+  onRetry,
 }: {
   templates: FrameTemplateSummary[];
   onPick: (id: string) => void;
+  // Why the picker has nothing to offer. Without it a failed list renders as
+  // the heading, the intro, and no cards - a screen that looks like an answer
+  // ("there are no templates") to a question that was never answered.
+  error?: string | null;
+  onRetry?: () => void;
 }) {
   return (
     <div className="mx-auto max-w-3xl space-y-8 py-6">
@@ -52,8 +60,24 @@ export function TemplatePicker({
           Frame keeps no link to the template it started from.
         </p>
       </div>
-      <Group heading="Your organization" templates={templates.filter((t) => !t.builtin)} onPick={onPick} />
-      <Group heading="Built-in" templates={templates.filter((t) => t.builtin)} onPick={onPick} />
+      {error ? (
+        <Alert variant="destructive">
+          <AlertTitle>Templates could not be loaded</AlertTitle>
+          <AlertDescription>{error}</AlertDescription>
+          {onRetry && (
+            <AlertAction>
+              <Button type="button" variant="outline" size="sm" onClick={onRetry}>
+                Try again
+              </Button>
+            </AlertAction>
+          )}
+        </Alert>
+      ) : (
+        <>
+          <Group heading="Your organization" templates={templates.filter((t) => !t.builtin)} onPick={onPick} />
+          <Group heading="Built-in" templates={templates.filter((t) => t.builtin)} onPick={onPick} />
+        </>
+      )}
     </div>
   );
 }

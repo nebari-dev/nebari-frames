@@ -2,6 +2,7 @@ import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes } from "react-router";
 import { expect, it, vi, beforeEach } from "vitest";
+import { ConnectError, Code } from "@connectrpc/connect";
 
 const useQueryMock = vi.fn();
 const useMutationMock = vi.fn();
@@ -24,6 +25,7 @@ import { FrameService } from "@gen/frames/v1/frame_service_pb";
 const templateList = {
   isLoading: false,
   error: null,
+  isFetchedAfterMount: true,
   data: {
     canManage: false,
     templates: [
@@ -105,9 +107,9 @@ const orgTemplateWithPrefill = {
 function mockQueries(template: unknown) {
   useQueryMock.mockImplementation((method: unknown) => {
     if (method === FrameService.method.getFrameTemplate) {
-      return { isLoading: false, error: null, data: { template } };
+      return { isLoading: false, error: null, isFetchedAfterMount: true, data: { template } };
     }
-    return { isLoading: false, error: null, data: templateList.data };
+    return { isLoading: false, error: null, isFetchedAfterMount: true, data: templateList.data };
   });
 }
 
@@ -209,4 +211,54 @@ it("puts a required-slot violation under that section", async () => {
   // the form: that placement is the whole point of the FieldViolations detail.
   const section = screen.getByRole("heading", { name: /^terminology$/i }).closest("section");
   expect(section).toContainElement(message);
+});
+
+it("explains a failed template list instead of drawing an empty picker", async () => {
+  // What a dev database missing the frame_templates table actually produces.
+  // The built-ins are compiled into the binary, so "no templates" is never the
+  // truth here: an empty picker would be the page lying about why it is empty.
+  const refetch = vi.fn();
+  useQueryMock.mockReturnValue({
+    isLoading: false,
+    error: new ConnectError("no such table: frame_templates", Code.Internal),
+    isFetchedAfterMount: true,
+    data: undefined,
+    refetch,
+  });
+  renderAt("/frames/new");
+
+  expect(screen.getByText(/could not be loaded/i)).toBeInTheDocument();
+  // The bare server text, not the "[internal] …" the code prefix would add.
+  expect(screen.getByText("no such table: frame_templates")).toBeInTheDocument();
+  await userEvent.click(screen.getByRole("button", { name: /try again/i }));
+  expect(refetch).toHaveBeenCalled();
+});
+
+it("offers a way out when the chosen template cannot be read", async () => {
+  // A deleted org template, another org's id, or a typo in ?template=. The id
+  // stays in the URL and every publish carries it, so the form behind this is
+  // a dead end: the server refuses each publish for a template it will not
+  // return.
+  const refetch = vi.fn();
+  useQueryMock.mockImplementation((method: unknown) => {
+    if (method === FrameService.method.getFrameTemplate) {
+      return {
+        isLoading: false,
+        error: new ConnectError('no template "01JGONE"', Code.NotFound),
+        isFetchedAfterMount: true,
+        data: undefined,
+        refetch,
+      };
+    }
+    return templateList;
+  });
+  renderAt("/frames/new?template=01JGONE");
+
+  expect(screen.queryByLabelText(/frame name/i)).not.toBeInTheDocument();
+  expect(screen.getByText(/could not be loaded/i)).toBeInTheDocument();
+
+  // Back to the picker, with the bad id cleared from the URL rather than left
+  // for the next publish to carry.
+  await userEvent.click(screen.getByRole("button", { name: /choose a different template/i }));
+  expect(screen.getByRole("heading", { name: /built-in/i })).toBeInTheDocument();
 });

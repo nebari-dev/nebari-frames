@@ -45,3 +45,27 @@ it("reports the chosen template's id", async () => {
   await userEvent.click(screen.getByRole("button", { name: /brand voice and style/i }));
   expect(onPick).toHaveBeenCalledWith("builtin:brand-voice");
 });
+
+it("shows the error in place of the groups, so an empty picker is never mistaken for an empty catalog", async () => {
+  const onRetry = vi.fn();
+  render(
+    <TemplatePicker
+      templates={[]}
+      onPick={vi.fn()}
+      error="no such table: frame_templates"
+      onRetry={onRetry}
+    />,
+  );
+  expect(screen.getByText(/could not be loaded/i)).toBeInTheDocument();
+  expect(screen.getByText("no such table: frame_templates")).toBeInTheDocument();
+  // The group headings are what make a blank screen read as an answer.
+  expect(screen.queryByRole("heading", { name: /built-in/i })).not.toBeInTheDocument();
+  await userEvent.click(screen.getByRole("button", { name: /try again/i }));
+  expect(onRetry).toHaveBeenCalled();
+});
+
+it("shows the groups, not an error, when there is no error", () => {
+  render(<TemplatePicker templates={templates} onPick={vi.fn()} error={null} />);
+  expect(screen.getByRole("heading", { name: /built-in/i })).toBeInTheDocument();
+  expect(screen.queryByText(/could not be loaded/i)).not.toBeInTheDocument();
+});
