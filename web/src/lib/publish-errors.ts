@@ -31,6 +31,10 @@ export function mapPublishError(err: unknown): PublishErrorResult {
     if (Object.keys(fieldErrors).length > 0) {
       return { fieldErrors, formError: null };
     }
+    // No violation means a republished version. A violation carrying an empty
+    // field name would land here too and be reported as a version conflict,
+    // which would be wrong - the server never sends one (it names "name"), and
+    // this is the assumption to revisit if that ever changes.
     return { fieldErrors: { version: ce.rawMessage || "frame version already exists" }, formError: null };
   }
 

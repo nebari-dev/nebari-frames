@@ -84,9 +84,19 @@ func loadBuiltins() ([]Template, error) {
 				return nil, fmt.Errorf("%s: field_rules[%s] has no note", name, key)
 			}
 		}
-		out = append(out, Template{
+		tmpl := Template{
 			ID: f.ID, Title: f.Title, Description: f.Description, FieldRules: f.FieldRules,
-		})
+		}
+		// Starters reach the system through two doors - these files and the
+		// write RPCs - and a content rule that guards only one is a rule with a
+		// hole in it. A no-op while builtinFile carries no prefill key, but it
+		// is the door that has to fail at startup rather than at a user's first
+		// click (docs/adr/0001-frame-templates-are-not-frames.md), so the check
+		// belongs here before there is anything for it to catch.
+		if errs := contentErrors(&tmpl.Prefill.Slots, tmpl.Prefill.Extends); len(errs) > 0 {
+			return nil, fmt.Errorf("%s: %w", name, &ValidationError{Errors: errs})
+		}
+		out = append(out, tmpl)
 	}
 	// Blank leads: it is the "no template" escape hatch and must be easy to
 	// find. Everything else keeps filename order, which is alphabetical by

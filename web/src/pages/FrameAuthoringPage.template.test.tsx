@@ -228,8 +228,10 @@ it("explains a failed template list instead of drawing an empty picker", async (
   renderAt("/frames/new");
 
   expect(screen.getByText(/could not be loaded/i)).toBeInTheDocument();
-  // The bare server text, not the "[internal] …" the code prefix would add.
-  expect(screen.getByText("no such table: frame_templates")).toBeInTheDocument();
+  // A fixed sentence, not the server's text: every other read failure in this
+  // app states one, because storage detail is not something a reader can act
+  // on and retrying is.
+  expect(screen.queryByText(/no such table/i)).not.toBeInTheDocument();
   await userEvent.click(screen.getByRole("button", { name: /try again/i }));
   expect(refetch).toHaveBeenCalled();
 });
@@ -262,3 +264,72 @@ it("offers a way out when the chosen template cannot be read", async () => {
   await userEvent.click(screen.getByRole("button", { name: /choose a different template/i }));
   expect(screen.getByRole("heading", { name: /built-in/i })).toBeInTheDocument();
 });
+
+it("keeps an in-progress form when a later fetch of the chosen template fails", async () => {
+  // The template loaded once and the author has been typing. A refetch can
+  // still fail afterwards - reconnect, a token refresh, the template being
+  // deleted in another session - and replacing the form at that point throws
+  // away unsaved work for a template that is demonstrably readable.
+  let failing = false;
+  useQueryMock.mockImplementation((method: unknown) => {
+    if (method === FrameService.method.getFrameTemplate) {
+      return {
+        isLoading: false,
+        isFetchedAfterMount: true,
+        data: { template: vocabularyTemplate },
+        error: failing ? new ConnectError("connection lost", Code.Unavailable) : null,
+        refetch: vi.fn(),
+      };
+    }
+    return templateList;
+  });
+  const { rerender } = renderAt("/frames/new?template=builtin:domain-vocabulary");
+  await userEvent.type(screen.getByLabelText(/frame name/i), "vocab");
+
+  failing = true;
+  rerender(
+    <MemoryRouter initialEntries={["/frames/new?template=builtin:domain-vocabulary"]}>
+      <Routes>
+        <Route path="/frames/new" element={<FrameAuthoringPage mode="create" />} />
+      </Routes>
+    </MemoryRouter>,
+  );
+
+  expect(screen.getByLabelText(/frame name/i)).toHaveValue("vocab");
+  expect(screen.queryByText(/could not be loaded/i)).not.toBeInTheDocument();
+});
+
+it("seeds the create form only from a prefill fetched after this mount", async () => {
+  // The mirror of AdminTemplatesPage's stale-seed test. Without it, deleting
+  // this page's `isFetchedAfterMount` guard breaks no test at all, even though
+  // it is half of the fix for seeding from a cached row.
+  let fetched = false;
+  useQueryMock.mockImplementation((method: unknown) => {
+    if (method === FrameService.method.getFrameTemplate) {
+      return fetched
+        ? { isLoading: false, error: null, isFetchedAfterMount: true, data: { template: orgTemplateWithPrefill } }
+        : {
+            isLoading: false,
+            error: null,
+            isFetchedAfterMount: false,
+            // The cached copy: an earlier prefill for this same id.
+            data: { template: { ...orgTemplateWithPrefill, prefill: new TextEncoder().encode("slots:\n  terminology:\n    - term: Stale\n      definition: From the cache.\n") } },
+          };
+    }
+    return templateList;
+  });
+
+  const { rerender } = renderAt("/frames/new?template=01JORGTEMPLATE0000000000AB");
+  expect(screen.queryByDisplayValue("Stale")).not.toBeInTheDocument();
+
+  fetched = true;
+  rerender(
+    <MemoryRouter initialEntries={["/frames/new?template=01JORGTEMPLATE0000000000AB"]}>
+      <Routes>
+        <Route path="/frames/new" element={<FrameAuthoringPage mode="create" />} />
+      </Routes>
+    </MemoryRouter>,
+  );
+  expect(await screen.findByDisplayValue("Frame")).toBeInTheDocument();
+});
+

@@ -2,6 +2,7 @@ package frames
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"testing"
 	"time"
@@ -484,24 +485,28 @@ func TestOrgTemplateIsVisibleToAnotherMember(t *testing.T) {
 // author, at their first publish, naming a row they never wrote.
 func TestTemplateWritesRefusePrefillContentThatCannotBePublished(t *testing.T) {
 	tests := []struct {
-		name    string
-		prefill string
-		wantMsg string
+		name      string
+		prefill   string
+		wantMsg   string
+		wantField string
 	}{
 		{
-			name:    "a blank list row",
-			prefill: "slots:\n  rules:\n    - \"\"\n",
-			wantMsg: "slots.rules[0]: must not be empty",
+			name:      "a blank list row",
+			prefill:   "slots:\n  rules:\n    - \"\"\n",
+			wantMsg:   "slots.rules[0]: must not be empty",
+			wantField: "slots.rules[0]",
 		},
 		{
-			name:    "a terminology entry missing its definition",
-			prefill: "slots:\n  terminology:\n    - term: Frame\n      definition: \"\"\n",
-			wantMsg: "slots.terminology[0].definition: must not be empty",
+			name:      "a terminology entry missing its definition",
+			prefill:   "slots:\n  terminology:\n    - term: Frame\n      definition: \"\"\n",
+			wantMsg:   "slots.terminology[0].definition: must not be empty",
+			wantField: "slots.terminology[0].definition",
 		},
 		{
-			name:    "an unpinned parent",
-			prefill: "extends:\n  - ref: acme/base\n    version: \"\"\nslots: {}\n",
-			wantMsg: "extends[0].version: must be pinned to a version",
+			name:      "an unpinned parent",
+			prefill:   "extends:\n  - ref: acme/base\n    version: \"\"\nslots: {}\n",
+			wantMsg:   "extends[0].version: must be pinned to a version",
+			wantField: "extends[0].version",
 		},
 		{
 			name:    "content that publishes cleanly is accepted",
@@ -546,6 +551,32 @@ func TestTemplateWritesRefusePrefillContentThatCannotBePublished(t *testing.T) {
 				}
 				if !strings.Contains(err.Error(), tt.wantMsg) {
 					t.Errorf("%s: err = %v, want it to name %q", call.name, err, tt.wantMsg)
+				}
+				// The path must also arrive as a FieldViolations detail, the way
+				// a publish's violations do: a message a client has to substring
+				// its way through cannot be attached to an input.
+				var ce *connect.Error
+				if !errors.As(err, &ce) {
+					t.Fatalf("%s: not a connect error: %v", call.name, err)
+				}
+				found := false
+				for _, d := range ce.Details() {
+					msg, derr := d.Value()
+					if derr != nil {
+						continue
+					}
+					fv, ok := msg.(*framesv1.FieldViolations)
+					if !ok {
+						continue
+					}
+					for _, v := range fv.Violations {
+						if v.Field == tt.wantField {
+							found = true
+						}
+					}
+				}
+				if !found {
+					t.Errorf("%s: no field violation for %q on %v", call.name, tt.wantField, err)
 				}
 			}
 		})

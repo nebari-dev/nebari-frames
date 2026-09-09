@@ -161,7 +161,14 @@ function TemplateFormDialog({
     // is what silently reverts a previous edit on the next Save.
     if (!rowQ.isFetchedAfterMount) return;
     const tmpl = rowQ.data?.template;
-    if (!tmpl) return;
+    if (!tmpl) {
+      // A fetch that succeeded while carrying no row: not something the RPC
+      // should produce, but if it does, `ready` would never flip and the
+      // dialog would sit on its skeleton with nothing to explain it. Scheduled
+      // outside the effect body, like the decode failure below.
+      setTimeout(() => setLoadError("The registry returned no content for it."), 0);
+      return;
+    }
     try {
       const doc = parseFrameContent(tmpl.prefill);
       // This effect reacts to the row query resolving (an external system's
@@ -216,17 +223,23 @@ function TemplateFormDialog({
     <Dialog open onOpenChange={onOpenChange}>
       <DialogContent className="max-h-[85vh] max-w-2xl overflow-y-auto">
         <DialogTitle>{target.mode === "edit" ? "Edit template" : "New template"}</DialogTitle>
-        {rowQ.error || loadError ? (
+        {!ready ? (
           // Seeding waits for a fetch of its own, so anything that stops the
           // seed - a failed request, or content that will not decode - has to
-          // be said here. Both used to leave the dialog on its loading
-          // skeleton for as long as the admin cared to wait.
-          <Alert variant="destructive">
-            <AlertTitle>This template could not be loaded</AlertTitle>
-            <AlertDescription>{rowQ.error ? rowQ.error.rawMessage : loadError}</AlertDescription>
-          </Alert>
-        ) : !ready ? (
-          <Skeleton className="h-48 w-full" />
+          // be said here; both used to leave this dialog on its skeleton for
+          // as long as the admin cared to wait. Nested inside `!ready` rather
+          // than checked ahead of it, so a refetch that fails after the form
+          // is populated cannot replace an edit in progress with an error.
+          rowQ.error || loadError ? (
+            <Alert variant="destructive">
+              <AlertTitle>This template could not be loaded</AlertTitle>
+              <AlertDescription>
+                {loadError ?? "It may have been deleted, or the registry could not be reached."}
+              </AlertDescription>
+            </Alert>
+          ) : (
+            <Skeleton className="h-48 w-full" />
+          )
         ) : (
           <FormProvider {...methods}>
             <form onSubmit={(e) => { void methods.handleSubmit(onSubmit)(e); }} className="space-y-6">

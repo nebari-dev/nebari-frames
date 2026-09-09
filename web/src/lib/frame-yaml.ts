@@ -64,11 +64,19 @@ function withoutBlanks(items: string[] | undefined): string[] {
   return (items ?? []).filter((s) => s.trim() !== "");
 }
 
+// The same rule for terminology, where a row is a pair. Only a row with
+// nothing at all in it is dropped: a half-filled row is a real validation
+// error the author meant to write and should see, not a stray keystroke.
+function withoutEmptyTerms(terms: FrameDoc["slots"]["terminology"]): { term: string; definition: string }[] {
+  return (terms ?? []).filter((t) => t.term.trim() !== "" || t.definition.trim() !== "");
+}
+
 // Builds a plain object with keys in schema.go order, omitting empty values,
 // so the YAML round-trips through the backend Parse (KnownFields(true)).
 function compactSlots(s: FrameDoc["slots"]): Record<string, unknown> {
   const out: Record<string, unknown> = {};
-  if (s.terminology && s.terminology.length > 0) out.terminology = s.terminology;
+  const terms = withoutEmptyTerms(s.terminology);
+  if (terms.length > 0) out.terminology = terms;
   for (const key of ["rules", "skills", "prompts"] as const) {
     const items = withoutBlanks(s[key]);
     if (items.length > 0) out[key] = items;

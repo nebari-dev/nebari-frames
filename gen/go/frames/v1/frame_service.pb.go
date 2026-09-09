@@ -730,7 +730,15 @@ func (x *FieldViolation) GetMessage() string {
 // FieldViolations is attached as a Connect error detail on PublishFrame when
 // schema validation fails, so clients can map failures to individual inputs.
 // ConvertFrame reuses it for markdown structure errors, with field "markdown"
-// and a message naming the offending line.
+// and a message naming the offending line. The template write RPCs reuse it for
+// a prefill whose content could not be published.
+//
+// It is not tied to InvalidArgument. PublishFrame also attaches it on
+// AlreadyExists, naming "name" when the frame name is already taken - that code
+// covers two different collisions, a taken name and a republished version, and
+// they are fixed in different inputs. A republished version names no field, so
+// a client with no violation to read should treat AlreadyExists as a version
+// conflict.
 type FieldViolations struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Violations    []*FieldViolation      `protobuf:"bytes,1,rep,name=violations,proto3" json:"violations,omitempty"`

@@ -40,15 +40,20 @@ function Group({
 export function TemplatePicker({
   templates,
   onPick,
-  error,
+  failed,
   onRetry,
 }: {
   templates: FrameTemplateSummary[];
   onPick: (id: string) => void;
-  // Why the picker has nothing to offer. Without it a failed list renders as
-  // the heading, the intro, and no cards - a screen that looks like an answer
+  // Whether the list failed to load. Without this a failed list renders as the
+  // heading, the intro, and no cards - a screen that looks like an answer
   // ("there are no templates") to a question that was never answered.
-  error?: string | null;
+  //
+  // A flag rather than the server's message: read failures across this app
+  // state a fixed sentence (AdminFramesPage, AdminMembersPage, and this page's
+  // own list error), because the text on a failed read is storage or wiring
+  // detail and retrying is the only thing the reader can act on.
+  failed?: boolean;
   onRetry?: () => void;
 }) {
   return (
@@ -60,10 +65,10 @@ export function TemplatePicker({
           Frame keeps no link to the template it started from.
         </p>
       </div>
-      {error ? (
+      {failed ? (
         <Alert variant="destructive">
           <AlertTitle>Templates could not be loaded</AlertTitle>
-          <AlertDescription>{error}</AlertDescription>
+          <AlertDescription>The registry could not be reached.</AlertDescription>
           {onRetry && (
             <AlertAction>
               <Button type="button" variant="outline" size="sm" onClick={onRetry}>

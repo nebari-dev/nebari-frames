@@ -48,6 +48,6 @@ func addPublishCmd(root *cobra.Command) {
 	cmd.Flags().StringVar(&dir, "dir", "", "Directory containing frame.yaml")
 	cmd.Flags().StringVar(&changelog, "changelog", "", "Release notes for this version")
 	cmd.Flags().StringVar(&templateID, "template", "",
-		"Template this Frame is being created from; its required sections are checked")
+		"Template this Frame is being created from; asserts the Frame is new and checks the template's required sections")
 	root.AddCommand(cmd)
 }

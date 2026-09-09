@@ -52,12 +52,11 @@ it("shows the error in place of the groups, so an empty picker is never mistaken
     <TemplatePicker
       templates={[]}
       onPick={vi.fn()}
-      error="no such table: frame_templates"
+      failed
       onRetry={onRetry}
     />,
   );
   expect(screen.getByText(/could not be loaded/i)).toBeInTheDocument();
-  expect(screen.getByText("no such table: frame_templates")).toBeInTheDocument();
   // The group headings are what make a blank screen read as an answer.
   expect(screen.queryByRole("heading", { name: /built-in/i })).not.toBeInTheDocument();
   await userEvent.click(screen.getByRole("button", { name: /try again/i }));
@@ -65,7 +64,7 @@ it("shows the error in place of the groups, so an empty picker is never mistaken
 });
 
 it("shows the groups, not an error, when there is no error", () => {
-  render(<TemplatePicker templates={templates} onPick={vi.fn()} error={null} />);
+  render(<TemplatePicker templates={templates} onPick={vi.fn()} failed={false} />);
   expect(screen.getByRole("heading", { name: /built-in/i })).toBeInTheDocument();
   expect(screen.queryByText(/could not be loaded/i)).not.toBeInTheDocument();
 });

@@ -175,7 +175,8 @@ type PublishRequest struct {
 //
 // Errors are connect errors so both front doors can map them without
 // translation: PermissionDenied, InvalidArgument (with field violations),
-// AlreadyExists, NotFound, Internal.
+// AlreadyExists (with a field violation naming "name" when the name is taken,
+// and none when a version is republished), NotFound, Internal.
 //
 // PublishDoc itself publishes with no concurrency check and no template.
 func (s *Service) PublishDoc(ctx context.Context, doc *Doc, changelog string, intent PublishIntent) (*framesv1.Frame, *framesv1.FrameVersion, error) {

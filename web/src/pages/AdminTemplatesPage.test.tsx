@@ -230,7 +230,9 @@ it("says why the edit form is missing when its row cannot be read", async () => 
   await userEvent.click(orgRow.querySelector('[data-testid="edit-template"]') as HTMLElement);
 
   expect(await screen.findByText(/could not be loaded/i)).toBeInTheDocument();
-  expect(screen.getByText('no template "t1"')).toBeInTheDocument();
+  // A fixed sentence rather than the server's, matching this page's own list
+  // error and every other read failure in the app.
+  expect(screen.queryByText(/no template/i)).not.toBeInTheDocument();
   expect(screen.queryByLabelText(/^title$/i)).not.toBeInTheDocument();
 });
 
@@ -245,4 +247,36 @@ it("says so when a stored template's content cannot be decoded", async () => {
 
   expect(await screen.findByText(/could not be read/i)).toBeInTheDocument();
   expect(screen.queryByLabelText(/^title$/i)).not.toBeInTheDocument();
+});
+
+it("keeps an in-progress edit when a later row fetch fails", async () => {
+  // Same rule as the authoring form: once the dialog has a row and the admin
+  // is typing, a failed refetch must not replace their unsaved edit with an
+  // error screen.
+  const { ConnectError, Code } = await import("@connectrpc/connect");
+  let failing = false;
+  useQueryMock.mockImplementation((method: unknown) => {
+    if (method === FrameService.method.getFrameTemplate) {
+      return {
+        isLoading: false,
+        isFetchedAfterMount: true,
+        data: { template: existingOrgTemplate },
+        error: failing ? new ConnectError("connection lost", Code.Unavailable) : null,
+      };
+    }
+    return { isLoading: false, error: null, isFetchedAfterMount: true, data: templateListData };
+  });
+
+  const { rerender } = renderPage();
+  const orgRow = screen.getByText("Our House Style").closest("li, tr")!;
+  await userEvent.click(orgRow.querySelector('[data-testid="edit-template"]') as HTMLElement);
+  const titleInput = await screen.findByLabelText(/^title$/i);
+  await userEvent.clear(titleInput);
+  await userEvent.type(titleInput, "Renamed Style");
+
+  failing = true;
+  rerender(<MemoryRouter><AdminTemplatesPage /></MemoryRouter>);
+
+  expect(screen.getByLabelText(/^title$/i)).toHaveValue("Renamed Style");
+  expect(screen.queryByText(/could not be loaded/i)).not.toBeInTheDocument();
 });

@@ -235,7 +235,12 @@ func validateTemplateInput(title, description string, prefill []byte, rules map[
 		// author was handed as ready to fill in. Held to the same content rules
 		// a Frame is, at the boundary where the bytes arrive.
 		if errs := contentErrors(&decodedPrefill.Slots, decodedPrefill.Extends); len(errs) > 0 {
-			return templateInput{}, connect.NewError(connect.CodeInvalidArgument, &ValidationError{Errors: errs})
+			// Through violationErr like every other ValidationError that crosses
+			// this boundary (service.go), so the field paths contentErrors just
+			// produced reach the client as a detail rather than only as a
+			// flattened message. A client that maps violations onto inputs can
+			// then point at the offending row.
+			return templateInput{}, violationErr(&ValidationError{Errors: errs})
 		}
 	}
 	decoded, err := fieldRulesFromProto(rules)
