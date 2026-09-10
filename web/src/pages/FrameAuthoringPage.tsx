@@ -9,7 +9,15 @@ import { FrameService } from "@gen/frames/v1/frame_service_pb";
 import { authoringFormSchema, emptyFrameDoc, suggestNextVersion } from "@/lib/authoring-schema";
 import { serializeFrameDoc, parseFrameContent } from "@/lib/frame-yaml";
 import { SLOT_SECTIONS, sectionHasContent, type SlotSectionDef } from "@/lib/slot-sections";
+import {
+  seededSections,
+  isRequiredSection,
+  sectionHint,
+  publishTemplateID,
+  type TemplateRules,
+} from "@/lib/templates";
 import { mapPublishError } from "@/lib/publish-errors";
+import { freshData } from "@/lib/query-freshness";
 import { type AuthoringForm, formToDoc, docToForm } from "@/components/form/form-model";
 import { ExtendsEditor } from "@/components/form/ExtendsEditor";
 import { ExcludesEditor } from "@/components/form/ExcludesEditor";
@@ -20,8 +28,10 @@ import { MarkdownSourceEditor } from "@/components/form/MarkdownSourceEditor";
 import { DocMetadataHeader } from "@/components/document/DocMetadataHeader";
 import { AddSectionMenu } from "@/components/document/AddSectionMenu";
 import { PublishDialog } from "@/components/document/PublishDialog";
+import { TemplatePicker } from "@/components/frame/TemplatePicker";
 import { Button } from "@/components/ui/button";
-import { Alert } from "@/components/ui/alert";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Alert, AlertTitle, AlertDescription } from "@/components/ui/alert";
 import {
   DropdownMenu,
   DropdownMenuTrigger,
@@ -37,29 +47,40 @@ const decode = (b: Uint8Array) => new TextDecoder().decode(b);
 // One editable section of the document: heading, the editor for its content
 // shape, and a remove control. Sections the author has not added simply are
 // not on the page - the document editor shows the document, not the schema.
+//
+// `hint` overrides `def.hint` when a template's rule carries a note for this
+// slot, and `removable` is false for a template-required section: deleting
+// one guarantees a publish failure, so the control is withheld rather than
+// offered and then punished.
 function SectionEditor({
   def,
+  hint,
+  removable,
   onRemove,
 }: {
   def: SlotSectionDef;
+  hint: string;
+  removable: boolean;
   onRemove: () => void;
 }) {
   return (
     <section className="group space-y-2 border-t border-border pt-4">
       <div className="flex items-center justify-between">
         <h2 className="text-lg font-semibold">{def.label}</h2>
-        <Button
-          type="button"
-          variant="ghost"
-          size="sm"
-          className="text-muted-foreground opacity-0 transition-opacity group-focus-within:opacity-100 group-hover:opacity-100"
-          onClick={onRemove}
-        >
-          <X className="size-4" />
-          Remove section
-        </Button>
+        {removable && (
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            className="text-muted-foreground opacity-0 transition-opacity group-focus-within:opacity-100 group-hover:opacity-100"
+            onClick={onRemove}
+          >
+            <X className="size-4" />
+            Remove section
+          </Button>
+        )}
       </div>
-      <p className="text-xs text-muted-foreground">{def.hint}</p>
+      <p className="text-xs text-muted-foreground">{hint}</p>
       {def.kind === "terms" && <TerminologyEditor />}
       {def.kind === "list" && (
         <ListEditor name={def.path as `slots.${"rules" | "skills" | "prompts"}`} label={def.label} />
@@ -72,7 +93,7 @@ function SectionEditor({
 export function FrameAuthoringPage({ mode }: { mode: "create" | "edit" }) {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [formError, setFormError] = useState<string | null>(null);
 
   const methods = useForm<AuthoringForm>({
@@ -91,6 +112,33 @@ export function FrameAuthoringPage({ mode }: { mode: "create" | "edit" }) {
   );
   const [markdownSource, setMarkdownSource] = useState("");
   const [markdownErrors, setMarkdownErrors] = useState<string[]>([]);
+
+  const templateID = searchParams.get("template") ?? "";
+  // The picker is the first screen of the create flow. `?import=1` bypasses it:
+  // that path already has its source document, so asking for a starting shape
+  // would be nonsense. Edit mode never sees it - templates apply at creation.
+  const choosingTemplate = mode === "create" && !importing && templateID === "";
+
+  // Fetched only while the picker screen can actually render: edit mode and
+  // the `?import=1` path never show it, so there is nothing to list for.
+  const templates = useQuery(
+    FrameService.method.listFrameTemplates,
+    {},
+    { enabled: choosingTemplate },
+  );
+  // Fetched only once a template is chosen, and only on the flow that will
+  // send its id: publishTemplateID owns that rule, so the fetch and the publish
+  // cannot disagree about whether this template matters. The import path and
+  // edit mode send nothing, so they ask for nothing.
+  const publishesTemplate = publishTemplateID({ mode, importing, templateID }) !== "";
+  const chosen = useQuery(
+    FrameService.method.getFrameTemplate,
+    { id: templateID },
+    // Paired with freshData() on the seed below; see that helper for why
+    // neither half works alone.
+    { enabled: publishesTemplate, refetchOnMount: "always" },
+  );
+  const rules: TemplateRules = (chosen.data?.template?.fieldRules ?? {}) as TemplateRules;
 
   // Sections the author added this session; content-bearing sections are
   // always visible regardless (which covers the async edit-mode prefill).
@@ -117,6 +165,58 @@ export function FrameAuthoringPage({ mode }: { mode: "create" | "edit" }) {
     // reset only when the loaded version changes
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mode, editQ.data?.version?.digest]);
+
+  // Keyed per template, because `?template=` is URL state and this page does
+  // not remount when it changes.
+  const [seededFor, setSeededFor] = useState<string | null>(null);
+  // The template whose stored prefill would not decode. Keyed by id for the
+  // same reason, so picking another template does not inherit its failure.
+  const [unreadableFor, setUnreadableFor] = useState<string | null>(null);
+
+  // Seeds the form once the chosen template arrives. This mirrors the edit
+  // path exactly: getFrameTemplate -> parseFrameContent -> docToForm are the
+  // same three steps that open an existing Frame, so there is no second
+  // parsing path to keep in step.
+  // Read here rather than inside the effect, so the effect depends on the value
+  // it uses instead of on the three query fields freshData happens to read.
+  const freshTemplate = freshData(chosen)?.template;
+  useEffect(() => {
+    // publishesTemplate, not a fourth spelling of the same condition: the
+    // fetch, the seed and every publish read one rule.
+    if (!publishesTemplate || seededFor === templateID) return;
+    if (!freshTemplate) return;
+    try {
+      // The prefill is the canonical YAML subset the backend produced, so it
+      // goes through the same parse the edit flow uses.
+      const doc = parseFrameContent(freshTemplate.prefill);
+      methods.reset(docToForm({ ...doc, version: "1.0.0" }, ""));
+      // Sections the template asks for are on the page from the start rather
+      // than behind "+ Add section": the point of a template is that the
+      // author does not have to know which sections this kind of Frame needs.
+      // Unioned with whatever the prefill itself populated, so prefilled
+      // content is never hidden behind a collapsed section.
+      const fromRules = seededSections(rules).map((def) => def.key);
+      const fromPrefill = SLOT_SECTIONS.filter((def) => sectionHasContent(def, doc.slots)).map(
+        (def) => def.key,
+      );
+      // This is a callback reacting to an external system's data arriving
+      // (the template query resolving), which is the effect rule's own
+      // sanctioned use of setState-in-effect; the heuristic cannot tell that
+      // apart from deriving state from other state, hence the disable.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setAdded(new Set([...fromRules, ...fromPrefill]));
+      // Latched inside the try: a prefill that did not decode seeded nothing,
+      // and calling it seeded would leave the author on a defaults-only form
+      // with the id still in the URL and still sent by every publish.
+      setSeededFor(templateID);
+    } catch {
+      setUnreadableFor(templateID);
+    }
+    // `rules` is deliberately absent: it comes from the same row as
+    // freshTemplate, and listing it would re-run this effect on every identity
+    // change.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [freshTemplate, publishesTemplate, templateID, seededFor]);
 
   const slots = useWatch({ control: methods.control, name: "slots" }) as
     | AuthoringForm["slots"]
@@ -230,23 +330,28 @@ export function FrameAuthoringPage({ mode }: { mode: "create" | "edit" }) {
 
   // A publish failure closes the dialog only when the problem lives outside
   // it: a version conflict must be fixed where the version input is.
-  const onSubmit = (form: AuthoringForm) => {
+  const onSubmit = async (form: AuthoringForm) => {
     setFormError(null);
     const content = encode(serializeFrameDoc(formToDoc(form)));
-    publish.mutate(
-      { content, changelog: form.changelog },
-      {
-        onSuccess: () => afterPublish(form.name),
-        onError: (err: unknown) => {
-          const { fieldErrors, formError: fe } = mapPublishError(err);
-          for (const [path, message] of Object.entries(fieldErrors)) {
-            methods.setError(path as never, { type: "server", message });
-          }
-          setFormError(fe);
-          if (!fieldErrors.version) setPublishOpen(false);
-        },
-      },
-    );
+    try {
+      await publish.mutateAsync({
+        content,
+        changelog: form.changelog,
+        // publishTemplateID owns this rule (create only, and only when a
+        // template was actually chosen) and is unit-tested on its own; the
+        // page must call it rather than re-implement the condition inline,
+        // or the two can drift.
+        templateId: publishTemplateID({ mode, importing, templateID }),
+      });
+      afterPublish(form.name);
+    } catch (err) {
+      const { fieldErrors, formError: fe } = mapPublishError(err);
+      for (const [path, message] of Object.entries(fieldErrors)) {
+        methods.setError(path as never, { type: "server", message });
+      }
+      setFormError(fe);
+      if (!fieldErrors.version) setPublishOpen(false);
+    }
   };
 
   // Invalid form on publish: keep the dialog open only when the version itself
@@ -267,7 +372,13 @@ export function FrameAuthoringPage({ mode }: { mode: "create" | "edit" }) {
       {
         onSuccess: (res) => {
           publish.mutate(
-            { content: res.yaml, changelog: methods.getValues("changelog") },
+            {
+              content: res.yaml,
+              changelog: methods.getValues("changelog"),
+              // Same rule as the document path: the check an author opted into
+              // must not depend on which editor tab they published from.
+              templateId: publishTemplateID({ mode, importing, templateID }),
+            },
             {
               onSuccess: () => {
                 let published = methods.getValues("name");
@@ -299,6 +410,80 @@ export function FrameAuthoringPage({ mode }: { mode: "create" | "edit" }) {
   };
 
   const title = mode === "edit" ? "Edit Frame" : importing ? "Import Frame" : "New Frame";
+
+  if (choosingTemplate) {
+    return (
+      <TemplatePicker
+        templates={templates.data?.templates ?? []}
+        // A failed list would otherwise draw the heading and no cards, which
+        // reads as "your org has no templates" rather than "the request
+        // failed" - and the built-ins are compiled in, so it is never true.
+        failed={templates.error !== null}
+        onRetry={() => void templates.refetch()}
+        // The choice goes in the URL rather than component state, so it is
+        // linkable and survives a reload, matching how `?import=1` works.
+        onPick={(id) => setSearchParams({ template: id }, { replace: true })}
+      />
+    );
+  }
+
+  // A template that cannot be read is a dead end, not a blank form: the id
+  // stays in the URL and every publish carries it, so the server refuses each
+  // one for a template the author cannot see. Say so, and offer the two ways
+  // out - retry, or go back and pick another. Both failures land here: the
+  // fetch failing, and its stored content not decoding.
+  //
+  // Only while there is nothing to show. Once the prefill has seeded a form the
+  // author is typing into, this template is demonstrably readable and the id is
+  // demonstrably good; a later failure is a refetch (reconnect, a token
+  // refresh, a delete in another session), and replacing the form over one
+  // would throw away unsaved work to report a problem that no longer blocks
+  // anything.
+  if ((chosen.error || unreadableFor === templateID) && seededFor !== templateID) {
+    return (
+      <div className="mx-auto max-w-3xl space-y-4 py-6">
+        <Alert variant="destructive">
+          <AlertTitle>This template could not be loaded</AlertTitle>
+          <AlertDescription>
+            {chosen.error
+              ? "It may have been deleted, it may belong to another organization, or the registry could not be reached."
+              : "Its starting content could not be read."}
+          </AlertDescription>
+        </Alert>
+        <div className="flex gap-2">
+          {/* Only for a failed fetch. A prefill that will not decode fails the
+              same way every time - the stored bytes are the input - so a retry
+              there would just redraw this screen. */}
+          {chosen.error && (
+            <Button type="button" onClick={() => void chosen.refetch()}>
+              Try again
+            </Button>
+          )}
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => setSearchParams({}, { replace: true })}
+          >
+            Choose a different template
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
+  // A form that is about to be seeded must not be editable first. `reset`
+  // replaces form state wholesale, and `refetchOnMount: "always"` guarantees
+  // the seed arrives a round trip after this render - so anything the author
+  // typed in between would vanish. The template edit dialog withholds its form
+  // for the same reason.
+  if (publishesTemplate && seededFor !== templateID) {
+    return (
+      <div className="mx-auto max-w-3xl space-y-4 py-6">
+        <Skeleton className="h-8 w-64" />
+        <Skeleton className="h-64 w-full" />
+      </div>
+    );
+  }
 
   return (
     <FormProvider {...methods}>
@@ -363,7 +548,13 @@ export function FrameAuthoringPage({ mode }: { mode: "create" | "edit" }) {
             </div>
 
             {visibleSections.map((def) => (
-              <SectionEditor key={def.key} def={def} onRemove={() => removeSection(def)} />
+              <SectionEditor
+                key={def.key}
+                def={def}
+                hint={sectionHint(rules, def)}
+                removable={!isRequiredSection(rules, def.key)}
+                onRemove={() => removeSection(def)}
+              />
             ))}
 
             <div className="border-t border-border pt-4">

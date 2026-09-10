@@ -65,8 +65,29 @@ func Validate(doc *Doc) error {
 		add("visibility", "must be one of "+strings.Join(VisibilityValues, ", "))
 	}
 
+	errs = append(errs, contentErrors(&doc.Slots, doc.Extends)...)
+
+	if len(errs) > 0 {
+		return &ValidationError{Errors: errs}
+	}
+	return nil
+}
+
+// contentErrors checks the part of a document that is not identity: the ten
+// slots and the parents it declares.
+//
+// Split out of Validate so a template prefill can be held to the same rules.
+// A prefill is exactly this part of a document - it must not carry identity at
+// all (see ParsePrefill) - and it is spliced verbatim into an author's
+// scaffold, so content that no publish would accept has to be refused where the
+// template is saved (validateTemplateInput) rather than where a Frame is
+// published from it.
+func contentErrors(slots *Slots, extends []ExtendRef) []FieldError {
+	var errs []FieldError
+	add := func(path, msg string) { errs = append(errs, FieldError{Path: path, Message: msg}) }
+
 	seenTerm := map[string]bool{}
-	for i, term := range doc.Slots.Terminology {
+	for i, term := range slots.Terminology {
 		if strings.TrimSpace(term.Term) == "" {
 			add(fmt.Sprintf("slots.terminology[%d].term", i), "must not be empty")
 		} else if seenTerm[term.Term] {
@@ -85,11 +106,11 @@ func Validate(doc *Doc) error {
 			}
 		}
 	}
-	checkList("rules", doc.Slots.Rules)
-	checkList("skills", doc.Slots.Skills)
-	checkList("prompts", doc.Slots.Prompts)
+	checkList("rules", slots.Rules)
+	checkList("skills", slots.Skills)
+	checkList("prompts", slots.Prompts)
 
-	for i, e := range doc.Extends {
+	for i, e := range extends {
 		if !strings.Contains(e.Ref, "/") {
 			add(fmt.Sprintf("extends[%d].ref", i), "must be org_slug/frame_name")
 		}
@@ -97,9 +118,5 @@ func Validate(doc *Doc) error {
 			add(fmt.Sprintf("extends[%d].version", i), "must be pinned to a version")
 		}
 	}
-
-	if len(errs) > 0 {
-		return &ValidationError{Errors: errs}
-	}
-	return nil
+	return errs
 }

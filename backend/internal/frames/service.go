@@ -116,10 +116,20 @@ func (s *Service) PublishFrame(ctx context.Context, req *connect.Request[framesv
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInvalidArgument, err)
 	}
+	intent := PublishUpsert
+	if req.Msg.TemplateId != "" {
+		// Naming a template asserts this is a new Frame. A template is copied
+		// once at creation, so applying one to a Frame that already exists is a
+		// mistake rather than an update, and the existing create-intent branch
+		// below reports it as AlreadyExists with a message that says so.
+		intent = PublishCreate
+	}
 	// The submitted bytes are stored verbatim rather than re-marshalled from
 	// doc: an author's comments and formatting survive, and the digest stays
 	// stable for a document that did not change.
-	frame, version, err := s.publish(ctx, caller, doc, req.Msg.Content, req.Msg.Changelog, PublishUpsert, "")
+	frame, version, err := s.publish(ctx, caller, doc, req.Msg.Content, PublishRequest{
+		Changelog: req.Msg.Changelog, Intent: intent, TemplateID: req.Msg.TemplateId,
+	})
 	if err != nil {
 		return nil, err
 	}
@@ -139,6 +149,24 @@ func (s *Service) authorizePublish(ctx context.Context) (rbac.Caller, error) {
 	return caller, nil
 }
 
+// PublishRequest carries what a publish needs beyond the document itself. A
+// struct rather than more positional parameters: publish already takes seven,
+// and the same reasoning behind the Option type on Service applies here - adding
+// an input should not churn every call site.
+type PublishRequest struct {
+	Changelog string
+	Intent    PublishIntent
+	// BaseVersion is the version the caller read before composing doc. Empty
+	// means the caller did not check, which is the unguarded behaviour the
+	// Connect RPC has always had.
+	BaseVersion string
+	// TemplateID names the template this Frame is being created from. It is used
+	// to check that template's required slots and is then discarded: nothing is
+	// recorded on the Frame, and a later publish is never re-checked. Empty means
+	// no template and no checks.
+	TemplateID string
+}
+
 // PublishDoc validates and publishes doc as a new version, enforcing RBAC:
 // creating a frame needs the publisher or admin role, and writing to an
 // existing frame needs edit permission on it. It is the single write path
@@ -147,21 +175,33 @@ func (s *Service) authorizePublish(ctx context.Context) (rbac.Caller, error) {
 //
 // Errors are connect errors so both front doors can map them without
 // translation: PermissionDenied, InvalidArgument (with field violations),
-// AlreadyExists, NotFound, Internal.
+// AlreadyExists (with a field violation naming "name" when the name is taken,
+// and none when a version is republished), NotFound, Internal.
+//
+// PublishDoc itself publishes with no concurrency check and no template.
 func (s *Service) PublishDoc(ctx context.Context, doc *Doc, changelog string, intent PublishIntent) (*framesv1.Frame, *framesv1.FrameVersion, error) {
-	return s.PublishDocFrom(ctx, doc, changelog, intent, "")
+	return s.PublishDocRequest(ctx, doc, PublishRequest{Changelog: changelog, Intent: intent})
 }
 
-// PublishDocFrom is PublishDoc with a concurrency check. baseVersion is the
-// version the caller read before composing doc; the publish is rejected with
-// CodeFailedPrecondition when the frame has moved on since. An empty
-// baseVersion means the caller did not check, which is the unguarded behaviour
-// the Connect RPC has always had.
+// PublishDocFrom is PublishDoc with a concurrency check. See PublishRequest.
 //
 // A read-modify-write without this check silently loses one of two concurrent
 // updates: both merge onto the same base, both pick different version strings
 // so nothing collides, and both report success.
 func (s *Service) PublishDocFrom(ctx context.Context, doc *Doc, changelog string, intent PublishIntent, baseVersion string) (*framesv1.Frame, *framesv1.FrameVersion, error) {
+	return s.PublishDocRequest(ctx, doc, PublishRequest{
+		Changelog: changelog, Intent: intent, BaseVersion: baseVersion,
+	})
+}
+
+// PublishDocRequest is for a caller that only has a decoded Doc, not the
+// author's original bytes: it re-marshals doc into canonical form itself,
+// which loses whatever comments and formatting the author's own bytes had.
+// Only PublishFrame (the Connect RPC handler) preserves those exactly, because
+// it passes req.Msg.Content straight into publish instead of going through
+// here. A future caller that needs the author's bytes to survive - the CLI
+// included - must route through PublishFrame, not this function.
+func (s *Service) PublishDocRequest(ctx context.Context, doc *Doc, req PublishRequest) (*framesv1.Frame, *framesv1.FrameVersion, error) {
 	caller, err := s.authorizePublish(ctx)
 	if err != nil {
 		return nil, nil, err
@@ -170,16 +210,43 @@ func (s *Service) PublishDocFrom(ctx context.Context, doc *Doc, changelog string
 	if err != nil {
 		return nil, nil, connect.NewError(connect.CodeInternal, err)
 	}
-	return s.publish(ctx, caller, doc, content, changelog, intent, baseVersion)
+	return s.publish(ctx, caller, doc, content, req)
 }
 
 // publish is the shared implementation, called only with a caller that
 // authorizePublish has already cleared. content is the canonical stored form of
 // doc; callers holding the author's original bytes pass those so they are not
 // normalized away.
-func (s *Service) publish(ctx context.Context, caller rbac.Caller, doc *Doc, content []byte, changelog string, intent PublishIntent, baseVersion string) (*framesv1.Frame, *framesv1.FrameVersion, error) {
+func (s *Service) publish(ctx context.Context, caller rbac.Caller, doc *Doc, content []byte, req PublishRequest) (*framesv1.Frame, *framesv1.FrameVersion, error) {
+	// Schema violations are collected rather than returned straight away, so
+	// they can be reported together with the template's. An author who fixes
+	// three schema errors and only then discovers two more required sections has
+	// been made to do the work twice.
+	var fieldErrs []FieldError
 	if verr := Validate(doc); verr != nil {
-		return nil, nil, violationErr(verr)
+		var ve *ValidationError
+		if !errors.As(verr, &ve) {
+			return nil, nil, violationErr(verr)
+		}
+		fieldErrs = ve.Errors
+	}
+	if req.TemplateID != "" {
+		tmpl, err := s.lookupTemplate(ctx, caller, req.TemplateID)
+		if err != nil {
+			// A template the caller cannot use makes the publish request wrong,
+			// not the template missing: what is being rejected is the Frame they
+			// asked to create. Another org's id lands here too, and reports the
+			// same thing an unknown id does so existence does not leak.
+			if code := connect.CodeOf(err); code == connect.CodeNotFound || code == connect.CodeInvalidArgument {
+				return nil, nil, connect.NewError(connect.CodeInvalidArgument,
+					fmt.Errorf("unknown template_id %q", req.TemplateID))
+			}
+			return nil, nil, err
+		}
+		fieldErrs = append(fieldErrs, tmpl.Check(doc)...)
+	}
+	if len(fieldErrs) > 0 {
+		return nil, nil, violationErr(&ValidationError{Errors: fieldErrs})
 	}
 	// Enforced here rather than at either entry point so the Connect API and the
 	// MCP tools share one limit. It matters more now that an LLM can author a
@@ -201,10 +268,10 @@ func (s *Service) publish(ctx context.Context, caller rbac.Caller, doc *Doc, con
 		return nil, nil, connect.NewError(connect.CodeInternal, err)
 	}
 	switch {
-	case isNew && intent == PublishUpdate:
+	case isNew && req.Intent == PublishUpdate:
 		return nil, nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("no frame named %q to update", doc.Name))
-	case !isNew && intent == PublishCreate:
-		return nil, nil, connect.NewError(connect.CodeAlreadyExists, fmt.Errorf("a frame named %q already exists; update it instead", doc.Name))
+	case !isNew && req.Intent == PublishCreate:
+		return nil, nil, nameTakenErr(doc.Name)
 	}
 
 	now := timestamppb.Now()
@@ -223,10 +290,10 @@ func (s *Service) publish(ctx context.Context, caller rbac.Caller, doc *Doc, con
 		if !allowed {
 			return nil, nil, connect.NewError(connect.CodePermissionDenied, errors.New("edit permission required"))
 		}
-		if baseVersion != "" && existing.LatestVersion != baseVersion {
+		if req.BaseVersion != "" && existing.LatestVersion != req.BaseVersion {
 			return nil, nil, connect.NewError(connect.CodeFailedPrecondition, fmt.Errorf(
 				"frame %q has moved on: you based this change on %s but the latest is %s; re-read it and apply your change again",
-				doc.Name, baseVersion, existing.LatestVersion))
+				doc.Name, req.BaseVersion, existing.LatestVersion))
 		}
 		// latest_version must only move forward. Otherwise publishing an older
 		// version silently unpublishes newer content: every default read, and
@@ -261,7 +328,7 @@ func (s *Service) publish(ctx context.Context, caller rbac.Caller, doc *Doc, con
 
 	digest := sha256.Sum256(content)
 	version := &framesv1.FrameVersion{
-		Version: doc.Version, Changelog: changelog, Digest: hex.EncodeToString(digest[:]),
+		Version: doc.Version, Changelog: req.Changelog, Digest: hex.EncodeToString(digest[:]),
 		SizeBytes: int64(len(content)), PublishedBy: caller.Subject, PublishedAt: now,
 		Content: content,
 	}
@@ -656,6 +723,24 @@ func violationErr(err error) *connect.Error {
 		if detail, derr := connect.NewErrorDetail(fv); derr == nil {
 			cerr.AddDetail(detail)
 		}
+	}
+	return cerr
+}
+
+// nameTakenErr reports a create-intent publish onto a name that already exists.
+//
+// The detail matters as much as the code here: a republished version is also
+// AlreadyExists, so a client that has only the code and the message text cannot
+// tell the two apart, and the one input the author must change differs between
+// them. Naming the field lets a client put the message where the fix is.
+func nameTakenErr(name string) *connect.Error {
+	msg := fmt.Sprintf("a frame named %q already exists; update it instead", name)
+	cerr := connect.NewError(connect.CodeAlreadyExists, errors.New(msg))
+	fv := &framesv1.FieldViolations{
+		Violations: []*framesv1.FieldViolation{{Field: "name", Message: msg}},
+	}
+	if detail, derr := connect.NewErrorDetail(fv); derr == nil {
+		cerr.AddDetail(detail)
 	}
 	return cerr
 }

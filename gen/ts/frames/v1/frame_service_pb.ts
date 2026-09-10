@@ -4,7 +4,7 @@
 
 import type { GenFile, GenMessage, GenService } from "@bufbuild/protobuf/codegenv2";
 import { fileDesc, messageDesc, serviceDesc } from "@bufbuild/protobuf/codegenv2";
-import type { Frame, FrameSummary, FrameVersion, FrameVersionSummary, Membership, Org, ParentRef, Permissions } from "./frame_pb";
+import type { FieldRule, Frame, FrameSummary, FrameTemplate, FrameTemplateSummary, FrameVersion, FrameVersionSummary, Membership, Org, ParentRef, Permissions } from "./frame_pb";
 import { file_frames_v1_frame } from "./frame_pb";
 import type { Message } from "@bufbuild/protobuf";
 
@@ -12,7 +12,7 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file frames/v1/frame_service.proto.
  */
 export const file_frames_v1_frame_service: GenFile = /*@__PURE__*/
-  fileDesc("Ch1mcmFtZXMvdjEvZnJhbWVfc2VydmljZS5wcm90bxIJZnJhbWVzLnYxIjkKE1B1Ymxpc2hGcmFtZVJlcXVlc3QSDwoHY29udGVudBgBIAEoDBIRCgljaGFuZ2Vsb2cYAiABKAkiYQoUUHVibGlzaEZyYW1lUmVzcG9uc2USHwoFZnJhbWUYASABKAsyEC5mcmFtZXMudjEuRnJhbWUSKAoHdmVyc2lvbhgCIAEoCzIXLmZyYW1lcy52MS5GcmFtZVZlcnNpb24iEwoRTGlzdEZyYW1lc1JlcXVlc3QiUQoSTGlzdEZyYW1lc1Jlc3BvbnNlEicKBmZyYW1lcxgBIAMoCzIXLmZyYW1lcy52MS5GcmFtZVN1bW1hcnkSEgoKY2FuX2NyZWF0ZRgCIAEoCCJCCg9HZXRGcmFtZVJlcXVlc3QSEAoIb3JnX3NsdWcYASABKAkSDAoEbmFtZRgCIAEoCRIPCgd2ZXJzaW9uGAMgASgJIsMBChBHZXRGcmFtZVJlc3BvbnNlEh8KBWZyYW1lGAEgASgLMhAuZnJhbWVzLnYxLkZyYW1lEigKB3ZlcnNpb24YAiABKAsyFy5mcmFtZXMudjEuRnJhbWVWZXJzaW9uEiUKB2V4dGVuZHMYAyADKAsyFC5mcmFtZXMudjEuUGFyZW50UmVmEhAKCGV4Y2x1ZGVzGAQgAygJEisKC3Blcm1pc3Npb25zGAUgASgLMhYuZnJhbWVzLnYxLlBlcm1pc3Npb25zIkYKE1Jlc29sdmVGcmFtZVJlcXVlc3QSEAoIb3JnX3NsdWcYASABKAkSDAoEbmFtZRgCIAEoCRIPCgd2ZXJzaW9uGAMgASgJIjAKFFJlc29sdmVGcmFtZVJlc3BvbnNlEhgKEHJlc29sdmVkX2NvbnRlbnQYASABKAwiDgoMR2V0TWVSZXF1ZXN0Im4KDUdldE1lUmVzcG9uc2USDwoHc3ViamVjdBgBIAEoCRINCgVlbWFpbBgCIAEoCRIbCgNvcmcYAyABKAsyDi5mcmFtZXMudjEuT3JnEgwKBHJvbGUYBCABKAkSEgoKY2FuX2NyZWF0ZRgFIAEoCCI6ChhMaXN0RnJhbWVWZXJzaW9uc1JlcXVlc3QSEAoIb3JnX3NsdWcYASABKAkSDAoEbmFtZRgCIAEoCSJNChlMaXN0RnJhbWVWZXJzaW9uc1Jlc3BvbnNlEjAKCHZlcnNpb25zGAEgAygLMh4uZnJhbWVzLnYxLkZyYW1lVmVyc2lvblN1bW1hcnkiMAoORmllbGRWaW9sYXRpb24SDQoFZmllbGQYASABKAkSDwoHbWVzc2FnZRgCIAEoCSJACg9GaWVsZFZpb2xhdGlvbnMSLQoKdmlvbGF0aW9ucxgBIAMoCzIZLmZyYW1lcy52MS5GaWVsZFZpb2xhdGlvbiJDChNDb252ZXJ0RnJhbWVSZXF1ZXN0Eg4KBHlhbWwYASABKAxIABISCghtYXJrZG93bhgCIAEoDEgAQggKBnNvdXJjZSI2ChRDb252ZXJ0RnJhbWVSZXNwb25zZRIMCgR5YW1sGAEgASgMEhAKCG1hcmtkb3duGAIgASgMIkMKEkRlbGV0ZUZyYW1lUmVxdWVzdBIQCghvcmdfc2x1ZxgBIAEoCRIMCgRuYW1lGAIgASgJEg0KBWZvcmNlGAMgASgIIhUKE0RlbGV0ZUZyYW1lUmVzcG9uc2UiKAoNRGVsZXRlQmxvY2tlZBIXCg9ibG9ja2luZ19mcmFtZXMYASADKAkiFwoVTGlzdE9yZ01lbWJlcnNSZXF1ZXN0IkAKFkxpc3RPcmdNZW1iZXJzUmVzcG9uc2USJgoHbWVtYmVycxgBIAMoCzIVLmZyYW1lcy52MS5NZW1iZXJzaGlwIjIKE0FkZE9yZ01lbWJlclJlcXVlc3QSDQoFZW1haWwYASABKAkSDAoEcm9sZRgCIAEoCSI9ChRBZGRPcmdNZW1iZXJSZXNwb25zZRIlCgZtZW1iZXIYASABKAsyFS5mcmFtZXMudjEuTWVtYmVyc2hpcCJFChRTZXRNZW1iZXJSb2xlUmVxdWVzdBIQCgh1c2VyX3N1YhgBIAEoCRINCgVlbWFpbBgCIAEoCRIMCgRyb2xlGAMgASgJIj4KFVNldE1lbWJlclJvbGVSZXNwb25zZRIlCgZtZW1iZXIYASABKAsyFS5mcmFtZXMudjEuTWVtYmVyc2hpcCI5ChZSZW1vdmVPcmdNZW1iZXJSZXF1ZXN0EhAKCHVzZXJfc3ViGAEgASgJEg0KBWVtYWlsGAIgASgJIhkKF1JlbW92ZU9yZ01lbWJlclJlc3BvbnNlMtEHCgxGcmFtZVNlcnZpY2USTwoMUHVibGlzaEZyYW1lEh4uZnJhbWVzLnYxLlB1Ymxpc2hGcmFtZVJlcXVlc3QaHy5mcmFtZXMudjEuUHVibGlzaEZyYW1lUmVzcG9uc2USSQoKTGlzdEZyYW1lcxIcLmZyYW1lcy52MS5MaXN0RnJhbWVzUmVxdWVzdBodLmZyYW1lcy52MS5MaXN0RnJhbWVzUmVzcG9uc2USQwoIR2V0RnJhbWUSGi5mcmFtZXMudjEuR2V0RnJhbWVSZXF1ZXN0GhsuZnJhbWVzLnYxLkdldEZyYW1lUmVzcG9uc2USTwoMUmVzb2x2ZUZyYW1lEh4uZnJhbWVzLnYxLlJlc29sdmVGcmFtZVJlcXVlc3QaHy5mcmFtZXMudjEuUmVzb2x2ZUZyYW1lUmVzcG9uc2USOgoFR2V0TWUSFy5mcmFtZXMudjEuR2V0TWVSZXF1ZXN0GhguZnJhbWVzLnYxLkdldE1lUmVzcG9uc2USXgoRTGlzdEZyYW1lVmVyc2lvbnMSIy5mcmFtZXMudjEuTGlzdEZyYW1lVmVyc2lvbnNSZXF1ZXN0GiQuZnJhbWVzLnYxLkxpc3RGcmFtZVZlcnNpb25zUmVzcG9uc2USTAoLRGVsZXRlRnJhbWUSHS5mcmFtZXMudjEuRGVsZXRlRnJhbWVSZXF1ZXN0Gh4uZnJhbWVzLnYxLkRlbGV0ZUZyYW1lUmVzcG9uc2USTwoMQ29udmVydEZyYW1lEh4uZnJhbWVzLnYxLkNvbnZlcnRGcmFtZVJlcXVlc3QaHy5mcmFtZXMudjEuQ29udmVydEZyYW1lUmVzcG9uc2USVQoOTGlzdE9yZ01lbWJlcnMSIC5mcmFtZXMudjEuTGlzdE9yZ01lbWJlcnNSZXF1ZXN0GiEuZnJhbWVzLnYxLkxpc3RPcmdNZW1iZXJzUmVzcG9uc2USTwoMQWRkT3JnTWVtYmVyEh4uZnJhbWVzLnYxLkFkZE9yZ01lbWJlclJlcXVlc3QaHy5mcmFtZXMudjEuQWRkT3JnTWVtYmVyUmVzcG9uc2USUgoNU2V0TWVtYmVyUm9sZRIfLmZyYW1lcy52MS5TZXRNZW1iZXJSb2xlUmVxdWVzdBogLmZyYW1lcy52MS5TZXRNZW1iZXJSb2xlUmVzcG9uc2USWAoPUmVtb3ZlT3JnTWVtYmVyEiEuZnJhbWVzLnYxLlJlbW92ZU9yZ01lbWJlclJlcXVlc3QaIi5mcmFtZXMudjEuUmVtb3ZlT3JnTWVtYmVyUmVzcG9uc2VCpgEKDWNvbS5mcmFtZXMudjFCEUZyYW1lU2VydmljZVByb3RvUAFaPWdpdGh1Yi5jb20vbmViYXJpLWRldi9uZWJhcmktZnJhbWVzL2dlbi9nby9mcmFtZXMvdjE7ZnJhbWVzdjGiAgNGWFiqAglGcmFtZXMuVjHKAglGcmFtZXNcVjHiAhVGcmFtZXNcVjFcR1BCTWV0YWRhdGHqAgpGcmFtZXM6OlYxYgZwcm90bzM", [file_frames_v1_frame]);
+  fileDesc("Ch1mcmFtZXMvdjEvZnJhbWVfc2VydmljZS5wcm90bxIJZnJhbWVzLnYxIk4KE1B1Ymxpc2hGcmFtZVJlcXVlc3QSDwoHY29udGVudBgBIAEoDBIRCgljaGFuZ2Vsb2cYAiABKAkSEwoLdGVtcGxhdGVfaWQYAyABKAkiYQoUUHVibGlzaEZyYW1lUmVzcG9uc2USHwoFZnJhbWUYASABKAsyEC5mcmFtZXMudjEuRnJhbWUSKAoHdmVyc2lvbhgCIAEoCzIXLmZyYW1lcy52MS5GcmFtZVZlcnNpb24iEwoRTGlzdEZyYW1lc1JlcXVlc3QiUQoSTGlzdEZyYW1lc1Jlc3BvbnNlEicKBmZyYW1lcxgBIAMoCzIXLmZyYW1lcy52MS5GcmFtZVN1bW1hcnkSEgoKY2FuX2NyZWF0ZRgCIAEoCCJCCg9HZXRGcmFtZVJlcXVlc3QSEAoIb3JnX3NsdWcYASABKAkSDAoEbmFtZRgCIAEoCRIPCgd2ZXJzaW9uGAMgASgJIsMBChBHZXRGcmFtZVJlc3BvbnNlEh8KBWZyYW1lGAEgASgLMhAuZnJhbWVzLnYxLkZyYW1lEigKB3ZlcnNpb24YAiABKAsyFy5mcmFtZXMudjEuRnJhbWVWZXJzaW9uEiUKB2V4dGVuZHMYAyADKAsyFC5mcmFtZXMudjEuUGFyZW50UmVmEhAKCGV4Y2x1ZGVzGAQgAygJEisKC3Blcm1pc3Npb25zGAUgASgLMhYuZnJhbWVzLnYxLlBlcm1pc3Npb25zIkYKE1Jlc29sdmVGcmFtZVJlcXVlc3QSEAoIb3JnX3NsdWcYASABKAkSDAoEbmFtZRgCIAEoCRIPCgd2ZXJzaW9uGAMgASgJIjAKFFJlc29sdmVGcmFtZVJlc3BvbnNlEhgKEHJlc29sdmVkX2NvbnRlbnQYASABKAwiDgoMR2V0TWVSZXF1ZXN0Im4KDUdldE1lUmVzcG9uc2USDwoHc3ViamVjdBgBIAEoCRINCgVlbWFpbBgCIAEoCRIbCgNvcmcYAyABKAsyDi5mcmFtZXMudjEuT3JnEgwKBHJvbGUYBCABKAkSEgoKY2FuX2NyZWF0ZRgFIAEoCCI6ChhMaXN0RnJhbWVWZXJzaW9uc1JlcXVlc3QSEAoIb3JnX3NsdWcYASABKAkSDAoEbmFtZRgCIAEoCSJNChlMaXN0RnJhbWVWZXJzaW9uc1Jlc3BvbnNlEjAKCHZlcnNpb25zGAEgAygLMh4uZnJhbWVzLnYxLkZyYW1lVmVyc2lvblN1bW1hcnkiMAoORmllbGRWaW9sYXRpb24SDQoFZmllbGQYASABKAkSDwoHbWVzc2FnZRgCIAEoCSJACg9GaWVsZFZpb2xhdGlvbnMSLQoKdmlvbGF0aW9ucxgBIAMoCzIZLmZyYW1lcy52MS5GaWVsZFZpb2xhdGlvbiJDChNDb252ZXJ0RnJhbWVSZXF1ZXN0Eg4KBHlhbWwYASABKAxIABISCghtYXJrZG93bhgCIAEoDEgAQggKBnNvdXJjZSI2ChRDb252ZXJ0RnJhbWVSZXNwb25zZRIMCgR5YW1sGAEgASgMEhAKCG1hcmtkb3duGAIgASgMIkMKEkRlbGV0ZUZyYW1lUmVxdWVzdBIQCghvcmdfc2x1ZxgBIAEoCRIMCgRuYW1lGAIgASgJEg0KBWZvcmNlGAMgASgIIhUKE0RlbGV0ZUZyYW1lUmVzcG9uc2UiKAoNRGVsZXRlQmxvY2tlZBIXCg9ibG9ja2luZ19mcmFtZXMYASADKAkiFwoVTGlzdE9yZ01lbWJlcnNSZXF1ZXN0IkAKFkxpc3RPcmdNZW1iZXJzUmVzcG9uc2USJgoHbWVtYmVycxgBIAMoCzIVLmZyYW1lcy52MS5NZW1iZXJzaGlwIjIKE0FkZE9yZ01lbWJlclJlcXVlc3QSDQoFZW1haWwYASABKAkSDAoEcm9sZRgCIAEoCSI9ChRBZGRPcmdNZW1iZXJSZXNwb25zZRIlCgZtZW1iZXIYASABKAsyFS5mcmFtZXMudjEuTWVtYmVyc2hpcCJFChRTZXRNZW1iZXJSb2xlUmVxdWVzdBIQCgh1c2VyX3N1YhgBIAEoCRINCgVlbWFpbBgCIAEoCRIMCgRyb2xlGAMgASgJIj4KFVNldE1lbWJlclJvbGVSZXNwb25zZRIlCgZtZW1iZXIYASABKAsyFS5mcmFtZXMudjEuTWVtYmVyc2hpcCI5ChZSZW1vdmVPcmdNZW1iZXJSZXF1ZXN0EhAKCHVzZXJfc3ViGAEgASgJEg0KBWVtYWlsGAIgASgJIhkKF1JlbW92ZU9yZ01lbWJlclJlc3BvbnNlIhsKGUxpc3RGcmFtZVRlbXBsYXRlc1JlcXVlc3QiZAoaTGlzdEZyYW1lVGVtcGxhdGVzUmVzcG9uc2USMgoJdGVtcGxhdGVzGAEgAygLMh8uZnJhbWVzLnYxLkZyYW1lVGVtcGxhdGVTdW1tYXJ5EhIKCmNhbl9tYW5hZ2UYAiABKAgiJQoXR2V0RnJhbWVUZW1wbGF0ZVJlcXVlc3QSCgoCaWQYASABKAkiRgoYR2V0RnJhbWVUZW1wbGF0ZVJlc3BvbnNlEioKCHRlbXBsYXRlGAEgASgLMhguZnJhbWVzLnYxLkZyYW1lVGVtcGxhdGUi5gEKGkNyZWF0ZUZyYW1lVGVtcGxhdGVSZXF1ZXN0Eg0KBXRpdGxlGAEgASgJEhMKC2Rlc2NyaXB0aW9uGAIgASgJEg8KB3ByZWZpbGwYAyABKAwSSgoLZmllbGRfcnVsZXMYBCADKAsyNS5mcmFtZXMudjEuQ3JlYXRlRnJhbWVUZW1wbGF0ZVJlcXVlc3QuRmllbGRSdWxlc0VudHJ5GkcKD0ZpZWxkUnVsZXNFbnRyeRILCgNrZXkYASABKAkSIwoFdmFsdWUYAiABKAsyFC5mcmFtZXMudjEuRmllbGRSdWxlOgI4ASJJChtDcmVhdGVGcmFtZVRlbXBsYXRlUmVzcG9uc2USKgoIdGVtcGxhdGUYASABKAsyGC5mcmFtZXMudjEuRnJhbWVUZW1wbGF0ZSLyAQoaVXBkYXRlRnJhbWVUZW1wbGF0ZVJlcXVlc3QSCgoCaWQYASABKAkSDQoFdGl0bGUYAiABKAkSEwoLZGVzY3JpcHRpb24YAyABKAkSDwoHcHJlZmlsbBgEIAEoDBJKCgtmaWVsZF9ydWxlcxgFIAMoCzI1LmZyYW1lcy52MS5VcGRhdGVGcmFtZVRlbXBsYXRlUmVxdWVzdC5GaWVsZFJ1bGVzRW50cnkaRwoPRmllbGRSdWxlc0VudHJ5EgsKA2tleRgBIAEoCRIjCgV2YWx1ZRgCIAEoCzIULmZyYW1lcy52MS5GaWVsZFJ1bGU6AjgBIkkKG1VwZGF0ZUZyYW1lVGVtcGxhdGVSZXNwb25zZRIqCgh0ZW1wbGF0ZRgBIAEoCzIYLmZyYW1lcy52MS5GcmFtZVRlbXBsYXRlIigKGkRlbGV0ZUZyYW1lVGVtcGxhdGVSZXF1ZXN0EgoKAmlkGAEgASgJIh0KG0RlbGV0ZUZyYW1lVGVtcGxhdGVSZXNwb25zZTLDCwoMRnJhbWVTZXJ2aWNlEk8KDFB1Ymxpc2hGcmFtZRIeLmZyYW1lcy52MS5QdWJsaXNoRnJhbWVSZXF1ZXN0Gh8uZnJhbWVzLnYxLlB1Ymxpc2hGcmFtZVJlc3BvbnNlEkkKCkxpc3RGcmFtZXMSHC5mcmFtZXMudjEuTGlzdEZyYW1lc1JlcXVlc3QaHS5mcmFtZXMudjEuTGlzdEZyYW1lc1Jlc3BvbnNlEkMKCEdldEZyYW1lEhouZnJhbWVzLnYxLkdldEZyYW1lUmVxdWVzdBobLmZyYW1lcy52MS5HZXRGcmFtZVJlc3BvbnNlEk8KDFJlc29sdmVGcmFtZRIeLmZyYW1lcy52MS5SZXNvbHZlRnJhbWVSZXF1ZXN0Gh8uZnJhbWVzLnYxLlJlc29sdmVGcmFtZVJlc3BvbnNlEjoKBUdldE1lEhcuZnJhbWVzLnYxLkdldE1lUmVxdWVzdBoYLmZyYW1lcy52MS5HZXRNZVJlc3BvbnNlEl4KEUxpc3RGcmFtZVZlcnNpb25zEiMuZnJhbWVzLnYxLkxpc3RGcmFtZVZlcnNpb25zUmVxdWVzdBokLmZyYW1lcy52MS5MaXN0RnJhbWVWZXJzaW9uc1Jlc3BvbnNlEkwKC0RlbGV0ZUZyYW1lEh0uZnJhbWVzLnYxLkRlbGV0ZUZyYW1lUmVxdWVzdBoeLmZyYW1lcy52MS5EZWxldGVGcmFtZVJlc3BvbnNlEk8KDENvbnZlcnRGcmFtZRIeLmZyYW1lcy52MS5Db252ZXJ0RnJhbWVSZXF1ZXN0Gh8uZnJhbWVzLnYxLkNvbnZlcnRGcmFtZVJlc3BvbnNlEmEKEkxpc3RGcmFtZVRlbXBsYXRlcxIkLmZyYW1lcy52MS5MaXN0RnJhbWVUZW1wbGF0ZXNSZXF1ZXN0GiUuZnJhbWVzLnYxLkxpc3RGcmFtZVRlbXBsYXRlc1Jlc3BvbnNlElsKEEdldEZyYW1lVGVtcGxhdGUSIi5mcmFtZXMudjEuR2V0RnJhbWVUZW1wbGF0ZVJlcXVlc3QaIy5mcmFtZXMudjEuR2V0RnJhbWVUZW1wbGF0ZVJlc3BvbnNlEmQKE0NyZWF0ZUZyYW1lVGVtcGxhdGUSJS5mcmFtZXMudjEuQ3JlYXRlRnJhbWVUZW1wbGF0ZVJlcXVlc3QaJi5mcmFtZXMudjEuQ3JlYXRlRnJhbWVUZW1wbGF0ZVJlc3BvbnNlEmQKE1VwZGF0ZUZyYW1lVGVtcGxhdGUSJS5mcmFtZXMudjEuVXBkYXRlRnJhbWVUZW1wbGF0ZVJlcXVlc3QaJi5mcmFtZXMudjEuVXBkYXRlRnJhbWVUZW1wbGF0ZVJlc3BvbnNlEmQKE0RlbGV0ZUZyYW1lVGVtcGxhdGUSJS5mcmFtZXMudjEuRGVsZXRlRnJhbWVUZW1wbGF0ZVJlcXVlc3QaJi5mcmFtZXMudjEuRGVsZXRlRnJhbWVUZW1wbGF0ZVJlc3BvbnNlElUKDkxpc3RPcmdNZW1iZXJzEiAuZnJhbWVzLnYxLkxpc3RPcmdNZW1iZXJzUmVxdWVzdBohLmZyYW1lcy52MS5MaXN0T3JnTWVtYmVyc1Jlc3BvbnNlEk8KDEFkZE9yZ01lbWJlchIeLmZyYW1lcy52MS5BZGRPcmdNZW1iZXJSZXF1ZXN0Gh8uZnJhbWVzLnYxLkFkZE9yZ01lbWJlclJlc3BvbnNlElIKDVNldE1lbWJlclJvbGUSHy5mcmFtZXMudjEuU2V0TWVtYmVyUm9sZVJlcXVlc3QaIC5mcmFtZXMudjEuU2V0TWVtYmVyUm9sZVJlc3BvbnNlElgKD1JlbW92ZU9yZ01lbWJlchIhLmZyYW1lcy52MS5SZW1vdmVPcmdNZW1iZXJSZXF1ZXN0GiIuZnJhbWVzLnYxLlJlbW92ZU9yZ01lbWJlclJlc3BvbnNlQqYBCg1jb20uZnJhbWVzLnYxQhFGcmFtZVNlcnZpY2VQcm90b1ABWj1naXRodWIuY29tL25lYmFyaS1kZXYvbmViYXJpLWZyYW1lcy9nZW4vZ28vZnJhbWVzL3YxO2ZyYW1lc3YxogIDRlhYqgIJRnJhbWVzLlYxygIJRnJhbWVzXFYx4gIVRnJhbWVzXFYxXEdQQk1ldGFkYXRh6gIKRnJhbWVzOjpWMWIGcHJvdG8z", [file_frames_v1_frame]);
 
 /**
  * @generated from message frames.v1.PublishFrameRequest
@@ -29,6 +29,16 @@ export type PublishFrameRequest = Message<"frames.v1.PublishFrameRequest"> & {
    * @generated from field: string changelog = 2;
    */
   changelog: string;
+
+  /**
+   * Optional. Names the template this Frame is being created from, so its
+   * required slots are checked. Used for validation and then discarded:
+   * nothing is recorded on the Frame, and the check applies on create only.
+   * Empty means no template and no checks.
+   *
+   * @generated from field: string template_id = 3;
+   */
+  templateId: string;
 };
 
 /**
@@ -327,7 +337,15 @@ export const FieldViolationSchema: GenMessage<FieldViolation> = /*@__PURE__*/
  * FieldViolations is attached as a Connect error detail on PublishFrame when
  * schema validation fails, so clients can map failures to individual inputs.
  * ConvertFrame reuses it for markdown structure errors, with field "markdown"
- * and a message naming the offending line.
+ * and a message naming the offending line. The template write RPCs reuse it for
+ * a prefill whose content could not be published.
+ *
+ * It is not tied to InvalidArgument. PublishFrame also attaches it on
+ * AlreadyExists, naming "name" when the frame name is already taken - that code
+ * covers two different collisions, a taken name and a republished version, and
+ * they are fixed in different inputs. A republished version names no field, so
+ * a client with no violation to read should treat AlreadyExists as a version
+ * conflict.
  *
  * @generated from message frames.v1.FieldViolations
  */
@@ -622,6 +640,211 @@ export const RemoveOrgMemberResponseSchema: GenMessage<RemoveOrgMemberResponse> 
   messageDesc(file_frames_v1_frame_service, 26);
 
 /**
+ * @generated from message frames.v1.ListFrameTemplatesRequest
+ */
+export type ListFrameTemplatesRequest = Message<"frames.v1.ListFrameTemplatesRequest"> & {
+};
+
+/**
+ * Describes the message frames.v1.ListFrameTemplatesRequest.
+ * Use `create(ListFrameTemplatesRequestSchema)` to create a new message.
+ */
+export const ListFrameTemplatesRequestSchema: GenMessage<ListFrameTemplatesRequest> = /*@__PURE__*/
+  messageDesc(file_frames_v1_frame_service, 27);
+
+/**
+ * @generated from message frames.v1.ListFrameTemplatesResponse
+ */
+export type ListFrameTemplatesResponse = Message<"frames.v1.ListFrameTemplatesResponse"> & {
+  /**
+   * @generated from field: repeated frames.v1.FrameTemplateSummary templates = 1;
+   */
+  templates: FrameTemplateSummary[];
+
+  /**
+   * Whether the caller may create, edit, and delete org templates, so the SPA
+   * does not have to infer admin-ness itself. Mirrors ListFramesResponse.can_create.
+   *
+   * @generated from field: bool can_manage = 2;
+   */
+  canManage: boolean;
+};
+
+/**
+ * Describes the message frames.v1.ListFrameTemplatesResponse.
+ * Use `create(ListFrameTemplatesResponseSchema)` to create a new message.
+ */
+export const ListFrameTemplatesResponseSchema: GenMessage<ListFrameTemplatesResponse> = /*@__PURE__*/
+  messageDesc(file_frames_v1_frame_service, 28);
+
+/**
+ * @generated from message frames.v1.GetFrameTemplateRequest
+ */
+export type GetFrameTemplateRequest = Message<"frames.v1.GetFrameTemplateRequest"> & {
+  /**
+   * @generated from field: string id = 1;
+   */
+  id: string;
+};
+
+/**
+ * Describes the message frames.v1.GetFrameTemplateRequest.
+ * Use `create(GetFrameTemplateRequestSchema)` to create a new message.
+ */
+export const GetFrameTemplateRequestSchema: GenMessage<GetFrameTemplateRequest> = /*@__PURE__*/
+  messageDesc(file_frames_v1_frame_service, 29);
+
+/**
+ * @generated from message frames.v1.GetFrameTemplateResponse
+ */
+export type GetFrameTemplateResponse = Message<"frames.v1.GetFrameTemplateResponse"> & {
+  /**
+   * @generated from field: frames.v1.FrameTemplate template = 1;
+   */
+  template?: FrameTemplate | undefined;
+};
+
+/**
+ * Describes the message frames.v1.GetFrameTemplateResponse.
+ * Use `create(GetFrameTemplateResponseSchema)` to create a new message.
+ */
+export const GetFrameTemplateResponseSchema: GenMessage<GetFrameTemplateResponse> = /*@__PURE__*/
+  messageDesc(file_frames_v1_frame_service, 30);
+
+/**
+ * @generated from message frames.v1.CreateFrameTemplateRequest
+ */
+export type CreateFrameTemplateRequest = Message<"frames.v1.CreateFrameTemplateRequest"> & {
+  /**
+   * @generated from field: string title = 1;
+   */
+  title: string;
+
+  /**
+   * @generated from field: string description = 2;
+   */
+  description: string;
+
+  /**
+   * @generated from field: bytes prefill = 3;
+   */
+  prefill: Uint8Array;
+
+  /**
+   * @generated from field: map<string, frames.v1.FieldRule> field_rules = 4;
+   */
+  fieldRules: { [key: string]: FieldRule };
+};
+
+/**
+ * Describes the message frames.v1.CreateFrameTemplateRequest.
+ * Use `create(CreateFrameTemplateRequestSchema)` to create a new message.
+ */
+export const CreateFrameTemplateRequestSchema: GenMessage<CreateFrameTemplateRequest> = /*@__PURE__*/
+  messageDesc(file_frames_v1_frame_service, 31);
+
+/**
+ * @generated from message frames.v1.CreateFrameTemplateResponse
+ */
+export type CreateFrameTemplateResponse = Message<"frames.v1.CreateFrameTemplateResponse"> & {
+  /**
+   * @generated from field: frames.v1.FrameTemplate template = 1;
+   */
+  template?: FrameTemplate | undefined;
+};
+
+/**
+ * Describes the message frames.v1.CreateFrameTemplateResponse.
+ * Use `create(CreateFrameTemplateResponseSchema)` to create a new message.
+ */
+export const CreateFrameTemplateResponseSchema: GenMessage<CreateFrameTemplateResponse> = /*@__PURE__*/
+  messageDesc(file_frames_v1_frame_service, 32);
+
+/**
+ * @generated from message frames.v1.UpdateFrameTemplateRequest
+ */
+export type UpdateFrameTemplateRequest = Message<"frames.v1.UpdateFrameTemplateRequest"> & {
+  /**
+   * @generated from field: string id = 1;
+   */
+  id: string;
+
+  /**
+   * @generated from field: string title = 2;
+   */
+  title: string;
+
+  /**
+   * @generated from field: string description = 3;
+   */
+  description: string;
+
+  /**
+   * @generated from field: bytes prefill = 4;
+   */
+  prefill: Uint8Array;
+
+  /**
+   * @generated from field: map<string, frames.v1.FieldRule> field_rules = 5;
+   */
+  fieldRules: { [key: string]: FieldRule };
+};
+
+/**
+ * Describes the message frames.v1.UpdateFrameTemplateRequest.
+ * Use `create(UpdateFrameTemplateRequestSchema)` to create a new message.
+ */
+export const UpdateFrameTemplateRequestSchema: GenMessage<UpdateFrameTemplateRequest> = /*@__PURE__*/
+  messageDesc(file_frames_v1_frame_service, 33);
+
+/**
+ * @generated from message frames.v1.UpdateFrameTemplateResponse
+ */
+export type UpdateFrameTemplateResponse = Message<"frames.v1.UpdateFrameTemplateResponse"> & {
+  /**
+   * @generated from field: frames.v1.FrameTemplate template = 1;
+   */
+  template?: FrameTemplate | undefined;
+};
+
+/**
+ * Describes the message frames.v1.UpdateFrameTemplateResponse.
+ * Use `create(UpdateFrameTemplateResponseSchema)` to create a new message.
+ */
+export const UpdateFrameTemplateResponseSchema: GenMessage<UpdateFrameTemplateResponse> = /*@__PURE__*/
+  messageDesc(file_frames_v1_frame_service, 34);
+
+/**
+ * @generated from message frames.v1.DeleteFrameTemplateRequest
+ */
+export type DeleteFrameTemplateRequest = Message<"frames.v1.DeleteFrameTemplateRequest"> & {
+  /**
+   * @generated from field: string id = 1;
+   */
+  id: string;
+};
+
+/**
+ * Describes the message frames.v1.DeleteFrameTemplateRequest.
+ * Use `create(DeleteFrameTemplateRequestSchema)` to create a new message.
+ */
+export const DeleteFrameTemplateRequestSchema: GenMessage<DeleteFrameTemplateRequest> = /*@__PURE__*/
+  messageDesc(file_frames_v1_frame_service, 35);
+
+/**
+ * @generated from message frames.v1.DeleteFrameTemplateResponse
+ */
+export type DeleteFrameTemplateResponse = Message<"frames.v1.DeleteFrameTemplateResponse"> & {
+};
+
+/**
+ * Describes the message frames.v1.DeleteFrameTemplateResponse.
+ * Use `create(DeleteFrameTemplateResponseSchema)` to create a new message.
+ */
+export const DeleteFrameTemplateResponseSchema: GenMessage<DeleteFrameTemplateResponse> = /*@__PURE__*/
+  messageDesc(file_frames_v1_frame_service, 36);
+
+/**
  * @generated from service frames.v1.FrameService
  */
 export const FrameService: GenService<{
@@ -705,6 +928,60 @@ export const FrameService: GenService<{
     methodKind: "unary";
     input: typeof ConvertFrameRequestSchema;
     output: typeof ConvertFrameResponseSchema;
+  },
+  /**
+   * Read - the templates the caller may start a Frame from: the built-ins plus
+   * their own org's. Any member may call it.
+   *
+   * @generated from rpc frames.v1.FrameService.ListFrameTemplates
+   */
+  listFrameTemplates: {
+    methodKind: "unary";
+    input: typeof ListFrameTemplatesRequestSchema;
+    output: typeof ListFrameTemplatesResponseSchema;
+  },
+  /**
+   * Read - one template with its prefill and rules. 404 for a built-in that
+   * does not exist and for another org's template alike, so existence does not
+   * leak.
+   *
+   * @generated from rpc frames.v1.FrameService.GetFrameTemplate
+   */
+  getFrameTemplate: {
+    methodKind: "unary";
+    input: typeof GetFrameTemplateRequestSchema;
+    output: typeof GetFrameTemplateResponseSchema;
+  },
+  /**
+   * Admin only - create an org template.
+   *
+   * @generated from rpc frames.v1.FrameService.CreateFrameTemplate
+   */
+  createFrameTemplate: {
+    methodKind: "unary";
+    input: typeof CreateFrameTemplateRequestSchema;
+    output: typeof CreateFrameTemplateResponseSchema;
+  },
+  /**
+   * Admin only - replace an org template's content. Built-ins are immutable.
+   *
+   * @generated from rpc frames.v1.FrameService.UpdateFrameTemplate
+   */
+  updateFrameTemplate: {
+    methodKind: "unary";
+    input: typeof UpdateFrameTemplateRequestSchema;
+    output: typeof UpdateFrameTemplateResponseSchema;
+  },
+  /**
+   * Admin only - delete an org template. Frames already created from it are
+   * unaffected: a template is copied once and never referenced again.
+   *
+   * @generated from rpc frames.v1.FrameService.DeleteFrameTemplate
+   */
+  deleteFrameTemplate: {
+    methodKind: "unary";
+    input: typeof DeleteFrameTemplateRequestSchema;
+    output: typeof DeleteFrameTemplateResponseSchema;
   },
   /**
    * Admin only - list the caller's org members.

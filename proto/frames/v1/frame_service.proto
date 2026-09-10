@@ -23,6 +23,20 @@ service FrameService {
   // Pure conversion between the canonical slot YAML and the spec-conformant
   // .frame.md form. Stateless and unauthenticated beyond org membership.
   rpc ConvertFrame(ConvertFrameRequest) returns (ConvertFrameResponse);
+  // Read - the templates the caller may start a Frame from: the built-ins plus
+  // their own org's. Any member may call it.
+  rpc ListFrameTemplates(ListFrameTemplatesRequest) returns (ListFrameTemplatesResponse);
+  // Read - one template with its prefill and rules. 404 for a built-in that
+  // does not exist and for another org's template alike, so existence does not
+  // leak.
+  rpc GetFrameTemplate(GetFrameTemplateRequest) returns (GetFrameTemplateResponse);
+  // Admin only - create an org template.
+  rpc CreateFrameTemplate(CreateFrameTemplateRequest) returns (CreateFrameTemplateResponse);
+  // Admin only - replace an org template's content. Built-ins are immutable.
+  rpc UpdateFrameTemplate(UpdateFrameTemplateRequest) returns (UpdateFrameTemplateResponse);
+  // Admin only - delete an org template. Frames already created from it are
+  // unaffected: a template is copied once and never referenced again.
+  rpc DeleteFrameTemplate(DeleteFrameTemplateRequest) returns (DeleteFrameTemplateResponse);
   // Admin only - list the caller's org members.
   rpc ListOrgMembers(ListOrgMembersRequest) returns (ListOrgMembersResponse);
   // Admin only - add a member to the caller's org by email (pending until login).
@@ -36,6 +50,11 @@ service FrameService {
 message PublishFrameRequest {
   bytes content = 1;   // full YAML; name/version/extends/excludes/slots parsed server-side
   string changelog = 2;
+  // Optional. Names the template this Frame is being created from, so its
+  // required slots are checked. Used for validation and then discarded:
+  // nothing is recorded on the Frame, and the check applies on create only.
+  // Empty means no template and no checks.
+  string template_id = 3;
 }
 message PublishFrameResponse {
   Frame frame = 1;
@@ -96,7 +115,15 @@ message FieldViolation {
 // FieldViolations is attached as a Connect error detail on PublishFrame when
 // schema validation fails, so clients can map failures to individual inputs.
 // ConvertFrame reuses it for markdown structure errors, with field "markdown"
-// and a message naming the offending line.
+// and a message naming the offending line. The template write RPCs reuse it for
+// a prefill whose content could not be published.
+//
+// It is not tied to InvalidArgument. PublishFrame also attaches it on
+// AlreadyExists, naming "name" when the frame name is already taken - that code
+// covers two different collisions, a taken name and a republished version, and
+// they are fixed in different inputs. A republished version names no field, so
+// a client with no violation to read should treat AlreadyExists as a version
+// conflict.
 message FieldViolations {
   repeated FieldViolation violations = 1;
 }
@@ -157,3 +184,34 @@ message RemoveOrgMemberRequest {
   string email = 2;
 }
 message RemoveOrgMemberResponse {}
+
+message ListFrameTemplatesRequest {}
+message ListFrameTemplatesResponse {
+  repeated FrameTemplateSummary templates = 1;
+  // Whether the caller may create, edit, and delete org templates, so the SPA
+  // does not have to infer admin-ness itself. Mirrors ListFramesResponse.can_create.
+  bool can_manage = 2;
+}
+
+message GetFrameTemplateRequest { string id = 1; }
+message GetFrameTemplateResponse { FrameTemplate template = 1; }
+
+message CreateFrameTemplateRequest {
+  string title = 1;
+  string description = 2;
+  bytes prefill = 3;
+  map<string, FieldRule> field_rules = 4;
+}
+message CreateFrameTemplateResponse { FrameTemplate template = 1; }
+
+message UpdateFrameTemplateRequest {
+  string id = 1;
+  string title = 2;
+  string description = 3;
+  bytes prefill = 4;
+  map<string, FieldRule> field_rules = 5;
+}
+message UpdateFrameTemplateResponse { FrameTemplate template = 1; }
+
+message DeleteFrameTemplateRequest { string id = 1; }
+message DeleteFrameTemplateResponse {}

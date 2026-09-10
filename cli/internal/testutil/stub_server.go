@@ -15,12 +15,17 @@ import (
 // StubService implements framesv1connect.FrameServiceHandler via optional func
 // fields. Unset methods return CodeUnimplemented.
 type StubService struct {
-	PublishFn         func(context.Context, *connect.Request[framesv1.PublishFrameRequest]) (*connect.Response[framesv1.PublishFrameResponse], error)
-	ListFn            func(context.Context, *connect.Request[framesv1.ListFramesRequest]) (*connect.Response[framesv1.ListFramesResponse], error)
-	GetFn             func(context.Context, *connect.Request[framesv1.GetFrameRequest]) (*connect.Response[framesv1.GetFrameResponse], error)
-	ResolveFn         func(context.Context, *connect.Request[framesv1.ResolveFrameRequest]) (*connect.Response[framesv1.ResolveFrameResponse], error)
-	MeFn              func(context.Context, *connect.Request[framesv1.GetMeRequest]) (*connect.Response[framesv1.GetMeResponse], error)
-	ListVersionsFn    func(context.Context, *connect.Request[framesv1.ListFrameVersionsRequest]) (*connect.Response[framesv1.ListFrameVersionsResponse], error)
+	PublishFn        func(context.Context, *connect.Request[framesv1.PublishFrameRequest]) (*connect.Response[framesv1.PublishFrameResponse], error)
+	ListFn           func(context.Context, *connect.Request[framesv1.ListFramesRequest]) (*connect.Response[framesv1.ListFramesResponse], error)
+	GetFn            func(context.Context, *connect.Request[framesv1.GetFrameRequest]) (*connect.Response[framesv1.GetFrameResponse], error)
+	ResolveFn        func(context.Context, *connect.Request[framesv1.ResolveFrameRequest]) (*connect.Response[framesv1.ResolveFrameResponse], error)
+	MeFn             func(context.Context, *connect.Request[framesv1.GetMeRequest]) (*connect.Response[framesv1.GetMeResponse], error)
+	ListVersionsFn   func(context.Context, *connect.Request[framesv1.ListFrameVersionsRequest]) (*connect.Response[framesv1.ListFrameVersionsResponse], error)
+	ListTemplatesFn  func(context.Context, *connect.Request[framesv1.ListFrameTemplatesRequest]) (*connect.Response[framesv1.ListFrameTemplatesResponse], error)
+	GetTemplateFn    func(context.Context, *connect.Request[framesv1.GetFrameTemplateRequest]) (*connect.Response[framesv1.GetFrameTemplateResponse], error)
+	CreateTemplateFn func(context.Context, *connect.Request[framesv1.CreateFrameTemplateRequest]) (*connect.Response[framesv1.CreateFrameTemplateResponse], error)
+	UpdateTemplateFn func(context.Context, *connect.Request[framesv1.UpdateFrameTemplateRequest]) (*connect.Response[framesv1.UpdateFrameTemplateResponse], error)
+	DeleteTemplateFn func(context.Context, *connect.Request[framesv1.DeleteFrameTemplateRequest]) (*connect.Response[framesv1.DeleteFrameTemplateResponse], error)
 }
 
 var _ framesv1connect.FrameServiceHandler = (*StubService)(nil)
@@ -91,6 +96,41 @@ func (s *StubService) SetMemberRole(_ context.Context, r *connect.Request[frames
 }
 
 func (s *StubService) RemoveOrgMember(_ context.Context, r *connect.Request[framesv1.RemoveOrgMemberRequest]) (*connect.Response[framesv1.RemoveOrgMemberResponse], error) {
+	return nil, unimpl()
+}
+
+func (s *StubService) ListFrameTemplates(ctx context.Context, r *connect.Request[framesv1.ListFrameTemplatesRequest]) (*connect.Response[framesv1.ListFrameTemplatesResponse], error) {
+	if s.ListTemplatesFn != nil {
+		return s.ListTemplatesFn(ctx, r)
+	}
+	return nil, unimpl()
+}
+
+func (s *StubService) GetFrameTemplate(ctx context.Context, r *connect.Request[framesv1.GetFrameTemplateRequest]) (*connect.Response[framesv1.GetFrameTemplateResponse], error) {
+	if s.GetTemplateFn != nil {
+		return s.GetTemplateFn(ctx, r)
+	}
+	return nil, unimpl()
+}
+
+func (s *StubService) CreateFrameTemplate(ctx context.Context, r *connect.Request[framesv1.CreateFrameTemplateRequest]) (*connect.Response[framesv1.CreateFrameTemplateResponse], error) {
+	if s.CreateTemplateFn != nil {
+		return s.CreateTemplateFn(ctx, r)
+	}
+	return nil, unimpl()
+}
+
+func (s *StubService) UpdateFrameTemplate(ctx context.Context, r *connect.Request[framesv1.UpdateFrameTemplateRequest]) (*connect.Response[framesv1.UpdateFrameTemplateResponse], error) {
+	if s.UpdateTemplateFn != nil {
+		return s.UpdateTemplateFn(ctx, r)
+	}
+	return nil, unimpl()
+}
+
+func (s *StubService) DeleteFrameTemplate(ctx context.Context, r *connect.Request[framesv1.DeleteFrameTemplateRequest]) (*connect.Response[framesv1.DeleteFrameTemplateResponse], error) {
+	if s.DeleteTemplateFn != nil {
+		return s.DeleteTemplateFn(ctx, r)
+	}
 	return nil, unimpl()
 }
 

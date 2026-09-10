@@ -1,0 +1,5 @@
+# Blank is a real template rather than a special case in the picker, so that
+# starting from nothing takes the same code path as starting from a starter.
+id: builtin:blank
+title: Blank
+description: Start from an empty document and add only the sections you need.

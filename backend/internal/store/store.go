@@ -7,6 +7,7 @@ import (
 	"context"
 	"errors"
 	"strings"
+	"time"
 
 	framesv1 "github.com/nebari-dev/nebari-frames/gen/go/frames/v1"
 )
@@ -40,6 +41,31 @@ type ParentEdge struct {
 	ParentFrameID string
 	ParentVersion string
 	OrderIndex    int
+}
+
+// FrameTemplate is one org-authored template row.
+//
+// A store struct rather than a protobuf message, unlike Frame and Membership:
+// the proto is the external representation, and the template model is
+// deliberately owned internally with translation at the boundary. Grant and
+// ParentEdge above are store structs for the same reason.
+//
+// Built-in templates are not rows at all. They are compiled into the binary
+// (frames.BuiltinTemplates), so nothing in this package knows about them.
+//
+// Prefill and FieldRules are opaque blobs here. Keeping them as bytes means
+// adding a slot to frames.SlotTable never touches this schema, matching how
+// frame_versions.content is stored.
+type FrameTemplate struct {
+	ID          string
+	OrgID       string
+	Title       string
+	Description string
+	Prefill     []byte // canonical YAML: slots + extends
+	FieldRules  []byte // JSON: slot key -> {level, note}
+	CreatedBy   string
+	CreatedAt   time.Time
+	UpdatedAt   time.Time
 }
 
 // CreateFrameVersionInput carries everything a publish needs to insert
@@ -86,4 +112,15 @@ type Repository interface {
 
 	FrameChildren(ctx context.Context, parentFrameID string) ([]*framesv1.Frame, error)
 	DeleteFrame(ctx context.Context, frameID string) error
+
+	// Frame templates. Every accessor takes orgID because org scoping is the
+	// only access control a template has: making it impossible to ask for a row
+	// without saying who is asking beats relying on each handler to remember. A
+	// row belonging to another org reports ErrNotFound rather than a denial, so
+	// existence does not leak.
+	CreateFrameTemplate(ctx context.Context, t *FrameTemplate) error
+	UpdateFrameTemplate(ctx context.Context, t *FrameTemplate) error
+	DeleteFrameTemplate(ctx context.Context, orgID, id string) error
+	GetFrameTemplate(ctx context.Context, orgID, id string) (*FrameTemplate, error)
+	ListFrameTemplatesByOrg(ctx context.Context, orgID string) ([]*FrameTemplate, error)
 }

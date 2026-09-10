@@ -1,0 +1,16 @@
+id: builtin:product-context
+title: Product Context
+description: What you are building, who it is for, and what success looks like.
+field_rules:
+  goals:
+    level: required
+    note: What good outcomes look like for work done in this product, and how you would know you got one.
+  architecture:
+    level: recommended
+    note: The system's shape at the level a newcomer needs before touching it.
+  terminology:
+    level: recommended
+    note: Product-specific names for features, objects, and user types.
+  business_process:
+    level: recommended
+    note: How a change reaches users, if that is not obvious.

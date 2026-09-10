@@ -1,0 +1,13 @@
+id: builtin:brand-voice
+title: Brand Voice and Style
+description: How your organization sounds in writing, and the words it does and does not use.
+field_rules:
+  style:
+    level: required
+    note: Voice, tone, and formatting. Say what to do, not only what to avoid, and give an example of each.
+  terminology:
+    level: recommended
+    note: Product and brand names with their correct spelling and casing, plus any word you deliberately avoid.
+  rules:
+    level: recommended
+    note: Hard constraints, one per entry, that an assistant must never break when writing as your organization.

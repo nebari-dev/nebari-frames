@@ -1,8 +1,15 @@
 import { parse as parseYaml, stringify as stringifyYaml } from "yaml";
 import { z } from "zod";
 
-// Mirrors backend/internal/frames/schema.go. Keep in sync with that file:
-// it is the canonical Frame content schema.
+// Mirrors backend/internal/frames/schema.go. Keep in sync with that file: it is
+// the canonical Frame content schema.
+//
+// Deliberately lenient about values - a term may decode empty here - because
+// this is the shape everything already stored has to parse through, including
+// rows written before a rule existed. What a human is allowed to submit is a
+// stricter schema over the same keys: contentSlotsSchema in authoring-schema.ts,
+// which both the authoring form and the template dialog resolve against. The
+// backend splits the same two jobs the same way (Parse vs contentErrors).
 const termSchema = z.object({ term: z.string(), definition: z.string() });
 
 const slotsSchema = z.object({
@@ -27,7 +34,12 @@ export const VISIBILITY_VALUES = ["private", "internal", "shared", "public"] as 
 export const DEFAULT_VISIBILITY = "internal";
 
 export const frameDocSchema = z.object({
-  name: z.string(),
+  // A template's prefill is a strict subset of this schema that never sets
+  // identity fields (backend/internal/frames/templates.go ParsePrefill), so
+  // name must decode from an absent key the same way its sibling metadata
+  // fields already do - otherwise the one shared parser used by both the
+  // edit path and template seeding would reject every prefill.
+  name: z.string().default(""),
   description: z.string().default(""),
   version: z.string().default(""),
   visibility: z.string().default(""),
@@ -47,14 +59,33 @@ export function parseFrameContent(content: Uint8Array | string): FrameDoc {
   return frameDocSchema.parse(raw);
 }
 
+// Rows an author added and left empty. The backend refuses them
+// (slots.rules[0]: must not be empty), so keeping them turns an abandoned
+// keystroke into a publish failure that names a row nobody wrote - and in a
+// template prefill, one that surfaces later in somebody else's scaffold.
+// Blank rows in the middle are dropped too: index gaps are not meaningful in
+// any of these slots.
+function withoutBlanks(items: string[] | undefined): string[] {
+  return (items ?? []).filter((s) => s.trim() !== "");
+}
+
+// The same rule for terminology, where a row is a pair. Only a row with
+// nothing at all in it is dropped: a half-filled row is a real validation
+// error the author meant to write and should see, not a stray keystroke.
+function withoutEmptyTerms(terms: FrameDoc["slots"]["terminology"]): { term: string; definition: string }[] {
+  return (terms ?? []).filter((t) => t.term.trim() !== "" || t.definition.trim() !== "");
+}
+
 // Builds a plain object with keys in schema.go order, omitting empty values,
 // so the YAML round-trips through the backend Parse (KnownFields(true)).
 function compactSlots(s: FrameDoc["slots"]): Record<string, unknown> {
   const out: Record<string, unknown> = {};
-  if (s.terminology && s.terminology.length > 0) out.terminology = s.terminology;
-  if (s.rules && s.rules.length > 0) out.rules = s.rules;
-  if (s.skills && s.skills.length > 0) out.skills = s.skills;
-  if (s.prompts && s.prompts.length > 0) out.prompts = s.prompts;
+  const terms = withoutEmptyTerms(s.terminology);
+  if (terms.length > 0) out.terminology = terms;
+  for (const key of ["rules", "skills", "prompts"] as const) {
+    const items = withoutBlanks(s[key]);
+    if (items.length > 0) out[key] = items;
+  }
   for (const key of ["tool_specs", "goals", "style", "norms", "architecture", "business_process"] as const) {
     const v = s[key];
     if (typeof v === "string" && v.trim() !== "") out[key] = v;
@@ -75,5 +106,21 @@ export function serializeFrameDoc(doc: FrameDoc): string {
   if (doc.extends && doc.extends.length > 0) out.extends = doc.extends;
   if (doc.excludes && doc.excludes.length > 0) out.excludes = doc.excludes;
   out.slots = compactSlots(doc.slots);
+  return stringifyYaml(out);
+}
+
+// Serializes a template prefill: the same slot compaction as serializeFrameDoc,
+// but the input type itself has no room for name/description/version - a
+// template seeds content, never identity, and backend/internal/frames/templates.go
+// ParsePrefill rejects a blob that sets any of them. Mirrors that package's own
+// prefillDoc, which for the same reason omits those keys from its encoder
+// rather than emitting them empty and relying on the decoder to catch it.
+export function serializeFramePrefill(input: {
+  slots: FrameDoc["slots"];
+  extends?: FrameDoc["extends"];
+}): string {
+  const out: Record<string, unknown> = {};
+  if (input.extends && input.extends.length > 0) out.extends = input.extends;
+  out.slots = compactSlots(input.slots);
   return stringifyYaml(out);
 }

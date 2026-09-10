@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parseFrameContent, serializeFrameDoc, type FrameDoc } from "./frame-yaml";
+import { parseFrameContent, serializeFrameDoc, serializeFramePrefill, type FrameDoc } from "./frame-yaml";
 
 const yamlDoc = `
 name: brand-voice
@@ -81,5 +81,72 @@ slots:
     expect(out).not.toMatch(/excludes/);
     // re-parse must succeed (no stray keys for KnownFields(true))
     expect(parseFrameContent(out).name).toBe("minimal");
+  });
+
+  it("drops blank list rows rather than serializing them", () => {
+    // A list editor leaves an empty row behind the moment an author adds one
+    // and thinks better of it. The backend refuses those rows
+    // (slots.rules[0]: must not be empty), so serializing them turns a stray
+    // keystroke into a publish failure pointing at a row nobody wrote - and in
+    // a template prefill it fails later, in the author's scaffold.
+    const doc: FrameDoc = {
+      name: "minimal",
+      description: "d",
+      version: "1.0.0",
+      visibility: "",
+      scope: "",
+      maintainer: "",
+      slots: {
+        rules: ["A real rule", "", "   "],
+        skills: [""],
+        prompts: ["Ask what changed"],
+      },
+    };
+    const parsed = parseFrameContent(serializeFrameDoc(doc));
+    expect(parsed.slots.rules).toEqual(["A real rule"]);
+    expect(parsed.slots.prompts).toEqual(["Ask what changed"]);
+    // A list left with nothing in it is not a list.
+    expect(parsed.slots.skills).toBeUndefined();
+  });
+
+  it("drops a terminology row the author added and left entirely empty", () => {
+    // "+ Add term" appends {term: "", definition: ""}, so an abandoned row is
+    // as easy to produce here as in a list - and the backend refuses it the
+    // same way. A row with one side filled is a real error the author should
+    // see, so it survives to be reported.
+    const doc: FrameDoc = {
+      name: "minimal",
+      description: "d",
+      version: "1.0.0",
+      visibility: "",
+      scope: "",
+      maintainer: "",
+      slots: {
+        terminology: [
+          { term: "Frame", definition: "A scoped context artifact." },
+          { term: "  ", definition: "" },
+          { term: "Slot", definition: "" },
+        ],
+      },
+    };
+    const parsed = parseFrameContent(serializeFrameDoc(doc));
+    expect(parsed.slots.terminology).toEqual([
+      { term: "Frame", definition: "A scoped context artifact." },
+      { term: "Slot", definition: "" },
+    ]);
+  });
+
+  it("drops an empty terminology row from a template prefill, leaving no slot behind", () => {
+    const parsed = parseFrameContent(serializeFramePrefill({ slots: { terminology: [{ term: "", definition: "" }] } }));
+    expect(parsed.slots.terminology).toBeUndefined();
+  });
+
+  it("drops blank list rows from a template prefill too", () => {
+    const out = serializeFramePrefill({
+      slots: { rules: ["", "Keep it short"], skills: [] },
+    });
+    const parsed = parseFrameContent(out);
+    expect(parsed.slots.rules).toEqual(["Keep it short"]);
+    expect(parsed.slots.skills).toBeUndefined();
   });
 });

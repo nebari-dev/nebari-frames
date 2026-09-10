@@ -49,11 +49,14 @@ func (t *tokenRoundTripper) RoundTrip(req *http.Request) (*http.Response, error)
 	return t.base.RoundTrip(req)
 }
 
-// Publish publishes a new frame version. Returns the frame and the new version.
-func (c *Client) Publish(ctx context.Context, content []byte, changelog string) (*framesv1.Frame, *framesv1.FrameVersion, error) {
+// Publish publishes a new frame version. templateID is optional: when set, the
+// server checks that template's required slots, which only applies when the
+// Frame is being created.
+func (c *Client) Publish(ctx context.Context, content []byte, changelog, templateID string) (*framesv1.Frame, *framesv1.FrameVersion, error) {
 	resp, err := c.svc.PublishFrame(ctx, connect.NewRequest(&framesv1.PublishFrameRequest{
-		Content:   content,
-		Changelog: changelog,
+		Content:    content,
+		Changelog:  changelog,
+		TemplateId: templateID,
 	}))
 	if err != nil {
 		return nil, nil, err
@@ -104,4 +107,23 @@ func (c *Client) Me(ctx context.Context) (*framesv1.GetMeResponse, error) {
 		return nil, err
 	}
 	return resp.Msg, nil
+}
+
+// ListTemplates returns the templates the caller may start a Frame from - the
+// built-ins plus their org's - and whether they may manage the org's.
+func (c *Client) ListTemplates(ctx context.Context) ([]*framesv1.FrameTemplateSummary, bool, error) {
+	resp, err := c.svc.ListFrameTemplates(ctx, connect.NewRequest(&framesv1.ListFrameTemplatesRequest{}))
+	if err != nil {
+		return nil, false, err
+	}
+	return resp.Msg.Templates, resp.Msg.CanManage, nil
+}
+
+// GetTemplate fetches one template with its prefill and rules.
+func (c *Client) GetTemplate(ctx context.Context, id string) (*framesv1.FrameTemplate, error) {
+	resp, err := c.svc.GetFrameTemplate(ctx, connect.NewRequest(&framesv1.GetFrameTemplateRequest{Id: id}))
+	if err != nil {
+		return nil, err
+	}
+	return resp.Msg.Template, nil
 }

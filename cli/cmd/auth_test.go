@@ -55,3 +55,17 @@ func runCmd(t *testing.T, apiURL string, args ...string) string {
 	}
 	return buf.String()
 }
+
+// runCmdErr is runCmd for cases that must fail: it returns the error rather than
+// failing the test, so a rejection can be asserted on.
+func runCmdErr(t *testing.T, apiURL string, args ...string) (string, error) {
+	t.Helper()
+	c := NewRootCmd()
+	var buf bytes.Buffer
+	c.SetOut(&buf)
+	c.SetErr(&buf)
+	full := append([]string{"--api-url", apiURL, "--credentials-path", filepath.Join(t.TempDir(), "c.json")}, args...)
+	c.SetArgs(full)
+	err := c.Execute()
+	return buf.String(), err
+}

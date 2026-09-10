@@ -14,6 +14,7 @@ import { ConnectProviderPage } from "@/pages/ConnectProviderPage";
 import { AdminHomePage } from "@/pages/AdminHomePage";
 import { AdminMembersPage } from "@/pages/AdminMembersPage";
 import { AdminFramesPage } from "@/pages/AdminFramesPage";
+import { AdminTemplatesPage } from "@/pages/AdminTemplatesPage";
 
 export function AppRoutes() {
   return (
@@ -34,6 +35,7 @@ export function AppRoutes() {
               <Route path="/admin" element={<AdminHomePage />} />
               <Route path="/admin/members" element={<AdminMembersPage />} />
               <Route path="/admin/frames" element={<AdminFramesPage />} />
+              <Route path="/admin/templates" element={<AdminTemplatesPage />} />
             </Route>
           </Route>
         </Route>

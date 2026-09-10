@@ -2,10 +2,21 @@ import { useFormContext, get } from "react-hook-form";
 
 // Reads the message at a react-hook-form error path. Paths are dotted and may
 // index arrays ("slots.terminology.2.definition"), which is what get() handles.
+//
+// The `root` fallback is not an alternative spelling: @hookform/resolvers
+// (toNestErrors) nests an error under `<path>.root` whenever that path has
+// registered children, which is what a rule about a whole array produces - a
+// duplicate-term refine over `slots.terminology`, say, while
+// `slots.terminology.0.term` is registered. Reading only `.message` there
+// finds an object with none, so the form refuses to submit and shows nothing:
+// a Save button that silently does nothing at all.
 export function useFieldError(name: string): string | undefined {
   const { formState } = useFormContext();
-  const e = get(formState.errors, name) as { message?: string } | undefined;
-  return typeof e?.message === "string" ? e.message : undefined;
+  const e = get(formState.errors, name) as
+    | { message?: string; root?: { message?: string } }
+    | undefined;
+  const message = typeof e?.message === "string" ? e.message : e?.root?.message;
+  return typeof message === "string" ? message : undefined;
 }
 
 // Stable id for the error text, so an input can point at it via

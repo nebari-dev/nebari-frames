@@ -2,8 +2,8 @@
 // @generated from file frames/v1/frame.proto (package frames.v1, syntax proto3)
 /* eslint-disable */
 
-import type { GenFile, GenMessage } from "@bufbuild/protobuf/codegenv2";
-import { fileDesc, messageDesc } from "@bufbuild/protobuf/codegenv2";
+import type { GenEnum, GenFile, GenMessage } from "@bufbuild/protobuf/codegenv2";
+import { enumDesc, fileDesc, messageDesc } from "@bufbuild/protobuf/codegenv2";
 import type { Timestamp } from "@bufbuild/protobuf/wkt";
 import { file_google_protobuf_timestamp } from "@bufbuild/protobuf/wkt";
 import type { Message } from "@bufbuild/protobuf";
@@ -12,7 +12,7 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file frames/v1/frame.proto.
  */
 export const file_frames_v1_frame: GenFile = /*@__PURE__*/
-  fileDesc("ChVmcmFtZXMvdjEvZnJhbWUucHJvdG8SCWZyYW1lcy52MSJlCgNPcmcSCgoCaWQYASABKAkSDAoEc2x1ZxgCIAEoCRIUCgxkaXNwbGF5X25hbWUYAyABKAkSLgoKY3JlYXRlZF9hdBgEIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXAieQoKTWVtYmVyc2hpcBIOCgZvcmdfaWQYASABKAkSEAoIdXNlcl9zdWIYAiABKAkSDAoEcm9sZRgDIAEoCRIsCghhZGRlZF9hdBgEIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASDQoFZW1haWwYBSABKAki0QEKBUZyYW1lEgoKAmlkGAEgASgJEg4KBm9yZ19pZBgCIAEoCRIMCgRuYW1lGAMgASgJEhMKC2Rlc2NyaXB0aW9uGAQgASgJEhEKCW93bmVyX3N1YhgFIAEoCRIWCg5sYXRlc3RfdmVyc2lvbhgGIAEoCRIuCgpjcmVhdGVkX2F0GAcgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBIuCgp1cGRhdGVkX2F0GAggASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcCIpCglQYXJlbnRSZWYSCwoDcmVmGAEgASgJEg8KB3ZlcnNpb24YAiABKAkirwEKDEZyYW1lVmVyc2lvbhIPCgd2ZXJzaW9uGAEgASgJEhEKCWNoYW5nZWxvZxgCIAEoCRIOCgZkaWdlc3QYAyABKAkSEgoKc2l6ZV9ieXRlcxgEIAEoAxIUCgxwdWJsaXNoZWRfYnkYBSABKAkSMAoMcHVibGlzaGVkX2F0GAYgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBIPCgdjb250ZW50GAcgASgMIjMKC1Blcm1pc3Npb25zEhAKCGNhbl9lZGl0GAEgASgIEhIKCmNhbl9kZWxldGUYAiABKAgiywEKDEZyYW1lU3VtbWFyeRIQCghvcmdfc2x1ZxgBIAEoCRIMCgRuYW1lGAIgASgJEhMKC2Rlc2NyaXB0aW9uGAMgASgJEhEKCW93bmVyX3N1YhgEIAEoCRIWCg5sYXRlc3RfdmVyc2lvbhgFIAEoCRIuCgp1cGRhdGVkX2F0GAYgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBIrCgtwZXJtaXNzaW9ucxgHIAEoCzIWLmZyYW1lcy52MS5QZXJtaXNzaW9ucyKBAQoTRnJhbWVWZXJzaW9uU3VtbWFyeRIPCgd2ZXJzaW9uGAEgASgJEhEKCWNoYW5nZWxvZxgCIAEoCRIUCgxwdWJsaXNoZWRfYnkYAyABKAkSMAoMcHVibGlzaGVkX2F0GAQgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcEKfAQoNY29tLmZyYW1lcy52MUIKRnJhbWVQcm90b1ABWj1naXRodWIuY29tL25lYmFyaS1kZXYvbmViYXJpLWZyYW1lcy9nZW4vZ28vZnJhbWVzL3YxO2ZyYW1lc3YxogIDRlhYqgIJRnJhbWVzLlYxygIJRnJhbWVzXFYx4gIVRnJhbWVzXFYxXEdQQk1ldGFkYXRh6gIKRnJhbWVzOjpWMWIGcHJvdG8z", [file_google_protobuf_timestamp]);
+  fileDesc("ChVmcmFtZXMvdjEvZnJhbWUucHJvdG8SCWZyYW1lcy52MSJlCgNPcmcSCgoCaWQYASABKAkSDAoEc2x1ZxgCIAEoCRIUCgxkaXNwbGF5X25hbWUYAyABKAkSLgoKY3JlYXRlZF9hdBgEIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXAieQoKTWVtYmVyc2hpcBIOCgZvcmdfaWQYASABKAkSEAoIdXNlcl9zdWIYAiABKAkSDAoEcm9sZRgDIAEoCRIsCghhZGRlZF9hdBgEIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASDQoFZW1haWwYBSABKAki0QEKBUZyYW1lEgoKAmlkGAEgASgJEg4KBm9yZ19pZBgCIAEoCRIMCgRuYW1lGAMgASgJEhMKC2Rlc2NyaXB0aW9uGAQgASgJEhEKCW93bmVyX3N1YhgFIAEoCRIWCg5sYXRlc3RfdmVyc2lvbhgGIAEoCRIuCgpjcmVhdGVkX2F0GAcgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBIuCgp1cGRhdGVkX2F0GAggASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcCIpCglQYXJlbnRSZWYSCwoDcmVmGAEgASgJEg8KB3ZlcnNpb24YAiABKAkirwEKDEZyYW1lVmVyc2lvbhIPCgd2ZXJzaW9uGAEgASgJEhEKCWNoYW5nZWxvZxgCIAEoCRIOCgZkaWdlc3QYAyABKAkSEgoKc2l6ZV9ieXRlcxgEIAEoAxIUCgxwdWJsaXNoZWRfYnkYBSABKAkSMAoMcHVibGlzaGVkX2F0GAYgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBIPCgdjb250ZW50GAcgASgMIjMKC1Blcm1pc3Npb25zEhAKCGNhbl9lZGl0GAEgASgIEhIKCmNhbl9kZWxldGUYAiABKAgiywEKDEZyYW1lU3VtbWFyeRIQCghvcmdfc2x1ZxgBIAEoCRIMCgRuYW1lGAIgASgJEhMKC2Rlc2NyaXB0aW9uGAMgASgJEhEKCW93bmVyX3N1YhgEIAEoCRIWCg5sYXRlc3RfdmVyc2lvbhgFIAEoCRIuCgp1cGRhdGVkX2F0GAYgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBIrCgtwZXJtaXNzaW9ucxgHIAEoCzIWLmZyYW1lcy52MS5QZXJtaXNzaW9ucyKBAQoTRnJhbWVWZXJzaW9uU3VtbWFyeRIPCgd2ZXJzaW9uGAEgASgJEhEKCWNoYW5nZWxvZxgCIAEoCRIUCgxwdWJsaXNoZWRfYnkYAyABKAkSMAoMcHVibGlzaGVkX2F0GAQgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcCJACglGaWVsZFJ1bGUSJQoFbGV2ZWwYASABKA4yFi5mcmFtZXMudjEuUmVxdWlyZW1lbnQSDAoEbm90ZRgCIAEoCSJXChRGcmFtZVRlbXBsYXRlU3VtbWFyeRIKCgJpZBgBIAEoCRINCgV0aXRsZRgCIAEoCRITCgtkZXNjcmlwdGlvbhgDIAEoCRIPCgdidWlsdGluGAQgASgIIukBCg1GcmFtZVRlbXBsYXRlEgoKAmlkGAEgASgJEg0KBXRpdGxlGAIgASgJEhMKC2Rlc2NyaXB0aW9uGAMgASgJEg8KB2J1aWx0aW4YBCABKAgSDwoHcHJlZmlsbBgFIAEoDBI9CgtmaWVsZF9ydWxlcxgGIAMoCzIoLmZyYW1lcy52MS5GcmFtZVRlbXBsYXRlLkZpZWxkUnVsZXNFbnRyeRpHCg9GaWVsZFJ1bGVzRW50cnkSCwoDa2V5GAEgASgJEiMKBXZhbHVlGAIgASgLMhQuZnJhbWVzLnYxLkZpZWxkUnVsZToCOAEqewoLUmVxdWlyZW1lbnQSGwoXUkVRVUlSRU1FTlRfVU5TUEVDSUZJRUQQABIYChRSRVFVSVJFTUVOVF9PUFRJT05BTBABEhsKF1JFUVVJUkVNRU5UX1JFQ09NTUVOREVEEAISGAoUUkVRVUlSRU1FTlRfUkVRVUlSRUQQA0KfAQoNY29tLmZyYW1lcy52MUIKRnJhbWVQcm90b1ABWj1naXRodWIuY29tL25lYmFyaS1kZXYvbmViYXJpLWZyYW1lcy9nZW4vZ28vZnJhbWVzL3YxO2ZyYW1lc3YxogIDRlhYqgIJRnJhbWVzLlYxygIJRnJhbWVzXFYx4gIVRnJhbWVzXFYxXEdQQk1ldGFkYXRh6gIKRnJhbWVzOjpWMWIGcHJvdG8z", [file_google_protobuf_timestamp]);
 
 /**
  * @generated from message frames.v1.Org
@@ -314,4 +314,155 @@ export type FrameVersionSummary = Message<"frames.v1.FrameVersionSummary"> & {
  */
 export const FrameVersionSummarySchema: GenMessage<FrameVersionSummary> = /*@__PURE__*/
   messageDesc(file_frames_v1_frame, 7);
+
+/**
+ * FieldRule is a template's expectation for one slot. `note` is the template
+ * author's own guidance on what belongs there: the seeded authoring form shows
+ * it in place of the generic per-slot hint, and an MCP client asks it as a
+ * question. A message rather than a bare Requirement because widening a map's
+ * value type later would be a breaking wire change.
+ *
+ * @generated from message frames.v1.FieldRule
+ */
+export type FieldRule = Message<"frames.v1.FieldRule"> & {
+  /**
+   * @generated from field: frames.v1.Requirement level = 1;
+   */
+  level: Requirement;
+
+  /**
+   * @generated from field: string note = 2;
+   */
+  note: string;
+};
+
+/**
+ * Describes the message frames.v1.FieldRule.
+ * Use `create(FieldRuleSchema)` to create a new message.
+ */
+export const FieldRuleSchema: GenMessage<FieldRule> = /*@__PURE__*/
+  messageDesc(file_frames_v1_frame, 8);
+
+/**
+ * FrameTemplateSummary is what a picker needs: no prefill, so listing stays
+ * cheap. `builtin` is computed server-side so no client has to parse an id.
+ *
+ * @generated from message frames.v1.FrameTemplateSummary
+ */
+export type FrameTemplateSummary = Message<"frames.v1.FrameTemplateSummary"> & {
+  /**
+   * @generated from field: string id = 1;
+   */
+  id: string;
+
+  /**
+   * @generated from field: string title = 2;
+   */
+  title: string;
+
+  /**
+   * @generated from field: string description = 3;
+   */
+  description: string;
+
+  /**
+   * @generated from field: bool builtin = 4;
+   */
+  builtin: boolean;
+};
+
+/**
+ * Describes the message frames.v1.FrameTemplateSummary.
+ * Use `create(FrameTemplateSummarySchema)` to create a new message.
+ */
+export const FrameTemplateSummarySchema: GenMessage<FrameTemplateSummary> = /*@__PURE__*/
+  messageDesc(file_frames_v1_frame, 9);
+
+/**
+ * @generated from message frames.v1.FrameTemplate
+ */
+export type FrameTemplate = Message<"frames.v1.FrameTemplate"> & {
+  /**
+   * @generated from field: string id = 1;
+   */
+  id: string;
+
+  /**
+   * @generated from field: string title = 2;
+   */
+  title: string;
+
+  /**
+   * @generated from field: string description = 3;
+   */
+  description: string;
+
+  /**
+   * @generated from field: bool builtin = 4;
+   */
+  builtin: boolean;
+
+  /**
+   * Canonical YAML carrying only `slots` and `extends`. Bytes rather than a
+   * structured message on purpose: a message mirroring the slot schema would be
+   * a second place to update whenever frames.SlotTable changes, which is what
+   * the reflective guards in the MCP tests exist to catch.
+   *
+   * @generated from field: bytes prefill = 5;
+   */
+  prefill: Uint8Array;
+
+  /**
+   * Slot key (terminology, rules, skills, prompts, tool_specs, goals, style,
+   * norms, architecture, business_process) -> rule. Keyed by string, so adding
+   * a slot does not change this shape either.
+   *
+   * @generated from field: map<string, frames.v1.FieldRule> field_rules = 6;
+   */
+  fieldRules: { [key: string]: FieldRule };
+};
+
+/**
+ * Describes the message frames.v1.FrameTemplate.
+ * Use `create(FrameTemplateSchema)` to create a new message.
+ */
+export const FrameTemplateSchema: GenMessage<FrameTemplate> = /*@__PURE__*/
+  messageDesc(file_frames_v1_frame, 10);
+
+/**
+ * Requirement is how strongly a template wants a slot filled. Stricter than the
+ * Frame schema, which requires no slot at all: an org uses it to hold its own
+ * Frames to a house standard the spec does not impose.
+ *
+ * @generated from enum frames.v1.Requirement
+ */
+export enum Requirement {
+  /**
+   * treated as optional
+   *
+   * @generated from enum value: REQUIREMENT_UNSPECIFIED = 0;
+   */
+  UNSPECIFIED = 0,
+
+  /**
+   * @generated from enum value: REQUIREMENT_OPTIONAL = 1;
+   */
+  OPTIONAL = 1,
+
+  /**
+   * @generated from enum value: REQUIREMENT_RECOMMENDED = 2;
+   */
+  RECOMMENDED = 2,
+
+  /**
+   * @generated from enum value: REQUIREMENT_REQUIRED = 3;
+   */
+  REQUIRED = 3,
+}
+
+/**
+ * Describes the enum frames.v1.Requirement.
+ */
+export const RequirementSchema: GenEnum<Requirement> = /*@__PURE__*/
+  enumDesc(file_frames_v1_frame, 0);
 

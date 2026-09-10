@@ -20,7 +20,26 @@ const { convertMock, publishMock } = vi.hoisted(() => ({
 }));
 
 vi.mock("@connectrpc/connect-query", () => ({
-  useQuery: () => ({ data: { org: { slug: "openteams" } }, isLoading: false, error: null }),
+  useQuery: () => ({
+    // Rendering past the picker means a template was chosen AND fetched: the
+    // page withholds the form until the seed lands, because reset() would
+    // otherwise discard anything typed in the meantime. One object serves both
+    // readers - each looks at its own key.
+    data: {
+      org: { slug: "openteams" },
+      template: {
+        id: "builtin:blank",
+        title: "Blank",
+        description: "Empty.",
+        builtin: true,
+        prefill: new TextEncoder().encode("slots: {}\n"),
+        fieldRules: {},
+      },
+    },
+    isLoading: false,
+    error: null,
+    isFetchedAfterMount: true,
+  }),
   useMutation: (method: { name?: string }) => ({
     mutate: method?.name === "ConvertFrame" ? convertMock : publishMock,
     isPending: false,
@@ -47,8 +66,15 @@ beforeEach(() => {
   publishMock.mockReset();
 });
 
+// The real create path now starts at the template picker; these tests exercise
+// the authoring form itself, so they render past it with a template already
+// chosen in the URL, same as a user who just picked one.
 function renderCreate() {
-  return render(<MemoryRouter><FrameAuthoringPage mode="create" /></MemoryRouter>);
+  return render(
+    <MemoryRouter initialEntries={["/frames/new?template=builtin:blank"]}>
+      <FrameAuthoringPage mode="create" />
+    </MemoryRouter>,
+  );
 }
 
 // Markdown is a secondary mode behind the overflow menu, not a header toggle.
@@ -117,6 +143,46 @@ it("publishing from Markdown converts first, then publishes the canonical YAML",
 
   await waitFor(() => expect(publishMock).toHaveBeenCalled());
   expect(new TextDecoder().decode(publishMock.mock.calls[0][0].content)).toBe(yaml);
+});
+
+it("carries the chosen template id through a Markdown-mode publish, and none when importing", async () => {
+  const yaml = "name: brand-voice\ndescription: d\nversion: 1.0.0\nvisibility: internal\nslots: {}\n";
+
+  // A template was chosen (renderCreate() lands on ?template=builtin:blank);
+  // switching to Markdown before publishing must not drop the check that
+  // choice opted into. Two conversions happen here: entering Markdown mode
+  // (doc -> markdown), then publish's own markdown -> yaml step.
+  convertMock
+    .mockImplementationOnce((_req, opts) => opts.onSuccess({ markdown: encode("---\n---\n") }))
+    .mockImplementationOnce((_req, opts) => opts.onSuccess({ yaml: encode(yaml) }));
+
+  const templated = renderCreate();
+  await openMarkdownMode();
+  await screen.findByLabelText(/frame markdown source/i);
+  await userEvent.click(screen.getByRole("button", { name: /publish…/i }));
+  await userEvent.click(await screen.findByRole("button", { name: /^publish$/i }));
+
+  await waitFor(() => expect(publishMock).toHaveBeenCalled());
+  expect(publishMock.mock.calls[0][0].templateId).toBe("builtin:blank");
+  templated.unmount();
+
+  // The ?import=1 path lands in Markdown mode with its source document already
+  // in hand, never a template: applying a standard the author never picked
+  // would be a surprise, same as the document-editor path.
+  publishMock.mockClear();
+  convertMock.mockImplementationOnce((_req, opts) => opts.onSuccess({ yaml: encode(yaml) }));
+
+  render(
+    <MemoryRouter initialEntries={["/frames/new?import=1"]}>
+      <FrameAuthoringPage mode="create" />
+    </MemoryRouter>,
+  );
+  await screen.findByLabelText(/frame markdown source/i);
+  await userEvent.click(screen.getByRole("button", { name: /publish…/i }));
+  await userEvent.click(await screen.findByRole("button", { name: /^publish$/i }));
+
+  await waitFor(() => expect(publishMock).toHaveBeenCalled());
+  expect(publishMock.mock.calls[0][0].templateId).toBe("");
 });
 
 it("import mode opens straight into an empty Markdown editor", async () => {

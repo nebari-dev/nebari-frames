@@ -22,6 +22,61 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
+// Requirement is how strongly a template wants a slot filled. Stricter than the
+// Frame schema, which requires no slot at all: an org uses it to hold its own
+// Frames to a house standard the spec does not impose.
+type Requirement int32
+
+const (
+	Requirement_REQUIREMENT_UNSPECIFIED Requirement = 0 // treated as optional
+	Requirement_REQUIREMENT_OPTIONAL    Requirement = 1
+	Requirement_REQUIREMENT_RECOMMENDED Requirement = 2
+	Requirement_REQUIREMENT_REQUIRED    Requirement = 3
+)
+
+// Enum value maps for Requirement.
+var (
+	Requirement_name = map[int32]string{
+		0: "REQUIREMENT_UNSPECIFIED",
+		1: "REQUIREMENT_OPTIONAL",
+		2: "REQUIREMENT_RECOMMENDED",
+		3: "REQUIREMENT_REQUIRED",
+	}
+	Requirement_value = map[string]int32{
+		"REQUIREMENT_UNSPECIFIED": 0,
+		"REQUIREMENT_OPTIONAL":    1,
+		"REQUIREMENT_RECOMMENDED": 2,
+		"REQUIREMENT_REQUIRED":    3,
+	}
+)
+
+func (x Requirement) Enum() *Requirement {
+	p := new(Requirement)
+	*p = x
+	return p
+}
+
+func (x Requirement) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (Requirement) Descriptor() protoreflect.EnumDescriptor {
+	return file_frames_v1_frame_proto_enumTypes[0].Descriptor()
+}
+
+func (Requirement) Type() protoreflect.EnumType {
+	return &file_frames_v1_frame_proto_enumTypes[0]
+}
+
+func (x Requirement) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use Requirement.Descriptor instead.
+func (Requirement) EnumDescriptor() ([]byte, []int) {
+	return file_frames_v1_frame_proto_rawDescGZIP(), []int{0}
+}
+
 type Org struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Id            string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
@@ -622,6 +677,224 @@ func (x *FrameVersionSummary) GetPublishedAt() *timestamppb.Timestamp {
 	return nil
 }
 
+// FieldRule is a template's expectation for one slot. `note` is the template
+// author's own guidance on what belongs there: the seeded authoring form shows
+// it in place of the generic per-slot hint, and an MCP client asks it as a
+// question. A message rather than a bare Requirement because widening a map's
+// value type later would be a breaking wire change.
+type FieldRule struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Level         Requirement            `protobuf:"varint,1,opt,name=level,proto3,enum=frames.v1.Requirement" json:"level,omitempty"`
+	Note          string                 `protobuf:"bytes,2,opt,name=note,proto3" json:"note,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *FieldRule) Reset() {
+	*x = FieldRule{}
+	mi := &file_frames_v1_frame_proto_msgTypes[8]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *FieldRule) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*FieldRule) ProtoMessage() {}
+
+func (x *FieldRule) ProtoReflect() protoreflect.Message {
+	mi := &file_frames_v1_frame_proto_msgTypes[8]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use FieldRule.ProtoReflect.Descriptor instead.
+func (*FieldRule) Descriptor() ([]byte, []int) {
+	return file_frames_v1_frame_proto_rawDescGZIP(), []int{8}
+}
+
+func (x *FieldRule) GetLevel() Requirement {
+	if x != nil {
+		return x.Level
+	}
+	return Requirement_REQUIREMENT_UNSPECIFIED
+}
+
+func (x *FieldRule) GetNote() string {
+	if x != nil {
+		return x.Note
+	}
+	return ""
+}
+
+// FrameTemplateSummary is what a picker needs: no prefill, so listing stays
+// cheap. `builtin` is computed server-side so no client has to parse an id.
+type FrameTemplateSummary struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Id            string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	Title         string                 `protobuf:"bytes,2,opt,name=title,proto3" json:"title,omitempty"`
+	Description   string                 `protobuf:"bytes,3,opt,name=description,proto3" json:"description,omitempty"`
+	Builtin       bool                   `protobuf:"varint,4,opt,name=builtin,proto3" json:"builtin,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *FrameTemplateSummary) Reset() {
+	*x = FrameTemplateSummary{}
+	mi := &file_frames_v1_frame_proto_msgTypes[9]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *FrameTemplateSummary) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*FrameTemplateSummary) ProtoMessage() {}
+
+func (x *FrameTemplateSummary) ProtoReflect() protoreflect.Message {
+	mi := &file_frames_v1_frame_proto_msgTypes[9]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use FrameTemplateSummary.ProtoReflect.Descriptor instead.
+func (*FrameTemplateSummary) Descriptor() ([]byte, []int) {
+	return file_frames_v1_frame_proto_rawDescGZIP(), []int{9}
+}
+
+func (x *FrameTemplateSummary) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+func (x *FrameTemplateSummary) GetTitle() string {
+	if x != nil {
+		return x.Title
+	}
+	return ""
+}
+
+func (x *FrameTemplateSummary) GetDescription() string {
+	if x != nil {
+		return x.Description
+	}
+	return ""
+}
+
+func (x *FrameTemplateSummary) GetBuiltin() bool {
+	if x != nil {
+		return x.Builtin
+	}
+	return false
+}
+
+type FrameTemplate struct {
+	state       protoimpl.MessageState `protogen:"open.v1"`
+	Id          string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	Title       string                 `protobuf:"bytes,2,opt,name=title,proto3" json:"title,omitempty"`
+	Description string                 `protobuf:"bytes,3,opt,name=description,proto3" json:"description,omitempty"`
+	Builtin     bool                   `protobuf:"varint,4,opt,name=builtin,proto3" json:"builtin,omitempty"`
+	// Canonical YAML carrying only `slots` and `extends`. Bytes rather than a
+	// structured message on purpose: a message mirroring the slot schema would be
+	// a second place to update whenever frames.SlotTable changes, which is what
+	// the reflective guards in the MCP tests exist to catch.
+	Prefill []byte `protobuf:"bytes,5,opt,name=prefill,proto3" json:"prefill,omitempty"`
+	// Slot key (terminology, rules, skills, prompts, tool_specs, goals, style,
+	// norms, architecture, business_process) -> rule. Keyed by string, so adding
+	// a slot does not change this shape either.
+	FieldRules    map[string]*FieldRule `protobuf:"bytes,6,rep,name=field_rules,json=fieldRules,proto3" json:"field_rules,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *FrameTemplate) Reset() {
+	*x = FrameTemplate{}
+	mi := &file_frames_v1_frame_proto_msgTypes[10]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *FrameTemplate) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*FrameTemplate) ProtoMessage() {}
+
+func (x *FrameTemplate) ProtoReflect() protoreflect.Message {
+	mi := &file_frames_v1_frame_proto_msgTypes[10]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use FrameTemplate.ProtoReflect.Descriptor instead.
+func (*FrameTemplate) Descriptor() ([]byte, []int) {
+	return file_frames_v1_frame_proto_rawDescGZIP(), []int{10}
+}
+
+func (x *FrameTemplate) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+func (x *FrameTemplate) GetTitle() string {
+	if x != nil {
+		return x.Title
+	}
+	return ""
+}
+
+func (x *FrameTemplate) GetDescription() string {
+	if x != nil {
+		return x.Description
+	}
+	return ""
+}
+
+func (x *FrameTemplate) GetBuiltin() bool {
+	if x != nil {
+		return x.Builtin
+	}
+	return false
+}
+
+func (x *FrameTemplate) GetPrefill() []byte {
+	if x != nil {
+		return x.Prefill
+	}
+	return nil
+}
+
+func (x *FrameTemplate) GetFieldRules() map[string]*FieldRule {
+	if x != nil {
+		return x.FieldRules
+	}
+	return nil
+}
+
 var File_frames_v1_frame_proto protoreflect.FileDescriptor
 
 const file_frames_v1_frame_proto_rawDesc = "" +
@@ -680,7 +953,31 @@ const file_frames_v1_frame_proto_rawDesc = "" +
 	"\aversion\x18\x01 \x01(\tR\aversion\x12\x1c\n" +
 	"\tchangelog\x18\x02 \x01(\tR\tchangelog\x12!\n" +
 	"\fpublished_by\x18\x03 \x01(\tR\vpublishedBy\x12=\n" +
-	"\fpublished_at\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampR\vpublishedAtB\x9f\x01\n" +
+	"\fpublished_at\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampR\vpublishedAt\"M\n" +
+	"\tFieldRule\x12,\n" +
+	"\x05level\x18\x01 \x01(\x0e2\x16.frames.v1.RequirementR\x05level\x12\x12\n" +
+	"\x04note\x18\x02 \x01(\tR\x04note\"x\n" +
+	"\x14FrameTemplateSummary\x12\x0e\n" +
+	"\x02id\x18\x01 \x01(\tR\x02id\x12\x14\n" +
+	"\x05title\x18\x02 \x01(\tR\x05title\x12 \n" +
+	"\vdescription\x18\x03 \x01(\tR\vdescription\x12\x18\n" +
+	"\abuiltin\x18\x04 \x01(\bR\abuiltin\"\xab\x02\n" +
+	"\rFrameTemplate\x12\x0e\n" +
+	"\x02id\x18\x01 \x01(\tR\x02id\x12\x14\n" +
+	"\x05title\x18\x02 \x01(\tR\x05title\x12 \n" +
+	"\vdescription\x18\x03 \x01(\tR\vdescription\x12\x18\n" +
+	"\abuiltin\x18\x04 \x01(\bR\abuiltin\x12\x18\n" +
+	"\aprefill\x18\x05 \x01(\fR\aprefill\x12I\n" +
+	"\vfield_rules\x18\x06 \x03(\v2(.frames.v1.FrameTemplate.FieldRulesEntryR\n" +
+	"fieldRules\x1aS\n" +
+	"\x0fFieldRulesEntry\x12\x10\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\x12*\n" +
+	"\x05value\x18\x02 \x01(\v2\x14.frames.v1.FieldRuleR\x05value:\x028\x01*{\n" +
+	"\vRequirement\x12\x1b\n" +
+	"\x17REQUIREMENT_UNSPECIFIED\x10\x00\x12\x18\n" +
+	"\x14REQUIREMENT_OPTIONAL\x10\x01\x12\x1b\n" +
+	"\x17REQUIREMENT_RECOMMENDED\x10\x02\x12\x18\n" +
+	"\x14REQUIREMENT_REQUIRED\x10\x03B\x9f\x01\n" +
 	"\rcom.frames.v1B\n" +
 	"FrameProtoP\x01Z=github.com/nebari-dev/nebari-frames/gen/go/frames/v1;framesv1\xa2\x02\x03FXX\xaa\x02\tFrames.V1\xca\x02\tFrames\\V1\xe2\x02\x15Frames\\V1\\GPBMetadata\xea\x02\n" +
 	"Frames::V1b\x06proto3"
@@ -697,32 +994,41 @@ func file_frames_v1_frame_proto_rawDescGZIP() []byte {
 	return file_frames_v1_frame_proto_rawDescData
 }
 
-var file_frames_v1_frame_proto_msgTypes = make([]protoimpl.MessageInfo, 8)
+var file_frames_v1_frame_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
+var file_frames_v1_frame_proto_msgTypes = make([]protoimpl.MessageInfo, 12)
 var file_frames_v1_frame_proto_goTypes = []any{
-	(*Org)(nil),                   // 0: frames.v1.Org
-	(*Membership)(nil),            // 1: frames.v1.Membership
-	(*Frame)(nil),                 // 2: frames.v1.Frame
-	(*ParentRef)(nil),             // 3: frames.v1.ParentRef
-	(*FrameVersion)(nil),          // 4: frames.v1.FrameVersion
-	(*Permissions)(nil),           // 5: frames.v1.Permissions
-	(*FrameSummary)(nil),          // 6: frames.v1.FrameSummary
-	(*FrameVersionSummary)(nil),   // 7: frames.v1.FrameVersionSummary
-	(*timestamppb.Timestamp)(nil), // 8: google.protobuf.Timestamp
+	(Requirement)(0),              // 0: frames.v1.Requirement
+	(*Org)(nil),                   // 1: frames.v1.Org
+	(*Membership)(nil),            // 2: frames.v1.Membership
+	(*Frame)(nil),                 // 3: frames.v1.Frame
+	(*ParentRef)(nil),             // 4: frames.v1.ParentRef
+	(*FrameVersion)(nil),          // 5: frames.v1.FrameVersion
+	(*Permissions)(nil),           // 6: frames.v1.Permissions
+	(*FrameSummary)(nil),          // 7: frames.v1.FrameSummary
+	(*FrameVersionSummary)(nil),   // 8: frames.v1.FrameVersionSummary
+	(*FieldRule)(nil),             // 9: frames.v1.FieldRule
+	(*FrameTemplateSummary)(nil),  // 10: frames.v1.FrameTemplateSummary
+	(*FrameTemplate)(nil),         // 11: frames.v1.FrameTemplate
+	nil,                           // 12: frames.v1.FrameTemplate.FieldRulesEntry
+	(*timestamppb.Timestamp)(nil), // 13: google.protobuf.Timestamp
 }
 var file_frames_v1_frame_proto_depIdxs = []int32{
-	8, // 0: frames.v1.Org.created_at:type_name -> google.protobuf.Timestamp
-	8, // 1: frames.v1.Membership.added_at:type_name -> google.protobuf.Timestamp
-	8, // 2: frames.v1.Frame.created_at:type_name -> google.protobuf.Timestamp
-	8, // 3: frames.v1.Frame.updated_at:type_name -> google.protobuf.Timestamp
-	8, // 4: frames.v1.FrameVersion.published_at:type_name -> google.protobuf.Timestamp
-	8, // 5: frames.v1.FrameSummary.updated_at:type_name -> google.protobuf.Timestamp
-	5, // 6: frames.v1.FrameSummary.permissions:type_name -> frames.v1.Permissions
-	8, // 7: frames.v1.FrameVersionSummary.published_at:type_name -> google.protobuf.Timestamp
-	8, // [8:8] is the sub-list for method output_type
-	8, // [8:8] is the sub-list for method input_type
-	8, // [8:8] is the sub-list for extension type_name
-	8, // [8:8] is the sub-list for extension extendee
-	0, // [0:8] is the sub-list for field type_name
+	13, // 0: frames.v1.Org.created_at:type_name -> google.protobuf.Timestamp
+	13, // 1: frames.v1.Membership.added_at:type_name -> google.protobuf.Timestamp
+	13, // 2: frames.v1.Frame.created_at:type_name -> google.protobuf.Timestamp
+	13, // 3: frames.v1.Frame.updated_at:type_name -> google.protobuf.Timestamp
+	13, // 4: frames.v1.FrameVersion.published_at:type_name -> google.protobuf.Timestamp
+	13, // 5: frames.v1.FrameSummary.updated_at:type_name -> google.protobuf.Timestamp
+	6,  // 6: frames.v1.FrameSummary.permissions:type_name -> frames.v1.Permissions
+	13, // 7: frames.v1.FrameVersionSummary.published_at:type_name -> google.protobuf.Timestamp
+	0,  // 8: frames.v1.FieldRule.level:type_name -> frames.v1.Requirement
+	12, // 9: frames.v1.FrameTemplate.field_rules:type_name -> frames.v1.FrameTemplate.FieldRulesEntry
+	9,  // 10: frames.v1.FrameTemplate.FieldRulesEntry.value:type_name -> frames.v1.FieldRule
+	11, // [11:11] is the sub-list for method output_type
+	11, // [11:11] is the sub-list for method input_type
+	11, // [11:11] is the sub-list for extension type_name
+	11, // [11:11] is the sub-list for extension extendee
+	0,  // [0:11] is the sub-list for field type_name
 }
 
 func init() { file_frames_v1_frame_proto_init() }
@@ -735,13 +1041,14 @@ func file_frames_v1_frame_proto_init() {
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_frames_v1_frame_proto_rawDesc), len(file_frames_v1_frame_proto_rawDesc)),
-			NumEnums:      0,
-			NumMessages:   8,
+			NumEnums:      1,
+			NumMessages:   12,
 			NumExtensions: 0,
 			NumServices:   0,
 		},
 		GoTypes:           file_frames_v1_frame_proto_goTypes,
 		DependencyIndexes: file_frames_v1_frame_proto_depIdxs,
+		EnumInfos:         file_frames_v1_frame_proto_enumTypes,
 		MessageInfos:      file_frames_v1_frame_proto_msgTypes,
 	}.Build()
 	File_frames_v1_frame_proto = out.File

@@ -54,6 +54,21 @@ const (
 	// FrameServiceConvertFrameProcedure is the fully-qualified name of the FrameService's ConvertFrame
 	// RPC.
 	FrameServiceConvertFrameProcedure = "/frames.v1.FrameService/ConvertFrame"
+	// FrameServiceListFrameTemplatesProcedure is the fully-qualified name of the FrameService's
+	// ListFrameTemplates RPC.
+	FrameServiceListFrameTemplatesProcedure = "/frames.v1.FrameService/ListFrameTemplates"
+	// FrameServiceGetFrameTemplateProcedure is the fully-qualified name of the FrameService's
+	// GetFrameTemplate RPC.
+	FrameServiceGetFrameTemplateProcedure = "/frames.v1.FrameService/GetFrameTemplate"
+	// FrameServiceCreateFrameTemplateProcedure is the fully-qualified name of the FrameService's
+	// CreateFrameTemplate RPC.
+	FrameServiceCreateFrameTemplateProcedure = "/frames.v1.FrameService/CreateFrameTemplate"
+	// FrameServiceUpdateFrameTemplateProcedure is the fully-qualified name of the FrameService's
+	// UpdateFrameTemplate RPC.
+	FrameServiceUpdateFrameTemplateProcedure = "/frames.v1.FrameService/UpdateFrameTemplate"
+	// FrameServiceDeleteFrameTemplateProcedure is the fully-qualified name of the FrameService's
+	// DeleteFrameTemplate RPC.
+	FrameServiceDeleteFrameTemplateProcedure = "/frames.v1.FrameService/DeleteFrameTemplate"
 	// FrameServiceListOrgMembersProcedure is the fully-qualified name of the FrameService's
 	// ListOrgMembers RPC.
 	FrameServiceListOrgMembersProcedure = "/frames.v1.FrameService/ListOrgMembers"
@@ -87,6 +102,20 @@ type FrameServiceClient interface {
 	// Pure conversion between the canonical slot YAML and the spec-conformant
 	// .frame.md form. Stateless and unauthenticated beyond org membership.
 	ConvertFrame(context.Context, *connect.Request[v1.ConvertFrameRequest]) (*connect.Response[v1.ConvertFrameResponse], error)
+	// Read - the templates the caller may start a Frame from: the built-ins plus
+	// their own org's. Any member may call it.
+	ListFrameTemplates(context.Context, *connect.Request[v1.ListFrameTemplatesRequest]) (*connect.Response[v1.ListFrameTemplatesResponse], error)
+	// Read - one template with its prefill and rules. 404 for a built-in that
+	// does not exist and for another org's template alike, so existence does not
+	// leak.
+	GetFrameTemplate(context.Context, *connect.Request[v1.GetFrameTemplateRequest]) (*connect.Response[v1.GetFrameTemplateResponse], error)
+	// Admin only - create an org template.
+	CreateFrameTemplate(context.Context, *connect.Request[v1.CreateFrameTemplateRequest]) (*connect.Response[v1.CreateFrameTemplateResponse], error)
+	// Admin only - replace an org template's content. Built-ins are immutable.
+	UpdateFrameTemplate(context.Context, *connect.Request[v1.UpdateFrameTemplateRequest]) (*connect.Response[v1.UpdateFrameTemplateResponse], error)
+	// Admin only - delete an org template. Frames already created from it are
+	// unaffected: a template is copied once and never referenced again.
+	DeleteFrameTemplate(context.Context, *connect.Request[v1.DeleteFrameTemplateRequest]) (*connect.Response[v1.DeleteFrameTemplateResponse], error)
 	// Admin only - list the caller's org members.
 	ListOrgMembers(context.Context, *connect.Request[v1.ListOrgMembersRequest]) (*connect.Response[v1.ListOrgMembersResponse], error)
 	// Admin only - add a member to the caller's org by email (pending until login).
@@ -156,6 +185,36 @@ func NewFrameServiceClient(httpClient connect.HTTPClient, baseURL string, opts .
 			connect.WithSchema(frameServiceMethods.ByName("ConvertFrame")),
 			connect.WithClientOptions(opts...),
 		),
+		listFrameTemplates: connect.NewClient[v1.ListFrameTemplatesRequest, v1.ListFrameTemplatesResponse](
+			httpClient,
+			baseURL+FrameServiceListFrameTemplatesProcedure,
+			connect.WithSchema(frameServiceMethods.ByName("ListFrameTemplates")),
+			connect.WithClientOptions(opts...),
+		),
+		getFrameTemplate: connect.NewClient[v1.GetFrameTemplateRequest, v1.GetFrameTemplateResponse](
+			httpClient,
+			baseURL+FrameServiceGetFrameTemplateProcedure,
+			connect.WithSchema(frameServiceMethods.ByName("GetFrameTemplate")),
+			connect.WithClientOptions(opts...),
+		),
+		createFrameTemplate: connect.NewClient[v1.CreateFrameTemplateRequest, v1.CreateFrameTemplateResponse](
+			httpClient,
+			baseURL+FrameServiceCreateFrameTemplateProcedure,
+			connect.WithSchema(frameServiceMethods.ByName("CreateFrameTemplate")),
+			connect.WithClientOptions(opts...),
+		),
+		updateFrameTemplate: connect.NewClient[v1.UpdateFrameTemplateRequest, v1.UpdateFrameTemplateResponse](
+			httpClient,
+			baseURL+FrameServiceUpdateFrameTemplateProcedure,
+			connect.WithSchema(frameServiceMethods.ByName("UpdateFrameTemplate")),
+			connect.WithClientOptions(opts...),
+		),
+		deleteFrameTemplate: connect.NewClient[v1.DeleteFrameTemplateRequest, v1.DeleteFrameTemplateResponse](
+			httpClient,
+			baseURL+FrameServiceDeleteFrameTemplateProcedure,
+			connect.WithSchema(frameServiceMethods.ByName("DeleteFrameTemplate")),
+			connect.WithClientOptions(opts...),
+		),
 		listOrgMembers: connect.NewClient[v1.ListOrgMembersRequest, v1.ListOrgMembersResponse](
 			httpClient,
 			baseURL+FrameServiceListOrgMembersProcedure,
@@ -185,18 +244,23 @@ func NewFrameServiceClient(httpClient connect.HTTPClient, baseURL string, opts .
 
 // frameServiceClient implements FrameServiceClient.
 type frameServiceClient struct {
-	publishFrame      *connect.Client[v1.PublishFrameRequest, v1.PublishFrameResponse]
-	listFrames        *connect.Client[v1.ListFramesRequest, v1.ListFramesResponse]
-	getFrame          *connect.Client[v1.GetFrameRequest, v1.GetFrameResponse]
-	resolveFrame      *connect.Client[v1.ResolveFrameRequest, v1.ResolveFrameResponse]
-	getMe             *connect.Client[v1.GetMeRequest, v1.GetMeResponse]
-	listFrameVersions *connect.Client[v1.ListFrameVersionsRequest, v1.ListFrameVersionsResponse]
-	deleteFrame       *connect.Client[v1.DeleteFrameRequest, v1.DeleteFrameResponse]
-	convertFrame      *connect.Client[v1.ConvertFrameRequest, v1.ConvertFrameResponse]
-	listOrgMembers    *connect.Client[v1.ListOrgMembersRequest, v1.ListOrgMembersResponse]
-	addOrgMember      *connect.Client[v1.AddOrgMemberRequest, v1.AddOrgMemberResponse]
-	setMemberRole     *connect.Client[v1.SetMemberRoleRequest, v1.SetMemberRoleResponse]
-	removeOrgMember   *connect.Client[v1.RemoveOrgMemberRequest, v1.RemoveOrgMemberResponse]
+	publishFrame        *connect.Client[v1.PublishFrameRequest, v1.PublishFrameResponse]
+	listFrames          *connect.Client[v1.ListFramesRequest, v1.ListFramesResponse]
+	getFrame            *connect.Client[v1.GetFrameRequest, v1.GetFrameResponse]
+	resolveFrame        *connect.Client[v1.ResolveFrameRequest, v1.ResolveFrameResponse]
+	getMe               *connect.Client[v1.GetMeRequest, v1.GetMeResponse]
+	listFrameVersions   *connect.Client[v1.ListFrameVersionsRequest, v1.ListFrameVersionsResponse]
+	deleteFrame         *connect.Client[v1.DeleteFrameRequest, v1.DeleteFrameResponse]
+	convertFrame        *connect.Client[v1.ConvertFrameRequest, v1.ConvertFrameResponse]
+	listFrameTemplates  *connect.Client[v1.ListFrameTemplatesRequest, v1.ListFrameTemplatesResponse]
+	getFrameTemplate    *connect.Client[v1.GetFrameTemplateRequest, v1.GetFrameTemplateResponse]
+	createFrameTemplate *connect.Client[v1.CreateFrameTemplateRequest, v1.CreateFrameTemplateResponse]
+	updateFrameTemplate *connect.Client[v1.UpdateFrameTemplateRequest, v1.UpdateFrameTemplateResponse]
+	deleteFrameTemplate *connect.Client[v1.DeleteFrameTemplateRequest, v1.DeleteFrameTemplateResponse]
+	listOrgMembers      *connect.Client[v1.ListOrgMembersRequest, v1.ListOrgMembersResponse]
+	addOrgMember        *connect.Client[v1.AddOrgMemberRequest, v1.AddOrgMemberResponse]
+	setMemberRole       *connect.Client[v1.SetMemberRoleRequest, v1.SetMemberRoleResponse]
+	removeOrgMember     *connect.Client[v1.RemoveOrgMemberRequest, v1.RemoveOrgMemberResponse]
 }
 
 // PublishFrame calls frames.v1.FrameService.PublishFrame.
@@ -239,6 +303,31 @@ func (c *frameServiceClient) ConvertFrame(ctx context.Context, req *connect.Requ
 	return c.convertFrame.CallUnary(ctx, req)
 }
 
+// ListFrameTemplates calls frames.v1.FrameService.ListFrameTemplates.
+func (c *frameServiceClient) ListFrameTemplates(ctx context.Context, req *connect.Request[v1.ListFrameTemplatesRequest]) (*connect.Response[v1.ListFrameTemplatesResponse], error) {
+	return c.listFrameTemplates.CallUnary(ctx, req)
+}
+
+// GetFrameTemplate calls frames.v1.FrameService.GetFrameTemplate.
+func (c *frameServiceClient) GetFrameTemplate(ctx context.Context, req *connect.Request[v1.GetFrameTemplateRequest]) (*connect.Response[v1.GetFrameTemplateResponse], error) {
+	return c.getFrameTemplate.CallUnary(ctx, req)
+}
+
+// CreateFrameTemplate calls frames.v1.FrameService.CreateFrameTemplate.
+func (c *frameServiceClient) CreateFrameTemplate(ctx context.Context, req *connect.Request[v1.CreateFrameTemplateRequest]) (*connect.Response[v1.CreateFrameTemplateResponse], error) {
+	return c.createFrameTemplate.CallUnary(ctx, req)
+}
+
+// UpdateFrameTemplate calls frames.v1.FrameService.UpdateFrameTemplate.
+func (c *frameServiceClient) UpdateFrameTemplate(ctx context.Context, req *connect.Request[v1.UpdateFrameTemplateRequest]) (*connect.Response[v1.UpdateFrameTemplateResponse], error) {
+	return c.updateFrameTemplate.CallUnary(ctx, req)
+}
+
+// DeleteFrameTemplate calls frames.v1.FrameService.DeleteFrameTemplate.
+func (c *frameServiceClient) DeleteFrameTemplate(ctx context.Context, req *connect.Request[v1.DeleteFrameTemplateRequest]) (*connect.Response[v1.DeleteFrameTemplateResponse], error) {
+	return c.deleteFrameTemplate.CallUnary(ctx, req)
+}
+
 // ListOrgMembers calls frames.v1.FrameService.ListOrgMembers.
 func (c *frameServiceClient) ListOrgMembers(ctx context.Context, req *connect.Request[v1.ListOrgMembersRequest]) (*connect.Response[v1.ListOrgMembersResponse], error) {
 	return c.listOrgMembers.CallUnary(ctx, req)
@@ -278,6 +367,20 @@ type FrameServiceHandler interface {
 	// Pure conversion between the canonical slot YAML and the spec-conformant
 	// .frame.md form. Stateless and unauthenticated beyond org membership.
 	ConvertFrame(context.Context, *connect.Request[v1.ConvertFrameRequest]) (*connect.Response[v1.ConvertFrameResponse], error)
+	// Read - the templates the caller may start a Frame from: the built-ins plus
+	// their own org's. Any member may call it.
+	ListFrameTemplates(context.Context, *connect.Request[v1.ListFrameTemplatesRequest]) (*connect.Response[v1.ListFrameTemplatesResponse], error)
+	// Read - one template with its prefill and rules. 404 for a built-in that
+	// does not exist and for another org's template alike, so existence does not
+	// leak.
+	GetFrameTemplate(context.Context, *connect.Request[v1.GetFrameTemplateRequest]) (*connect.Response[v1.GetFrameTemplateResponse], error)
+	// Admin only - create an org template.
+	CreateFrameTemplate(context.Context, *connect.Request[v1.CreateFrameTemplateRequest]) (*connect.Response[v1.CreateFrameTemplateResponse], error)
+	// Admin only - replace an org template's content. Built-ins are immutable.
+	UpdateFrameTemplate(context.Context, *connect.Request[v1.UpdateFrameTemplateRequest]) (*connect.Response[v1.UpdateFrameTemplateResponse], error)
+	// Admin only - delete an org template. Frames already created from it are
+	// unaffected: a template is copied once and never referenced again.
+	DeleteFrameTemplate(context.Context, *connect.Request[v1.DeleteFrameTemplateRequest]) (*connect.Response[v1.DeleteFrameTemplateResponse], error)
 	// Admin only - list the caller's org members.
 	ListOrgMembers(context.Context, *connect.Request[v1.ListOrgMembersRequest]) (*connect.Response[v1.ListOrgMembersResponse], error)
 	// Admin only - add a member to the caller's org by email (pending until login).
@@ -343,6 +446,36 @@ func NewFrameServiceHandler(svc FrameServiceHandler, opts ...connect.HandlerOpti
 		connect.WithSchema(frameServiceMethods.ByName("ConvertFrame")),
 		connect.WithHandlerOptions(opts...),
 	)
+	frameServiceListFrameTemplatesHandler := connect.NewUnaryHandler(
+		FrameServiceListFrameTemplatesProcedure,
+		svc.ListFrameTemplates,
+		connect.WithSchema(frameServiceMethods.ByName("ListFrameTemplates")),
+		connect.WithHandlerOptions(opts...),
+	)
+	frameServiceGetFrameTemplateHandler := connect.NewUnaryHandler(
+		FrameServiceGetFrameTemplateProcedure,
+		svc.GetFrameTemplate,
+		connect.WithSchema(frameServiceMethods.ByName("GetFrameTemplate")),
+		connect.WithHandlerOptions(opts...),
+	)
+	frameServiceCreateFrameTemplateHandler := connect.NewUnaryHandler(
+		FrameServiceCreateFrameTemplateProcedure,
+		svc.CreateFrameTemplate,
+		connect.WithSchema(frameServiceMethods.ByName("CreateFrameTemplate")),
+		connect.WithHandlerOptions(opts...),
+	)
+	frameServiceUpdateFrameTemplateHandler := connect.NewUnaryHandler(
+		FrameServiceUpdateFrameTemplateProcedure,
+		svc.UpdateFrameTemplate,
+		connect.WithSchema(frameServiceMethods.ByName("UpdateFrameTemplate")),
+		connect.WithHandlerOptions(opts...),
+	)
+	frameServiceDeleteFrameTemplateHandler := connect.NewUnaryHandler(
+		FrameServiceDeleteFrameTemplateProcedure,
+		svc.DeleteFrameTemplate,
+		connect.WithSchema(frameServiceMethods.ByName("DeleteFrameTemplate")),
+		connect.WithHandlerOptions(opts...),
+	)
 	frameServiceListOrgMembersHandler := connect.NewUnaryHandler(
 		FrameServiceListOrgMembersProcedure,
 		svc.ListOrgMembers,
@@ -385,6 +518,16 @@ func NewFrameServiceHandler(svc FrameServiceHandler, opts ...connect.HandlerOpti
 			frameServiceDeleteFrameHandler.ServeHTTP(w, r)
 		case FrameServiceConvertFrameProcedure:
 			frameServiceConvertFrameHandler.ServeHTTP(w, r)
+		case FrameServiceListFrameTemplatesProcedure:
+			frameServiceListFrameTemplatesHandler.ServeHTTP(w, r)
+		case FrameServiceGetFrameTemplateProcedure:
+			frameServiceGetFrameTemplateHandler.ServeHTTP(w, r)
+		case FrameServiceCreateFrameTemplateProcedure:
+			frameServiceCreateFrameTemplateHandler.ServeHTTP(w, r)
+		case FrameServiceUpdateFrameTemplateProcedure:
+			frameServiceUpdateFrameTemplateHandler.ServeHTTP(w, r)
+		case FrameServiceDeleteFrameTemplateProcedure:
+			frameServiceDeleteFrameTemplateHandler.ServeHTTP(w, r)
 		case FrameServiceListOrgMembersProcedure:
 			frameServiceListOrgMembersHandler.ServeHTTP(w, r)
 		case FrameServiceAddOrgMemberProcedure:
@@ -432,6 +575,26 @@ func (UnimplementedFrameServiceHandler) DeleteFrame(context.Context, *connect.Re
 
 func (UnimplementedFrameServiceHandler) ConvertFrame(context.Context, *connect.Request[v1.ConvertFrameRequest]) (*connect.Response[v1.ConvertFrameResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("frames.v1.FrameService.ConvertFrame is not implemented"))
+}
+
+func (UnimplementedFrameServiceHandler) ListFrameTemplates(context.Context, *connect.Request[v1.ListFrameTemplatesRequest]) (*connect.Response[v1.ListFrameTemplatesResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("frames.v1.FrameService.ListFrameTemplates is not implemented"))
+}
+
+func (UnimplementedFrameServiceHandler) GetFrameTemplate(context.Context, *connect.Request[v1.GetFrameTemplateRequest]) (*connect.Response[v1.GetFrameTemplateResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("frames.v1.FrameService.GetFrameTemplate is not implemented"))
+}
+
+func (UnimplementedFrameServiceHandler) CreateFrameTemplate(context.Context, *connect.Request[v1.CreateFrameTemplateRequest]) (*connect.Response[v1.CreateFrameTemplateResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("frames.v1.FrameService.CreateFrameTemplate is not implemented"))
+}
+
+func (UnimplementedFrameServiceHandler) UpdateFrameTemplate(context.Context, *connect.Request[v1.UpdateFrameTemplateRequest]) (*connect.Response[v1.UpdateFrameTemplateResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("frames.v1.FrameService.UpdateFrameTemplate is not implemented"))
+}
+
+func (UnimplementedFrameServiceHandler) DeleteFrameTemplate(context.Context, *connect.Request[v1.DeleteFrameTemplateRequest]) (*connect.Response[v1.DeleteFrameTemplateResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("frames.v1.FrameService.DeleteFrameTemplate is not implemented"))
 }
 
 func (UnimplementedFrameServiceHandler) ListOrgMembers(context.Context, *connect.Request[v1.ListOrgMembersRequest]) (*connect.Response[v1.ListOrgMembersResponse], error) {

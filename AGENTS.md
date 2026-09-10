@@ -25,6 +25,7 @@ make dev           # backend :8080 (dev mode, fixture-seeded) + Vite :5173 with 
 make dev-auth      # Keycloak in Docker :8081 + backend on :5173 serving the built SPA
 make dev-clean     # kill orphan dev servers, drop dev DB + WAL/SHM, tear down Keycloak
 make image         # docker build (linux/amd64)
+make e2e           # blackbox RPC suite against a deployed frames (needs FRAMES_E2E_BASE_URL + FRAMES_E2E_TOKEN)
 
 # One Go test / package
 go test ./backend/internal/frames -run TestResolve -race
@@ -45,8 +46,11 @@ CI (`.github/workflows/ci.yml`) gates on five jobs: `proto` (buf lint plus a sta
 `gen/`), `go` (golangci-lint pinned to v2.12 plus race tests), `web` (lint, typecheck, vitest),
 `chart` (helm lint, template renders, kubeconform pinned to v0.7.0), and `e2e-sandbox` (deploys the
 built image onto a kind Nebari sandbox via ArgoCD and exercises real Keycloak auth through the
-gateway). `docs.yml` also fails if the generated CLI reference is stale. Run the local
-equivalents before pushing.
+gateway). `e2e-sandbox` also provisions a dedicated Keycloak client and user, then runs the
+build-tagged blackbox RPC suite in `e2e/` (`make e2e`) against the deployed pod through the real
+gateway; that suite skips locally whenever `FRAMES_E2E_BASE_URL` and `FRAMES_E2E_TOKEN` are unset, so
+`make test` is unaffected. `docs.yml` also fails if the generated CLI reference is stale. Run the
+local equivalents before pushing.
 
 **Generated code is checked in.** After touching `proto/frames/v1/*.proto`, run `make proto` and
 commit `gen/`. After touching `cli/cmd/*`, run `go run ./tools/docs-gen` and commit
@@ -85,6 +89,22 @@ store.Repository**.
   - `slots.go` - `SlotTable` is the single source of truth for slot keys, markdown headings, and
     content shape (terms / list / prose). Add or rename a slot here only; the `.frame.md` codec and
     the MCP composer both read it.
+  - `templates.go` / `builtins.go` - Frame templates: an authoring affordance, not Frames and not
+    a Frame Spec concept. A template carries prefill content plus a per-slot rule (required /
+    recommended / optional, with a note). Built-ins are embedded YAML parsed and validated at
+    package init, so a malformed starter panics at startup rather than failing at a user's first
+    click. `Check` reports required slots a document leaves empty; `publish` merges those with the
+    schema's own violations so an author sees everything at once. Checked on create only: nothing
+    is recorded on the Frame, so `required` is an authoring aid rather than ongoing governance.
+    See `docs/adr/0001-frame-templates-are-not-frames.md`. A prefill is held to the same content
+    rules a Frame is (`contentErrors`), but at the write boundary (`validateTemplateInput`), never
+    in `ParsePrefill`: that decoder is also the read path (`rowToTemplate` runs every stored row
+    through it), so a rule enforced there would make an already-stored row unreadable rather than
+    merely unpublishable. Starters arrive through two doors - the write RPCs and `loadBuiltins` at
+    package init. Built-ins carry rules and notes but no content at all: `builtinFile` has no
+    `prefill` key, so there is nothing for a content rule to check there.
+    `TestBuiltinFileCarriesNoPrefill` is a tripwire over that premise - add such a field and it
+    fails, telling you to run `contentErrors` in `loadBuiltins` and to replace the tripwire.
   - `framemd.go` - the Frame Spec v0.2 `.frame.md` codec (YAML frontmatter plus one `##` section per
     slot). Round-trip fidelity matters: `examples/*.yaml` and `examples/*.frame.md` are checked-in
     conformance fixtures asserted by `examples_test.go`.
@@ -102,7 +122,10 @@ store.Repository**.
   cannot be shadowed by a case variant. The in-memory fake enforces the same unique constraints;
   where it cannot, tests reach for real SQLite and say why. Publishes go
   through `CreateFrameVersion`, which inserts the frame row, version, inheritance edges, and grants
-  atomically. **SQLite is single-writer, so the deployment is pinned to one replica.**
+  atomically.
+  `frame_templates` holds org-authored templates, with prefill and field rules as opaque blobs so
+  a change to `SlotTable` never touches the schema; built-ins are not rows.
+  **SQLite is single-writer, so the deployment is pinned to one replica.**
 - `backend/internal/mcp` is a thin protocol adapter over `frames.Service`, exposing frames as MCP
   resources under `nebari-frame://<org>/<name>[@<version>]` plus RFC 9728 metadata at
   `/.well-known/oauth-protected-resource`. It is also a write surface: `create_frame` and
@@ -122,6 +145,33 @@ store.Repository**.
   `//go:embed` still compiles on a clean checkout. Auth guards live in `web/src/app/`
   (`RequireAuth`, `RequireMembership`, `RequireAdmin`); pages in `web/src/pages/`; RPC transport and
   domain helpers in `web/src/lib/`.
+  - Seeding a form from server data comes in two shapes. A form that may re-seed keys its `reset`
+    on an identity that changes when the data does (the authoring page's edit path keys on
+    `version.digest`). A form that seeds once and then belongs to the author - a template prefill,
+    the template edit dialog - must pin `refetchOnMount: "always"` on the query and take its data
+    from `freshData()` (`web/src/lib/query-freshness.ts`), which is where the reasoning lives:
+    React Query returns a cached row synchronously and refetches behind it, counts a *failed*
+    fetch in `isFetchedAfterMount`, and never clears cached data on error. Where the latch lives
+    depends on where the form's identity comes from: the template edit dialog is keyed and mounted
+    per target, so a boolean is its identity, while the authoring page's template comes from
+    `?template=` and can change while the page stays mounted, so it latches on the id it seeded
+    from.
+  - A form seeded from a query does not render editable before the seed lands. Both template
+    surfaces withhold it (a skeleton, or the dialog's), because `reset` replaces form state
+    wholesale and `refetchOnMount: "always"` guarantees the seed arrives a round trip after the
+    first render - so anything typed in between would vanish.
+  - `react-hooks/set-state-in-effect` reports at most one violation per effect, so a second
+    `setState` in the same effect can look clean while being the same construct. Do not read the
+    linter's silence as a constraint, and do not add a `setTimeout` claiming to satisfy a rule
+    that never fired - an unused `eslint-disable` is itself reported.
+  - Two schemas cover the same slot keys on purpose. `frame-yaml.ts` decodes whatever is stored
+    (lenient, because rows predate rules); `contentSlotsSchema` in `authoring-schema.ts` is what a
+    human may submit, and every form that edits slot content resolves against it. The backend
+    splits the same two jobs the same way (`Parse` vs `contentErrors`).
+  - Error text splits by direction. A failed read states a fixed sentence - the server's message
+    there is storage or wiring detail and retrying is all the reader can do. A failed write shows
+    `ConnectError.rawMessage`, because it names what the caller must change; when it carries
+    `FieldViolations`, it belongs on the input instead.
 - `cli/` is the `frames` binary (Cobra plus Viper; config at `~/.config/frames/config.yaml`, env
   prefix `FRAMES_`, device-flow login).
 - `chart/` deploys onto a Nebari cluster; the nebari-operator provisions routing, TLS, and the OIDC
@@ -148,5 +198,5 @@ store.Repository**.
   and keep new comments in the same register.
 - Always stop a dev loop with a single Ctrl-C. Killing it leaves the SQLite lock held and the next
   start fails with `disk I/O error` / `database is locked`; `make dev-clean` recovers.
-- Design docs in `docs/design/`, client connection guides in `docs/connect/`, manual QA scripts in
-  `docs/qa/`.
+- Design docs in `docs/design/`, architecture decision records in `docs/adr/`, client connection
+  guides in `docs/connect/`, manual QA scripts in `docs/qa/`.

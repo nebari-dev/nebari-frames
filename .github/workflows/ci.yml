@@ -269,14 +269,38 @@ jobs:
           # Prove it from inside the cluster. Without this the failure surfaces
           # 15 minutes later as an unexplained unhealthy Application, which is
           # how the upstream no-op went unnoticed in the first place.
-          kubectl delete pod dns-probe --ignore-not-found >/dev/null
-          OUT=$(kubectl run dns-probe --image=busybox:1.36 --restart=Never \
-            --attach --rm --quiet --image-pull-policy=IfNotPresent \
-            --command -- nslookup "keycloak.${DOMAIN}" 2>&1) || true
-          echo "${OUT}"
-          echo "${OUT}" | grep -qF "${GATEWAY_IP}" \
-            || { echo "::error::keycloak.${DOMAIN} does not resolve to ${GATEWAY_IP} from inside the cluster"; exit 1; }
-          echo "OK: keycloak.${DOMAIN} resolves to ${GATEWAY_IP} for pods"
+          #
+          # Wait rather than sampling once. `rollout status` reports the new
+          # CoreDNS pods Ready before the new Corefile is necessarily live in
+          # them: a ConfigMap mounted as a volume propagates on kubelet's sync
+          # interval, and CoreDNS reloads on a poll of its own. A single probe
+          # fired straight after the rollout therefore loses a race roughly half
+          # the time, and a lost race is indistinguishable from the real
+          # misconfiguration this check exists to catch. Retrying to a deadline
+          # makes slow propagation read as slow and leaves only genuine breakage
+          # reading as broken.
+          RESOLVED=0
+          for attempt in $(seq 1 24); do
+            kubectl delete pod dns-probe --ignore-not-found >/dev/null 2>&1
+            OUT=$(kubectl run dns-probe --image=busybox:1.36 --restart=Never \
+              --attach --rm --quiet --image-pull-policy=IfNotPresent \
+              --command -- nslookup "keycloak.${DOMAIN}" 2>&1) || true
+            if echo "${OUT}" | grep -qF "${GATEWAY_IP}"; then
+              RESOLVED=1
+              echo "OK: keycloak.${DOMAIN} resolves to ${GATEWAY_IP} for pods (attempt ${attempt})"
+              break
+            fi
+            echo "[${attempt}/24] keycloak.${DOMAIN} not resolving yet"
+            sleep 5
+          done
+          if [ "${RESOLVED}" != "1" ]; then
+            echo "::error::keycloak.${DOMAIN} does not resolve to ${GATEWAY_IP} from inside the cluster after 24 attempts"
+            echo "last probe output:"
+            echo "${OUT}"
+            echo "Corefile the ConfigMap currently holds:"
+            kubectl -n kube-system get configmap coredns -o jsonpath='{.data.Corefile}' || true
+            exit 1
+          fi
 
       - name: Provision the sandbox CA for the frames pod
         env:
@@ -479,3 +503,231 @@ jobs:
             200|302|303|307) echo "endpoint OK" ;;
             *) echo "::error::unexpected HTTP ${CODE}"; exit 1 ;;
           esac
+
+      - name: Resolve the gateway host names for the runner
+        env:
+          GATEWAY_IP: ${{ steps.sandbox.outputs.gateway-ip }}
+          CA_CERT_PATH: ${{ steps.sandbox.outputs.ca-cert-path }}
+        run: |
+          # Both the token-acquisition step and the blackbox suite below talk
+          # to frames.nebari.local and keycloak.nebari.local from the runner
+          # itself rather than from inside the cluster. curl can fake that with
+          # --resolve per call, but Go's http.Client has no equivalent, and the
+          # generated Connect client needs a real base URL it can dial - so a
+          # genuine hosts entry is the only thing that works for both.
+          echo "${GATEWAY_IP} frames.nebari.local keycloak.nebari.local" | sudo tee -a /etc/hosts
+
+          # Exported via GITHUB_ENV so every later step inherits it: the gateway
+          # presents the sandbox's self-signed CA, and pointing SSL_CERT_FILE at
+          # it is what lets both curl and the Go suite verify the connection
+          # for real instead of skipping verification.
+          echo "SSL_CERT_FILE=${CA_CERT_PATH}" >> "$GITHUB_ENV"
+
+      - name: Provision an e2e Keycloak identity
+        id: token
+        env:
+          KUBECONFIG: ${{ steps.sandbox.outputs.kubeconfig }}
+        run: |
+          REALM=nebari
+          KC_BASE=https://keycloak.nebari.local
+          # --cacert rather than the SSL_CERT_FILE the Go suite relies on below:
+          # Go's crypto/x509 documents honoring that env var on Linux, but curl's
+          # pickup of it depends on how the runner's curl was built against
+          # OpenSSL, which is not a bet worth making for a suite whose whole
+          # point is verifying the real certificate.
+          CACERT="${SSL_CERT_FILE}"
+
+          # The operator authenticates to Keycloak's admin API with these same
+          # credentials to provision every NebariApp's OIDC client (see
+          # nebari-operator's KeycloakConfig / KEYCLOAK_ADMIN_SECRET_NAME,
+          # default "keycloak-admin-credentials" in the "keycloak" namespace).
+          # Reusing them here means this step fails the same way the operator's
+          # own provisioning would if the admin API ever rejected them, rather
+          # than depending on a credential nothing else exercises.
+          KC_ADMIN_USER=$(kubectl -n keycloak get secret keycloak-admin-credentials -o jsonpath='{.data.admin-username}' | base64 -d)
+          KC_ADMIN_PASS=$(kubectl -n keycloak get secret keycloak-admin-credentials -o jsonpath='{.data.admin-password}' | base64 -d)
+
+          ADMIN_TOKEN_RESPONSE=$(curl -s --cacert "${CACERT}" -X POST "${KC_BASE}/realms/master/protocol/openid-connect/token" \
+            -d grant_type=password -d client_id=admin-cli \
+            -d "username=${KC_ADMIN_USER}" -d "password=${KC_ADMIN_PASS}")
+          ADMIN_TOKEN=$(echo "${ADMIN_TOKEN_RESPONSE}" | jq -r '.access_token')
+          [ -n "${ADMIN_TOKEN}" ] && [ "${ADMIN_TOKEN}" != "null" ] \
+            || { echo "::error::could not obtain a Keycloak master admin token: ${ADMIN_TOKEN_RESPONSE}"; exit 1; }
+
+          # The backend validates the token's aud claim against OIDC_CLIENT_ID,
+          # which the chart wires to the operator-provisioned SPA client, not
+          # the confidential client naming.ClientID() would suggest (see
+          # docs/qa/e2e-token-acquisition.md, and backend/internal/auth/validator.go's
+          # oidc.Config{ClientID: cfg.ClientID}). Reading it out of the secret
+          # the operator actually wrote, rather than re-deriving the "<ns>-<app>-spa"
+          # naming convention here, means a convention change breaks this loudly
+          # at the read below instead of silently at token validation in CI.
+          SPA_CLIENT_ID=$(kubectl -n nebari-frames get secret nebari-frames-nebari-frames-oidc-client \
+            -o jsonpath='{.data.spa-client-id}' | base64 -d)
+          [ -n "${SPA_CLIENT_ID}" ] \
+            || { echo "::error::spa-client-id is empty in the operator-provisioned OIDC secret"; exit 1; }
+
+          # A purpose-provisioned client: the SPA client the operator provisions
+          # has directAccessGrantsEnabled=false (it exists for the browser's PKCE
+          # flow, not password grants), so automated tests need their own. The
+          # audience mapper is the detail that actually matters here - without
+          # it the token's aud is this client's own id, which the backend
+          # rejects; see docs/qa/e2e-token-acquisition.md for how that was found.
+          CREATE_CLIENT_CODE=$(curl -s --cacert "${CACERT}" -o /tmp/create-client.json -w '%{http_code}' \
+            -X POST "${KC_BASE}/admin/realms/${REALM}/clients" \
+            -H "Authorization: Bearer ${ADMIN_TOKEN}" -H 'Content-Type: application/json' \
+            -d "$(jq -n --arg aud "${SPA_CLIENT_ID}" '{
+              clientId: "frames-e2e-test",
+              enabled: true,
+              publicClient: true,
+              directAccessGrantsEnabled: true,
+              standardFlowEnabled: false,
+              protocolMappers: [{
+                name: "frames-e2e-audience",
+                protocol: "openid-connect",
+                protocolMapper: "oidc-audience-mapper",
+                config: {
+                  "included.client.audience": $aud,
+                  "id.token.claim": "false",
+                  "access.token.claim": "true"
+                }
+              }]
+            }')")
+          [ "${CREATE_CLIENT_CODE}" = "201" ] \
+            || { echo "::error::client provisioning failed (HTTP ${CREATE_CLIENT_CODE})"; cat /tmp/create-client.json; exit 1; }
+
+          # e2e/templates_test.go asserts can_manage for the seeded admin, and
+          # frames grants that by matching a user's email against SEED_ADMIN_EMAIL
+          # at first login (see backend/internal/seed), not by anything Keycloak
+          # itself knows about - the Application spec below sets that email to
+          # e2e@example.com. The realm's built-in "admin" user has a different
+          # email and would only get frames' fail-closed default (no
+          # membership, PermissionDenied), so this also needs its own user.
+          E2E_PASSWORD=$(openssl rand -hex 24)
+          echo "::add-mask::${E2E_PASSWORD}"
+
+          # firstName and lastName are not decoration. Keycloak's declarative
+          # user profile is on by default and marks both required, so a user
+          # created without them is left incomplete and the password grant
+          # refuses with "Account is not fully set up" even though the account
+          # exists and the password was accepted. requiredActions is cleared
+          # explicitly for the same reason: a realm default such as
+          # UPDATE_PASSWORD would block the grant the same way.
+          CREATE_USER_CODE=$(curl -s --cacert "${CACERT}" -o /tmp/create-user.json -w '%{http_code}' \
+            -X POST "${KC_BASE}/admin/realms/${REALM}/users" \
+            -H "Authorization: Bearer ${ADMIN_TOKEN}" -H 'Content-Type: application/json' \
+            -d '{"username":"frames-e2e","email":"e2e@example.com","emailVerified":true,"enabled":true,"firstName":"Frames","lastName":"E2E","requiredActions":[]}')
+          [ "${CREATE_USER_CODE}" = "201" ] \
+            || { echo "::error::user provisioning failed (HTTP ${CREATE_USER_CODE})"; cat /tmp/create-user.json; exit 1; }
+
+          USER_ID=$(curl -s --cacert "${CACERT}" "${KC_BASE}/admin/realms/${REALM}/users?username=frames-e2e&exact=true" \
+            -H "Authorization: Bearer ${ADMIN_TOKEN}" | jq -r '.[0].id')
+          [ -n "${USER_ID}" ] && [ "${USER_ID}" != "null" ] \
+            || { echo "::error::could not look up the id of the just-created frames-e2e user"; exit 1; }
+
+          SET_PASSWORD_CODE=$(curl -s --cacert "${CACERT}" -o /dev/null -w '%{http_code}' \
+            -X PUT "${KC_BASE}/admin/realms/${REALM}/users/${USER_ID}/reset-password" \
+            -H "Authorization: Bearer ${ADMIN_TOKEN}" -H 'Content-Type: application/json' \
+            -d "$(jq -n --arg pw "${E2E_PASSWORD}" '{type: "password", value: $pw, temporary: false}')")
+          [ "${SET_PASSWORD_CODE}" = "204" ] \
+            || { echo "::error::setting the e2e user's password failed (HTTP ${SET_PASSWORD_CODE})"; exit 1; }
+
+          TOKEN_RESPONSE=$(curl -s --cacert "${CACERT}" -X POST "${KC_BASE}/realms/${REALM}/protocol/openid-connect/token" \
+            -d grant_type=password -d client_id=frames-e2e-test \
+            -d username=frames-e2e -d "password=${E2E_PASSWORD}")
+          ACCESS_TOKEN=$(echo "${TOKEN_RESPONSE}" | jq -r '.access_token')
+          [ -n "${ACCESS_TOKEN}" ] && [ "${ACCESS_TOKEN}" != "null" ] \
+            || {
+              echo "::error::password grant failed: ${TOKEN_RESPONSE}"
+              # "Account is not fully set up" says nothing about WHICH condition
+              # is unmet, and the account is gone once the cluster is torn down.
+              # Dump what the server thinks is outstanding so the next failure
+              # is diagnosable from the log alone.
+              echo "user record as Keycloak sees it:"
+              curl -s --cacert "${CACERT}" "${KC_BASE}/admin/realms/${REALM}/users/${USER_ID}" \
+                -H "Authorization: Bearer ${ADMIN_TOKEN}" \
+                | jq '{enabled, emailVerified, requiredActions, firstName, lastName}'
+              exit 1
+            }
+
+          echo "::add-mask::${ACCESS_TOKEN}"
+          echo "access_token=${ACCESS_TOKEN}" >> "$GITHUB_OUTPUT"
+
+      - name: Blackbox RPC suite
+        env:
+          FRAMES_E2E_TOKEN: ${{ steps.token.outputs.access_token }}
+        run: |
+          export FRAMES_E2E_BASE_URL=https://frames.nebari.local
+          # Without this guard a failed acquisition step above would leave
+          # FRAMES_E2E_TOKEN empty, every test would skip via t.Skipf, and the
+          # job would go green having asserted nothing - precisely the failure
+          # the "Auth is really on" step exists to prevent for dev mode, and
+          # the same trap applies here.
+          [ -n "${FRAMES_E2E_TOKEN}" ] || { echo "::error::no token; the acquisition step failed"; exit 1; }
+
+          # Take the serving certificate from the cluster rather than from the
+          # path the sandbox action reports, which is a different certificate
+          # altogether: pinning against it failed with a presented-versus-pinned
+          # mismatch. curl never noticed, because OpenSSL anchors on a
+          # self-signed certificate by exact match and the provisioning calls
+          # above talk to a different host.
+          #
+          # The subtlety is which secret. The nebari-operator gives each
+          # NebariApp its own Gateway listener with its own certificate, whose
+          # only SAN is that app's hostname, and Envoy serves it for that SNI.
+          # nebari-gateway-tls is merely the catch-all listener's certificate
+          # (SANs: apex, keycloak, argocd) and is NOT what frames.nebari.local
+          # presents - pinning it is what broke this job before. So resolve the
+          # certificate from the listener matching the hostname under test
+          # instead of naming a secret, which also survives a rename of the
+          # operator's "<app>-<namespace>-tls" convention.
+          #
+          # Reading it over the authenticated kubeconfig means the expected
+          # identity is learned from a trusted channel, not from the connection
+          # being tested, which trusting-on-first-use would amount to.
+          GW_NS=$(kubectl get gateway -A \
+            -o jsonpath='{.items[?(@.metadata.name=="nebari-gateway")].metadata.namespace}')
+          [ -n "${GW_NS}" ] || {
+            echo "::error::no nebari-gateway Gateway in any namespace"
+            kubectl get gateway -A 2>/dev/null || true
+            exit 1
+          }
+          CERT_SECRET=$(kubectl -n "${GW_NS}" get gateway nebari-gateway \
+            -o jsonpath='{.spec.listeners[?(@.hostname=="frames.nebari.local")].tls.certificateRefs[0].name}')
+          [ -n "${CERT_SECRET}" ] || {
+            echo "::error::no Gateway listener for frames.nebari.local, so the operator never provisioned its certificate"
+            kubectl -n "${GW_NS}" get gateway nebari-gateway -o yaml || true
+            exit 1
+          }
+          echo "pinning ${GW_NS}/${CERT_SECRET} (listener for frames.nebari.local)"
+          kubectl -n "${GW_NS}" get secret "${CERT_SECRET}" \
+            -o jsonpath='{.data.tls\.crt}' | base64 -d > /tmp/gateway-tls.crt
+          export FRAMES_E2E_CA_CERT=/tmp/gateway-tls.crt
+
+          # Fingerprints, so any future mismatch is explicable at a glance
+          # instead of costing another sandbox run to characterise. The last two
+          # must agree; the first is expected to differ.
+          echo "certificate fingerprints:"
+          printf '  action-reported path: %s\n' \
+            "$(openssl x509 -in "${SSL_CERT_FILE}" -noout -fingerprint -sha256 2>/dev/null | cut -d= -f2)"
+          printf '  %s/%s tls.crt (pinned): %s\n' "${GW_NS}" "${CERT_SECRET}" \
+            "$(openssl x509 -in /tmp/gateway-tls.crt -noout -fingerprint -sha256 2>/dev/null | cut -d= -f2)"
+          printf '  presented by the gateway: %s\n' \
+            "$(openssl s_client -connect frames.nebari.local:443 -servername frames.nebari.local \
+               </dev/null 2>/dev/null | openssl x509 -noout -fingerprint -sha256 2>/dev/null | cut -d= -f2)"
+
+          # What the trust anchor actually is, printed before the suite runs.
+          # "certificate signed by unknown authority" names no cause, and the
+          # cluster is gone by the time anyone reads the log, so a repeat would
+          # otherwise cost another full sandbox run to explain. Expect a
+          # self-signed leaf (CA:FALSE) whose only SAN is the hostname under
+          # test; the harness pins that rather than chaining to it.
+          echo "trust anchor at ${FRAMES_E2E_CA_CERT}:"
+          openssl x509 -in "${FRAMES_E2E_CA_CERT}" -noout -subject -issuer -dates \
+            -ext basicConstraints,keyUsage,subjectAltName 2>&1 || true
+          echo "chain the gateway actually presents:"
+          openssl s_client -connect frames.nebari.local:443 -servername frames.nebari.local \
+            -showcerts </dev/null 2>/dev/null \
+            | grep -E "^ *[0-9]+ s:|^ *i:|Verify return code" || true
+
+          go test -tags e2e -count=1 -v ./e2e/...

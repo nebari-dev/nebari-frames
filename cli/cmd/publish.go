@@ -10,7 +10,7 @@ import (
 )
 
 func addPublishCmd(root *cobra.Command) {
-	var dir, changelog string
+	var dir, changelog, templateID string
 	cmd := &cobra.Command{
 		Use:   "publish",
 		Short: "Publish a Frame from a directory containing frame.yaml",
@@ -26,10 +26,18 @@ func addPublishCmd(root *cobra.Command) {
 				}
 				return err
 			}
-			frame, version, err := getClientCtx(cmd.Context()).Publish(cmd.Context(), content, changelog)
+			frame, version, err := getClientCtx(cmd.Context()).Publish(cmd.Context(), content, changelog, templateID)
 			if err != nil {
-				if connect.CodeOf(err) == connect.CodeInvalidArgument {
+				switch code := connect.CodeOf(err); {
+				case code == connect.CodeInvalidArgument:
 					return fmt.Errorf("frame.yaml is invalid: %w", err)
+				case code == connect.CodeAlreadyExists && templateID != "":
+					// --template asserts a new Frame, which is exactly what a
+					// second publish is not. The scaffold's header names the
+					// flag, so an author following it lands here with nothing
+					// in the server's message pointing at the flag.
+					return fmt.Errorf(
+						"%w (--template applies to a Frame's first version only; publish later versions without it)", err)
 				}
 				return authAware(err)
 			}
@@ -39,5 +47,7 @@ func addPublishCmd(root *cobra.Command) {
 	}
 	cmd.Flags().StringVar(&dir, "dir", "", "Directory containing frame.yaml")
 	cmd.Flags().StringVar(&changelog, "changelog", "", "Release notes for this version")
+	cmd.Flags().StringVar(&templateID, "template", "",
+		"Template this Frame is being created from; asserts the Frame is new and checks the template's required sections")
 	root.AddCommand(cmd)
 }

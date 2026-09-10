@@ -790,3 +790,153 @@ func TestMembershipEmailsAreCanonical(t *testing.T) {
 		}
 	})
 }
+
+func TestSQLiteFrameTemplateCRUD(t *testing.T) {
+	ctx := context.Background()
+	r := newRepo(t) // existing helper in this file: opens a migrated DB under t.TempDir()
+	// A template references an org, so one has to exist.
+	if err := r.CreateOrg(ctx, &framesv1.Org{
+		Id: "org-a", Slug: "acme", DisplayName: "Acme", CreatedAt: timestamppb.Now(),
+	}); err != nil {
+		t.Fatalf("create org: %v", err)
+	}
+	if err := r.CreateOrg(ctx, &framesv1.Org{
+		Id: "org-b", Slug: "other", DisplayName: "Other", CreatedAt: timestamppb.Now(),
+	}); err != nil {
+		t.Fatalf("create other org: %v", err)
+	}
+
+	created := time.Unix(1700000000, 0).UTC()
+	row := &store.FrameTemplate{
+		ID: "t1", OrgID: "org-a", Title: "Brand Voice", Description: "How we sound",
+		Prefill:    []byte("slots:\n  style: Plain sentences.\n"),
+		FieldRules: []byte(`{"style":{"level":"required","note":"Voice and tone."}}`),
+		CreatedBy:  "user-1", CreatedAt: created, UpdatedAt: created,
+	}
+	if err := r.CreateFrameTemplate(ctx, row); err != nil {
+		t.Fatalf("create: %v", err)
+	}
+
+	got, err := r.GetFrameTemplate(ctx, "org-a", "t1")
+	if err != nil {
+		t.Fatalf("get: %v", err)
+	}
+	if got.Title != "Brand Voice" || got.CreatedBy != "user-1" {
+		t.Errorf("round trip lost scalars: %+v", got)
+	}
+	if string(got.Prefill) != string(row.Prefill) {
+		t.Errorf("prefill = %q, want %q", got.Prefill, row.Prefill)
+	}
+	if string(got.FieldRules) != string(row.FieldRules) {
+		t.Errorf("field_rules = %q, want %q", got.FieldRules, row.FieldRules)
+	}
+	if !got.CreatedAt.Equal(created) {
+		t.Errorf("created_at = %v, want %v", got.CreatedAt, created)
+	}
+
+	if _, err := r.GetFrameTemplate(ctx, "org-b", "t1"); !errors.Is(err, store.ErrNotFound) {
+		t.Errorf("cross-org get = %v, want ErrNotFound", err)
+	}
+
+	row.Title = "Brand Voice v2"
+	row.UpdatedAt = created.Add(time.Minute)
+	if err := r.UpdateFrameTemplate(ctx, row); err != nil {
+		t.Fatalf("update: %v", err)
+	}
+	got, err = r.GetFrameTemplate(ctx, "org-a", "t1")
+	if err != nil {
+		t.Fatalf("get after update: %v", err)
+	}
+	if got.Title != "Brand Voice v2" || !got.UpdatedAt.Equal(created.Add(time.Minute)) {
+		t.Errorf("update not applied: %+v", got)
+	}
+
+	if err := r.DeleteFrameTemplate(ctx, "org-a", "t1"); err != nil {
+		t.Fatalf("delete: %v", err)
+	}
+	if _, err := r.GetFrameTemplate(ctx, "org-a", "t1"); !errors.Is(err, store.ErrNotFound) {
+		t.Errorf("get after delete = %v, want ErrNotFound", err)
+	}
+}
+
+func TestSQLiteFrameTemplateConstraints(t *testing.T) {
+	ctx := context.Background()
+	r := newRepo(t)
+	for _, id := range []string{"org-a", "org-b"} {
+		if err := r.CreateOrg(ctx, &framesv1.Org{
+			Id: id, Slug: id, DisplayName: id, CreatedAt: timestamppb.Now(),
+		}); err != nil {
+			t.Fatalf("create org %s: %v", id, err)
+		}
+	}
+	mk := func(id, orgID, title string) *store.FrameTemplate {
+		now := time.Unix(1700000000, 0).UTC()
+		return &store.FrameTemplate{
+			ID: id, OrgID: orgID, Title: title, Description: "d",
+			Prefill: []byte("slots: {}\n"), FieldRules: []byte("{}"),
+			CreatedBy: "u", CreatedAt: now, UpdatedAt: now,
+		}
+	}
+	if err := r.CreateFrameTemplate(ctx, mk("t1", "org-a", "Brand Voice")); err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+
+	// The UNIQUE (org_id, title) constraint has to surface as ErrAlreadyExists,
+	// not a raw driver error, or the handler cannot map it to a useful code.
+	if err := r.CreateFrameTemplate(ctx, mk("t2", "org-a", "Brand Voice")); !errors.Is(err, store.ErrAlreadyExists) {
+		t.Errorf("duplicate title in org = %v, want ErrAlreadyExists", err)
+	}
+	// The control: the same title in another org must succeed, or the test above
+	// would pass for the wrong reason.
+	if err := r.CreateFrameTemplate(ctx, mk("t3", "org-b", "Brand Voice")); err != nil {
+		t.Errorf("same title in another org = %v, want success", err)
+	}
+	if err := r.CreateFrameTemplate(ctx, mk("t1", "org-a", "Different")); !errors.Is(err, store.ErrAlreadyExists) {
+		t.Errorf("duplicate id = %v, want ErrAlreadyExists", err)
+	}
+	if err := r.UpdateFrameTemplate(ctx, mk("nope", "org-a", "X")); !errors.Is(err, store.ErrNotFound) {
+		t.Errorf("update missing = %v, want ErrNotFound", err)
+	}
+	if err := r.UpdateFrameTemplate(ctx, mk("t1", "org-b", "Brand Voice")); !errors.Is(err, store.ErrNotFound) {
+		t.Errorf("update across orgs = %v, want ErrNotFound", err)
+	}
+	if err := r.DeleteFrameTemplate(ctx, "org-b", "t1"); !errors.Is(err, store.ErrNotFound) {
+		t.Errorf("delete across orgs = %v, want ErrNotFound", err)
+	}
+}
+
+func TestSQLiteFrameTemplateListIsOrgScopedAndOrdered(t *testing.T) {
+	ctx := context.Background()
+	r := newRepo(t)
+	for _, id := range []string{"org-a", "org-b"} {
+		if err := r.CreateOrg(ctx, &framesv1.Org{
+			Id: id, Slug: id, DisplayName: id, CreatedAt: timestamppb.Now(),
+		}); err != nil {
+			t.Fatalf("create org %s: %v", id, err)
+		}
+	}
+	now := time.Unix(1700000000, 0).UTC()
+	for _, spec := range []struct{ id, org, title string }{
+		{"t1", "org-a", "Zebra"},
+		{"t2", "org-a", "Alpha"},
+		{"t3", "org-b", "Other org"},
+	} {
+		if err := r.CreateFrameTemplate(ctx, &store.FrameTemplate{
+			ID: spec.id, OrgID: spec.org, Title: spec.title, Description: "d",
+			Prefill: []byte("slots: {}\n"), FieldRules: []byte("{}"),
+			CreatedBy: "u", CreatedAt: now, UpdatedAt: now,
+		}); err != nil {
+			t.Fatalf("seed %s: %v", spec.id, err)
+		}
+	}
+	rows, err := r.ListFrameTemplatesByOrg(ctx, "org-a")
+	if err != nil {
+		t.Fatalf("list: %v", err)
+	}
+	if len(rows) != 2 {
+		t.Fatalf("got %d rows, want 2 (org-b's must not appear)", len(rows))
+	}
+	if rows[0].Title != "Alpha" || rows[1].Title != "Zebra" {
+		t.Errorf("order = %q, %q, want Alpha then Zebra", rows[0].Title, rows[1].Title)
+	}
+}
