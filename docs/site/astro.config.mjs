@@ -24,6 +24,7 @@ export default defineConfig({
           githubHref: 'https://github.com/nebari-dev/nebari-frames',
         }),
       ],
+      lastUpdated: true,
       sidebar: [
         {
           label: 'Documentation',
